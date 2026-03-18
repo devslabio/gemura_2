@@ -389,7 +389,7 @@ export class CollectionsService {
               statusEmoji = '📝';
           }
           
-          const message = `${statusEmoji} Muraho ${supplierUserAccount.user.name || 'muhinzi'}, amata yanyu ${formattedQuantity}L ku ${unitPrice} RWF/L kuwa ${formattedDateTime} ${statusText}. Igiciro: ${totalAmount} RWF. Murakoze.`;
+          const message = `${statusEmoji} Muraho ${supplierUserAccount.user.name || 'muhinzi'}, amata yanyu ${formattedQuantity}L mwagemuye kuri ${unitPrice} RWF/L kuwa ${formattedDateTime} ${statusText}. Igiciro: ${totalAmount} RWF. Murakoze.`;
           await this.smsService.sendSMS(supplierPhone, message);
         }
       } catch (smsError) {
