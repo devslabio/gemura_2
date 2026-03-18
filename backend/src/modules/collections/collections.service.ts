@@ -6,12 +6,14 @@ import { UpdateCollectionDto } from './dto/update-collection.dto';
 import { CancelCollectionDto } from './dto/cancel-collection.dto';
 import { TransactionsService } from '../accounting/transactions/transactions.service';
 import { TransactionType } from '../accounting/transactions/dto/create-transaction.dto';
+import { SmsService } from '../../common/services/sms.service';
 
 @Injectable()
 export class CollectionsService {
   constructor(
     private prisma: PrismaService,
     private transactionsService: TransactionsService,
+    private smsService: SmsService,
   ) {}
 
   async getRejectionReasons(includeInactive = false) {
@@ -336,6 +338,63 @@ export class CollectionsService {
           // Log error but don't fail the collection creation
           console.error('Failed to create finance transaction for collection:', error);
         }
+      }
+
+      // Try to send SMS notification to supplier (best-effort, non-blocking for core flow)
+      try {
+        const supplierUserAccount = await this.prisma.userAccount.findFirst({
+          where: {
+            account_id: supplierAccountId,
+            status: 'active',
+          },
+          include: {
+            user: {
+              select: {
+                phone: true,
+                name: true,
+              },
+            },
+          },
+        });
+
+        const supplierPhone = supplierUserAccount?.user?.phone;
+
+        if (supplierPhone) {
+          const formattedQuantity = quantity.toFixed(2).replace(/\.00$/, '');
+          const formattedDateTime = collection_at;
+          
+          // Build status-specific message
+          let statusText = '';
+          let statusEmoji = '';
+          
+          switch (status) {
+            case 'accepted':
+              statusText = 'accepted';
+              statusEmoji = '✅';
+              break;
+            case 'pending':
+              statusText = 'pending review';
+              statusEmoji = '⏳';
+              break;
+            case 'rejected':
+              statusText = 'rejected';
+              statusEmoji = '❌';
+              break;
+            case 'cancelled':
+              statusText = 'cancelled';
+              statusEmoji = '🚫';
+              break;
+            default:
+              statusText = status || 'recorded';
+              statusEmoji = '📝';
+          }
+          
+          const message = `${statusEmoji} Dear ${supplierUserAccount.user.name || 'supplier'}, your milk collection of ${formattedQuantity}L at ${unitPrice} RWF/L on ${formattedDateTime} has been ${statusText}. Total: ${totalAmount} RWF. Thank you for supplying.`;
+          await this.smsService.sendSMS(supplierPhone, message);
+        }
+      } catch (smsError) {
+        // Intentionally swallow SMS errors so they don't break collection creation
+        console.error('Failed to send milk collection SMS notification:', smsError);
       }
 
       return {
