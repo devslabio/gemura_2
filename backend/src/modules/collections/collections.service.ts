@@ -363,33 +363,33 @@ export class CollectionsService {
           const formattedQuantity = quantity.toFixed(2).replace(/\.00$/, '');
           const formattedDateTime = collection_at;
           
-          // Build status-specific message
+          // Build status-specific message in Kinyarwanda
           let statusText = '';
           let statusEmoji = '';
           
           switch (status) {
             case 'accepted':
-              statusText = 'accepted';
+              statusText = 'yemewe';
               statusEmoji = '✅';
               break;
             case 'pending':
-              statusText = 'pending review';
+              statusText = 'irategerezwa';
               statusEmoji = '⏳';
               break;
             case 'rejected':
-              statusText = 'rejected';
+              statusText = 'yanze';
               statusEmoji = '❌';
               break;
             case 'cancelled':
-              statusText = 'cancelled';
+              statusText = 'yahagaritswe';
               statusEmoji = '🚫';
               break;
             default:
-              statusText = status || 'recorded';
+              statusText = status || 'yanditswe';
               statusEmoji = '📝';
           }
           
-          const message = `${statusEmoji} Dear ${supplierUserAccount.user.name || 'supplier'}, your milk collection of ${formattedQuantity}L at ${unitPrice} RWF/L on ${formattedDateTime} has been ${statusText}. Total: ${totalAmount} RWF. Thank you for supplying.`;
+          const message = `${statusEmoji} Mwaramutse ${supplierUserAccount.user.name || 'muhinzi'}, amata yanyu ${formattedQuantity}L ku ${unitPrice} RWF/L kuwa ${formattedDateTime} ${statusText}. Igiciro: ${totalAmount} RWF. Murakoze cyane.`;
           await this.smsService.sendSMS(supplierPhone, message);
         }
       } catch (smsError) {
