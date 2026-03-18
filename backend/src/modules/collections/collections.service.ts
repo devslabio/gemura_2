@@ -373,11 +373,11 @@ export class CollectionsService {
               statusEmoji = '✅';
               break;
             case 'pending':
-              statusText = 'irategerezwa';
+              statusText = 'arategereje';
               statusEmoji = '⏳';
               break;
             case 'rejected':
-              statusText = 'yanze';
+              statusText = 'ntiyemewe';
               statusEmoji = '❌';
               break;
             case 'cancelled':
@@ -389,7 +389,7 @@ export class CollectionsService {
               statusEmoji = '📝';
           }
           
-          const message = `${statusEmoji} Mwaramutse ${supplierUserAccount.user.name || 'muhinzi'}, amata yanyu ${formattedQuantity}L ku ${unitPrice} RWF/L kuwa ${formattedDateTime} ${statusText}. Igiciro: ${totalAmount} RWF. Murakoze cyane.`;
+          const message = `${statusEmoji} Muraho ${supplierUserAccount.user.name || 'muhinzi'}, amata yanyu ${formattedQuantity}L ku ${unitPrice} RWF/L kuwa ${formattedDateTime} ${statusText}. Igiciro: ${totalAmount} RWF. Murakoze.`;
           await this.smsService.sendSMS(supplierPhone, message);
         }
       } catch (smsError) {
