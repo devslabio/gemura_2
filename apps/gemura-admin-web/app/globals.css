@@ -1,0 +1,430 @@
+@import "tailwindcss";
+
+/* Gemura brand colors (copied from gemura-web) - primary blue only */
+@theme {
+  --color-primary: #004aad;
+  --color-primary-50: #eef4fc;
+  --color-primary-100: #d6e4fc;
+  --color-primary-200: #adc8fc;
+  --color-primary-300: #85a8f8;
+  --color-primary-400: #5c8ef4;
+  --color-primary-500: #004aad;
+  --color-primary-600: #003d8f;
+  --color-primary-700: #003075;
+  --color-primary-800: #00265c;
+  --color-primary-900: #001d45;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  --primary: #004aad;
+  --primary-hover: #003d8f;
+  --primary-active: #003075;
+  --font-source-sans-pro: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-source-sans-pro);
+  line-height: 1.5;
+}
+
+/* Minimal shared styles so the admin login looks consistent. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 0.25rem;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.btn-secondary {
+  background-color: white;
+  color: #111827;
+  border-color: #e5e7eb;
+}
+
+.input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.125rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: #111827;
+  transition: all 0.2s ease;
+  line-height: 1.5;
+}
+
+.input:focus {
+  outline: none;
+  background: white;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.safe-area-inset {
+  padding-left: env(safe-area-inset-left, 0);
+  padding-right: env(safe-area-inset-right, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* --- Auth hero (covers) + digital clock (copied/adapted from sacco-analytics) --- */
+.auth-hero {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.auth-hero__gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    #052a54 0%,
+    #0b2b5f 22%,
+    #004aad 48%,
+    #003d8f 68%,
+    #004aad 92%,
+    #003075 100%
+  );
+}
+
+.auth-hero__mesh {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 48% at 20% 20%, rgba(0, 74, 173, 0.14) 0%, transparent 52%),
+    radial-gradient(ellipse 58% 82% at 92% 72%, rgba(0, 74, 173, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 48% 110%, rgba(0, 0, 0, 0.35) 0%, transparent 42%),
+    radial-gradient(ellipse 100% 60% at 50% -10%, rgba(0, 0, 0, 0.2) 0%, transparent 55%);
+  pointer-events: none;
+}
+
+.auth-hero__particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.auth-hero__particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.35);
+  animation: auth-hero-drift 22s ease-in-out infinite;
+}
+
+.auth-hero__network {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.auth-hero__node {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.2);
+  animation: auth-hero-pulse 6s ease-in-out infinite;
+}
+
+.auth-hero__sparkline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 18%;
+  height: clamp(72px, 14vh, 140px);
+  width: 100%;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.auth-hero__bars {
+  animation: auth-hero-bars 10s ease-in-out infinite;
+}
+
+.auth-hero__line {
+  opacity: 0.65;
+}
+
+.auth-hero__clock {
+  position: relative;
+  z-index: 2;
+  padding: 1rem;
+}
+
+.auth-hero__brand {
+  position: absolute;
+  bottom: clamp(1.25rem, 4vh, 3rem);
+  left: 0;
+  right: 0;
+  text-align: center;
+  z-index: 2;
+  padding: 0 1.5rem;
+}
+
+.auth-hero__brand h2 {
+  font-size: clamp(1.2rem, 2.2vw, 1.55rem);
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0 0 0.4rem;
+  letter-spacing: -0.02em;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+}
+
+.auth-hero__brand p {
+  margin: 0;
+  font-size: clamp(0.8rem, 1.4vw, 0.95rem);
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.45;
+  max-width: 26rem;
+  margin-inline: auto;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Digital clock (adapted) */
+.digital-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  color: white;
+  text-align: center;
+}
+
+.digital-clock .time-display {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(0, 74, 173, 0.15);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 74, 173, 0.3);
+  border-radius: 16px;
+  padding: 2rem 3rem;
+}
+
+.digital-clock .time-segment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.digital-clock .time-value {
+  font-size: 4rem;
+  font-weight: 700;
+  font-family: 'Courier New', 'Monaco', monospace;
+  letter-spacing: 0.1em;
+  line-height: 1;
+}
+
+.digital-clock .time-seconds .time-value {
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.digital-clock .time-separator {
+  font-size: 4rem;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.8);
+  margin: 0 0.25rem;
+  animation: blink 1s infinite;
+}
+
+.digital-clock .am-pm {
+  font-size: 1.25rem;
+  font-weight: 500;
+  margin-left: 1rem;
+  opacity: 0.9;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.digital-clock .date-display {
+  font-size: 1.25rem;
+  font-weight: 400;
+  opacity: 0.95;
+  background: rgba(0, 74, 173, 0.15);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 74, 173, 0.3);
+  border-radius: 12px;
+  padding: 1rem 2rem;
+  letter-spacing: 0.05em;
+}
+
+@keyframes blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes auth-hero-drift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.45;
+  }
+  33% {
+    transform: translate(12px, -18px) scale(1.15);
+    opacity: 0.85;
+  }
+  66% {
+    transform: translate(-10px, 14px) scale(0.95);
+    opacity: 0.55;
+  }
+}
+
+@keyframes auth-hero-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 1;
+  }
+}
+
+@keyframes auth-hero-bars {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.75;
+  }
+  50% {
+    transform: translateY(-4px);
+    opacity: 0.95;
+  }
+}
+
+@media (max-width: 992px) {
+  .auth-hero {
+    min-height: 200px;
+    height: 200px;
+  }
+  .auth-hero__brand {
+    display: none;
+  }
+  .auth-hero__sparkline {
+    bottom: 8%;
+    opacity: 0.4;
+    height: 56px;
+  }
+  .auth-hero__clock {
+    transform: scale(0.88);
+    padding: 0.5rem;
+  }
+
+  .digital-clock .time-display {
+    padding: 1.5rem 2.5rem;
+  }
+  .digital-clock .time-value {
+    font-size: 3rem;
+  }
+  .digital-clock .time-separator {
+    font-size: 3rem;
+  }
+  .digital-clock .am-pm {
+    font-size: 1rem;
+  }
+  .digital-clock .date-display {
+    font-size: 1rem;
+    padding: 0.875rem 1.5rem;
+  }
+}
+
+@media (max-width: 576px) {
+  .auth-hero {
+    min-height: 160px;
+    height: 160px;
+  }
+  .auth-hero__clock {
+    transform: scale(0.78);
+  }
+  .digital-clock .time-display {
+    padding: 1rem 1.5rem;
+    gap: 0.25rem;
+  }
+  .digital-clock .time-value {
+    font-size: 2rem;
+  }
+  .digital-clock .time-separator {
+    font-size: 2rem;
+    margin: 0 0.125rem;
+  }
+  .digital-clock .am-pm {
+    font-size: 0.875rem;
+    margin-left: 0.5rem;
+  }
+  .digital-clock .date-display {
+    font-size: 0.875rem;
+    padding: 0.75rem 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-hero__particle,
+  .auth-hero__node,
+  .auth-hero__bars {
+    animation: none !important;
+  }
+}
+
