@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { usePermission } from '@/hooks/usePermission';
 import { fullNameFromParts } from '@/lib/utils/name';
 import { adminApi, CreateUserData } from '@/lib/api/admin';
 import { useToastStore } from '@/store/toast';
 import { useAuthStore } from '@/store/auth';
+import { PermissionService } from '@/lib/services/permission.service';
 import Icon, { faUser, faEnvelope, faPhone, faLock, faBuilding, faUserShield, faCheckCircle, faTimes } from '@/app/components/Icon';
 
 // Available roles and account types
@@ -59,7 +59,6 @@ const PERMISSIONS_FALLBACK = [
 
 export default function CreateUserPage() {
   const router = useRouter();
-  const { canManageUsers, isAdmin } = usePermission();
   const { currentAccount } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -89,11 +88,10 @@ export default function CreateUserPage() {
     }).catch(() => {});
   }, [currentAccount?.account_id]);
 
-  // Check permission on mount (run once; canManageUsers/isAdmin are stable in behavior)
+  // Permission check (simple pre-authorization to avoid API 403)
   useEffect(() => {
-    if (!canManageUsers() && !isAdmin()) {
+    if (!PermissionService.canManageUsers() && !PermissionService.isAdmin()) {
       router.push('/admin/users');
-      return;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

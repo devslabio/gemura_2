@@ -5,7 +5,6 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
 import {
-  isAdminAccount,
   isBusinessAccount,
   isExternalSupplier,
   isExternalCustomer,
@@ -29,7 +28,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
   const router = useRouter();
   const pathname = usePathname();
   const { currentAccount } = useAuthStore();
-  const { hasPermission } = usePermission();
+  const { hasPermission, isAdmin } = usePermission();
   const accountType = currentAccount?.account_type ?? '';
   const accountId = currentAccount?.account_id ?? '';
 
@@ -54,8 +53,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
       setAllowed(null);
     }
     if (!accountId) return;
-
-    if (isAdminAccount(accountType)) {
+    if (isAdmin()) {
       router.replace('/admin/dashboard');
       return;
     }
@@ -69,7 +67,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     }
     setAllowed(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fixed deps; accountId covers permission changes
-  }, [pathname, requiredPermission, accountType, accountId]);
+  }, [pathname, requiredPermission, accountType, accountId, isAdmin]);
 
   if (allowed === null) {
     return (

@@ -1,10 +1,12 @@
 /**
- * Navigation: admin vs user is based on account type (active/default account).
+ * Navigation and sectioning.
  *
- * - account_type === 'admin' (Account.type) → admin menu and features only.
- * - Else → user menu and features; what they see is based on role + permissions (unchanged).
+ * Admin portal visibility is determined by role + permissions (UserAccount.role + permissions),
+ * not by a special `account_type === 'admin'` system account. This keeps "Admin portal" separate from
+ * "admin account_type" which may not exist / may differ across deployments.
  *
- * Backend sends account_type from Account.type (tenant | branch | admin) and role from UserAccount.role.
+ * Backend still returns `account_type` + `role` (UserAccount.role), but the UI should use `role/permissions`
+ * when deciding whether to show/protect `/admin/*`.
  */
 
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
@@ -26,9 +28,6 @@ import {
   faTag,
 } from '@/app/components/Icon';
 
-/** Account type that sees only admin menu/features */
-export const ADMIN_ACCOUNT_TYPE = 'admin' as const;
-
 /** Account types that see user/operations menu (filtered by role + permissions) */
 export const BUSINESS_ACCOUNT_TYPES = ['mcc', 'owner', 'agent', 'tenant', 'branch'] as const;
 export const ADMIN_ROLES = ['owner', 'admin'] as const;
@@ -49,15 +48,14 @@ export interface NavItem {
 }
 
 /**
- * Admin section: only for role in [owner, admin] and account_type in [mcc, owner, agent].
- * Dashboard goes to admin dashboard; Users, Roles, Permissions, Settings.
+ * Admin section navigation items.
+ * Visibility is enforced in the sidebar/layout using `role + permissions`.
  */
 export const ADMIN_NAV_ITEMS: NavItem[] = [
   { icon: faHome, label: 'Dashboard', href: '/admin/dashboard', section: 'admin' },
   { icon: faUsers, label: 'Users', href: '/admin/users', section: 'admin' },
   { icon: faUserShield, label: 'Roles', href: '/admin/roles', section: 'admin' },
   { icon: faLock, label: 'Permissions', href: '/admin/permissions', section: 'admin' },
-  { icon: faUsers, label: 'IMMIS', href: '/immis', section: 'admin' },
   { icon: faCog, label: 'Settings', href: '/settings', section: 'admin' },
 ];
 
@@ -77,7 +75,6 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
   { icon: faHandHoldingDollar, label: 'Loans', href: '/loans', section: 'operations' },
   { icon: faChartLine, label: 'Finance', href: '/finance', section: 'operations' },
   { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'operations' },
-  { icon: faUsers, label: 'IMMIS', href: '/immis', section: 'operations' },
   { icon: faCog, label: 'Settings', href: '/settings', section: 'operations' },
 ];
 
@@ -98,11 +95,6 @@ export const EXTERNAL_CUSTOMER_NAV_ITEMS: NavItem[] = [
   { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'external_customer' },
   { icon: faCog, label: 'Settings', href: '/settings', section: 'external_customer' },
 ];
-
-/** True when current account is admin type → admin menu only */
-export function isAdminAccount(accountType: string): boolean {
-  return (accountType || '').toLowerCase() === ADMIN_ACCOUNT_TYPE;
-}
 
 export function isBusinessAccount(accountType: string): boolean {
   const t = (accountType || '').toLowerCase();

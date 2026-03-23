@@ -2,12 +2,12 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/store/auth';
-import { isAdminAccount } from '@/lib/config/nav.config';
+import { usePermission } from '@/hooks/usePermission';
 
 /**
- * Protects /admin/* routes: only current account with account_type === 'admin' can access.
- * Others are redirected to /dashboard.
+ * Admin portal gate:
+ * - Requires at least `dashboard.view` (for admin overview) or `manage_users` (for users/roles/permissions).
+ * - Owner/admin roles bypass via backend permission logic.
  */
 export default function AdminLayout({
   children,
@@ -15,18 +15,16 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { currentAccount } = useAuthStore();
-  const accountType = currentAccount?.account_type ?? '';
+  const { canManageUsers, isAdmin, canViewDashboard } = usePermission();
+
+  const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
   useEffect(() => {
-    if (!isAdminAccount(accountType)) {
-      router.replace('/dashboard');
-    }
-    // Only re-run when account type changes; router is stable in behavior
+    if (!allowed) router.replace('/dashboard');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountType]);
+  }, [allowed]);
 
-  if (!isAdminAccount(accountType)) {
+  if (!allowed) {
     return (
       <div className="flex items-center justify-center p-8">
         <p className="text-gray-500">Redirecting...</p>

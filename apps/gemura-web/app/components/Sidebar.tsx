@@ -13,7 +13,6 @@ import {
   OPERATIONS_NAV_ITEMS,
   EXTERNAL_SUPPLIER_NAV_ITEMS,
   EXTERNAL_CUSTOMER_NAV_ITEMS,
-  isAdminAccount,
   isBusinessAccount,
   isAdminRole,
   isOperationsRole,
@@ -31,7 +30,7 @@ interface SidebarProps {
 export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange }: SidebarProps) {
   const pathname = usePathname();
   const { user, currentAccount } = useAuthStore();
-  const { canManageUsers, isAdmin, hasPermission } = usePermission();
+  const { canManageUsers, isAdmin, canViewDashboard, hasPermission } = usePermission();
   const [userName, setUserName] = useState('User');
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState('User');
@@ -49,16 +48,27 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     }
   }, [user, currentAccount]);
 
-  // Build menu by account type first; then role/permissions for user (non-admin) accounts
+  // Build menu.
+  // Admin portal is shown based on role/permissions (manage_users + dashboard.view), matching backend.
   const menuItems = useMemo(() => {
     const items: NavItem[] = [];
 
-    // Admin account type → admin menu and features only
-    if (isAdminAccount(accountType)) {
+    const showAdminDashboard = canViewDashboard() || isAdmin();
+    const showAdminUsers = canManageUsers() || isAdmin();
+
+    if (showAdminDashboard || showAdminUsers) {
       ADMIN_NAV_ITEMS.forEach((item) => {
-        if (item.href === '/admin/users' && !canManageUsers() && !isAdmin()) return;
+        if (item.href === '/admin/dashboard') {
+          if (!showAdminDashboard) return;
+        }
+
+        if (item.href === '/admin/users' || item.href === '/admin/roles' || item.href === '/admin/permissions') {
+          if (!showAdminUsers) return;
+        }
+
         items.push(item);
       });
+
       return items;
     }
 
@@ -108,7 +118,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
       { icon: ADMIN_NAV_ITEMS[4].icon, label: 'Settings', href: '/settings', section: 'admin' },
     );
     return items;
-  }, [role, accountType, canManageUsers, isAdmin, hasPermission]);
+  }, [role, accountType, canManageUsers, isAdmin, canViewDashboard, hasPermission]);
 
   // Keep the section that contains the current route expanded (only add, never remove, to avoid loop)
   useEffect(() => {

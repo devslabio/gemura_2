@@ -16,7 +16,10 @@
     "prisma:validate": "prisma validate",
     "prisma:seed": "ts-node prisma/seed.ts",
     "seed:inventory-items": "ts-node prisma/seed-inventory-items.ts",
+    "seed:farms": "ts-node prisma/seed-farms.ts",
     "seed:animals": "ts-node prisma/seed-animals.ts",
+    "change-password:by-phone": "ts-node prisma/change-password-by-phone.ts",
+    "seed:reponse-farm": "ts-node prisma/seed-reponse-farm.ts",
     "migrate": "ts-node src/migration/migrate.ts",
     "migrate:selective": "ts-node src/migration/migrate-selective.ts",
     "migrate:fix-default-accounts": "ts-node src/migration/fix-default-accounts.ts"

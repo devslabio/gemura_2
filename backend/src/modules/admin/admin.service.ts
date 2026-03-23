@@ -543,7 +543,7 @@ export class AdminService {
   /**
    * Get dashboard statistics with comprehensive metrics
    */
-  async getDashboardStats(user: User, accountId: string) {
+  async getDashboardStats(user: User, accountId: string, dateFrom?: string, dateTo?: string) {
     await this.checkAdminPermission(user, accountId);
 
     // Get date ranges for trends
@@ -551,6 +551,34 @@ export class AdminService {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const last30Days = new Date(todayStart.getTime() - 30 * 24 * 60 * 60 * 1000);
     const last7Days = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // For range-based trend calculations we must stay consistent with how we bucket days:
+    // we use `new Date(sale.sale_at).toISOString().split('T')[0]` which is UTC day-based.
+    // So we interpret `date_from`/`date_to` as UTC dates too (not local midnights).
+    const todayStartUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    const last30DaysUtc = new Date(todayStartUtc.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const last7DaysUtc = new Date(todayStartUtc.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const parseDateOnlyUTC = (s?: string): Date | null => {
+      if (!s) return null;
+      const match = String(s).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) return null;
+      const y = Number(match[1]);
+      const m = Number(match[2]);
+      const d = Number(match[3]);
+      const dt = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0));
+      return Number.isNaN(dt.getTime()) ? null : dt;
+    };
+
+    // Trend range drives revenue chart + sales volume chart.
+    const trendStart = parseDateOnlyUTC(dateFrom) ?? (() => new Date(last30DaysUtc))();
+    const trendEnd = parseDateOnlyUTC(dateTo) ?? todayStartUtc;
+    const rangeStartDate = trendStart <= trendEnd ? trendStart : trendEnd;
+    const rangeEndDate = trendStart <= trendEnd ? trendEnd : trendStart;
+
+    // Include the full end day in range filtering (UTC).
+    rangeStartDate.setUTCHours(0, 0, 0, 0);
+    rangeEndDate.setUTCHours(23, 59, 59, 999);
 
     // Basic counts
     const [
@@ -613,14 +641,13 @@ export class AdminService {
       0,
     );
 
-    // Generate daily breakdown for last 30 days
+    // Generate daily breakdown for selected date range
     const dailyBreakdown = new Map<string, { date: string; revenue: number; sales: number }>();
-    
-    // Initialize last 30 days
-    for (let i = 29; i >= 0; i--) {
-      const date = new Date(todayStart);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+
+    for (let d = new Date(rangeStartDate); d <= rangeEndDate; d.setUTCDate(d.getUTCDate() + 1)) {
+      // Ensure we're bucketing by UTC day.
+      d.setUTCHours(0, 0, 0, 0);
+      const dateStr = d.toISOString().split('T')[0];
       dailyBreakdown.set(dateStr, { date: dateStr, revenue: 0, sales: 0 });
     }
 
@@ -640,6 +667,18 @@ export class AdminService {
       revenue: day.revenue,
       sales: day.sales,
     }));
+
+    // Compute range totals from the same accepted sales dataset.
+    const acceptedSalesInRange = allSales.filter((sale) => {
+      const dt = new Date(sale.sale_at);
+      return dt >= rangeStartDate && dt <= rangeEndDate;
+    });
+
+    const salesInRange = acceptedSalesInRange.length;
+    const revenueInRange = acceptedSalesInRange.reduce(
+      (sum, sale) => sum + Number(sale.quantity) * Number(sale.unit_price),
+      0,
+    );
 
     // Get sales by status
     const salesByStatus = await this.prisma.milkSale.groupBy({
@@ -683,7 +722,7 @@ export class AdminService {
           total: totalAccounts,
         },
         sales: {
-          total: totalSales,
+          total: salesInRange,
           last30Days: salesLast30Days.length,
           last7Days: salesLast7Days.length,
           today: salesToday.length,
@@ -698,7 +737,7 @@ export class AdminService {
           total: totalCustomers,
         },
         revenue: {
-          total: totalRevenue,
+          total: revenueInRange,
           last30Days: revenueLast30Days,
           last7Days: revenueLast7Days,
           today: revenueToday,

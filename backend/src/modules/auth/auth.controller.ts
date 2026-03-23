@@ -1,5 +1,5 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, Req, Get, BadRequestException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiNotFoundResponse, ApiConflictResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBody, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiNotFoundResponse } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -367,6 +367,30 @@ export class AuthController {
   })
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
     return this.authService.resetPassword(resetPasswordDto);
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Logout current session',
+    description:
+      'Logout endpoint for clients. For now this simply returns a success response so that mobile/web clients have a stable API. Session invalidation is handled client-side while token-based auth is being migrated.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Logout successful.',
+    example: {
+      code: 200,
+      status: 'success',
+      message: 'Logout successful.',
+    },
+  })
+  async logout() {
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Logout successful.',
+    };
   }
 
   @Get('token')

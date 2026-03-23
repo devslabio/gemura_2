@@ -90,10 +90,71 @@ body {
   box-shadow: 0 0 0 1px var(--primary);
 }
 
+.select,
+select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.125rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: #111827;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  line-height: 1.5;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-right: 2.5rem;
+}
+
+.select:hover:not(:disabled),
+select:hover:not(:disabled) {
+  border-color: #d1d5db;
+}
+
+.select:focus,
+select:focus {
+  outline: none;
+  background-color: white;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0, 74, 173, 0.1);
+}
+
+.select:disabled,
+select:disabled {
+  background: #f3f4f6;
+  color: #6b7280;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .safe-area-inset {
   padding-left: env(safe-area-inset-left, 0);
   padding-right: env(safe-area-inset-right, 0);
   padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Responsive content container: max-width on xl/2xl, prevent overflow */
+.container-content {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+@media (min-width: 1280px) {
+  .container-content {
+    max-width: 1400px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+@media (min-width: 1536px) {
+  .container-content {
+    max-width: 1600px;
+  }
 }
 
 /* --- Auth hero (covers) + digital clock (copied/adapted from sacco-analytics) --- */
@@ -426,5 +487,21 @@ body {
   .auth-hero__bars {
     animation: none !important;
   }
+}
+
+/* Skeleton shimmer animation */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #f3f4f6 0%, #e5e7eb 20%, #f3f4f6 40%, #f3f4f6 100%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
 }
 

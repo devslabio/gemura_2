@@ -65,6 +65,32 @@ services:
       retries: 5
       start_period: 60s
 
+  gemura-admin-ui:
+    build:
+      # Resolved from compose file dir (docker/); admin app archive extracts to apps/gemura-admin-web
+      context: ../apps/gemura-admin-web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL_ADMIN:-https://admin.gemura.rw/api}
+    container_name: gemura-admin-ui
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "3015:3005"
+    depends_on:
+      - gemura-api
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3005/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
 networks:
   kwezi_default:
     external: true

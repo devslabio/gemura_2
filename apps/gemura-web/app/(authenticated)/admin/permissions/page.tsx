@@ -3,17 +3,17 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { usePermission } from '@/hooks/usePermission';
 import { adminApi, type PermissionItem } from '@/lib/api/admin';
 import { useAuthStore } from '@/store/auth';
+import { usePermission } from '@/hooks/usePermission';
 import Icon, { faLock } from '@/app/components/Icon';
 import FilterBar, { FilterBarGroup } from '@/app/components/FilterBar';
 import { TableSkeleton } from '@/app/components/SkeletonLoader';
 
 export default function AdminPermissionsPage() {
   const router = useRouter();
-  const { canManageUsers, isAdmin } = usePermission();
   const { currentAccount } = useAuthStore();
+  const { canManageUsers, isAdmin } = usePermission();
   const [loading, setLoading] = useState(true);
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
   const [error, setError] = useState('');

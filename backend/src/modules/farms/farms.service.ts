@@ -91,20 +91,36 @@ export class FarmsService {
   }
 
   private async generateNextFarmCode(accountId: string): Promise<string> {
-    const last = await this.prisma.farm.findFirst({
-      where: { account_id: accountId },
-      orderBy: { created_at: 'desc' },
+    // Find the highest farm number across all farms (not just this account)
+    const allFarms = await this.prisma.farm.findMany({
       select: { code: true },
+      orderBy: { code: 'desc' },
     });
-    const nextNum = last?.code?.match(/^FARM-(\d+)$/)?.[1]
-      ? parseInt(last.code.replace(/^FARM-/, ''), 10) + 1
-      : 1;
-    const code = `FARM-${String(nextNum).padStart(4, '0')}`;
-    const exists = await this.prisma.farm.findUnique({ where: { code } });
-    if (exists) {
-      return `FARM-${String(nextNum + 1).padStart(4, '0')}`;
+    
+    let maxNum = 0;
+    for (const farm of allFarms) {
+      const match = farm.code?.match(/^FARM-(\d+)$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
     }
-    return code;
+    
+    // Try to find an available code
+    let nextNum = maxNum + 1;
+    let attempts = 0;
+    while (attempts < 100) {
+      const code = `FARM-${String(nextNum).padStart(4, '0')}`;
+      const exists = await this.prisma.farm.findUnique({ where: { code } });
+      if (!exists) {
+        return code;
+      }
+      nextNum++;
+      attempts++;
+    }
+    
+    // Fallback: use timestamp-based code
+    return `FARM-${Date.now().toString().slice(-8)}`;
   }
 
   async updateFarm(

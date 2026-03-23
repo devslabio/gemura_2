@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { usePermission } from '@/hooks/usePermission';
+import { PermissionService } from '@/lib/services/permission.service';
 import { fullNameFromParts, splitFullName } from '@/lib/utils/name';
 import { adminApi, UpdateUserData } from '@/lib/api/admin';
 import { useAuthStore } from '@/store/auth';
@@ -62,7 +62,6 @@ export default function EditUserPage() {
   const router = useRouter();
   const params = useParams();
   const userId = params.id as string;
-  const { canManageUsers, isAdmin } = usePermission();
   const { currentAccount } = useAuthStore();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -95,7 +94,7 @@ export default function EditUserPage() {
 
   // Check permission on mount and load user; only re-run when userId changes
   useEffect(() => {
-    if (!canManageUsers() && !isAdmin()) {
+    if (!PermissionService.canManageUsers() && !PermissionService.isAdmin()) {
       router.push('/admin/users');
       return;
     }

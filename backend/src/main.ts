@@ -50,8 +50,9 @@ async function bootstrap() {
   });
 
   // CORS configuration
-  // Allow all origins if CORS_ORIGIN is set to '*' or in development mode
-  const allowAllOrigins = process.env.CORS_ORIGIN === '*' || process.env.NODE_ENV !== 'production';
+  const isProduction = process.env.NODE_ENV === 'production';
+  // In production we never allow wildcard CORS; in non-production we can be more relaxed.
+  const allowAllOrigins = !isProduction && (process.env.CORS_ORIGIN === '*' || !process.env.CORS_ORIGIN);
 
   if (allowAllOrigins) {
     console.log('🌐 CORS: Allowing all origins');

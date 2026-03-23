@@ -1,0 +1,57 @@
+'use client';
+
+import { IconDefinition } from '@fortawesome/fontawesome-svg-core';
+import Link from 'next/link';
+import Icon from './Icon';
+
+interface StatCardProps {
+  label: string;
+  value: string | number;
+  icon: IconDefinition;
+  href?: string;
+  subtitle?: string;
+  iconBgColor?: string;
+  iconColor?: string;
+}
+
+/**
+ * ResolveIT-style stat card: label, value, optional subtitle, icon in colored box (right).
+ */
+export default function StatCard({
+  label,
+  value,
+  icon,
+  href,
+  subtitle,
+  iconBgColor = '#eff6ff',
+  iconColor = 'var(--primary)',
+}: StatCardProps) {
+  const content = (
+    <div className="bg-white rounded-sm border border-gray-200 p-6 min-h-[120px] hover:border-gray-300 transition-colors">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{label}</div>
+          <div className="text-2xl font-bold text-gray-900">{value}</div>
+          {subtitle && <div className="text-xs text-gray-600 mt-1.5">{subtitle}</div>}
+        </div>
+        <div
+          className="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center"
+          style={{ backgroundColor: iconBgColor, color: iconColor }}
+        >
+          <Icon icon={icon} size="lg" />
+        </div>
+      </div>
+    </div>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className="block">
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
+}
+

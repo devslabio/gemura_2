@@ -4,7 +4,6 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth';
-import { isAdminAccount } from '@/lib/config/nav.config';
 import { statsApi, OverviewResponse } from '@/lib/api/stats';
 import { accountingApi } from '@/lib/api/accounting';
 import { inventoryApi, type InventoryStats, type ValuationOverTimePoint, type TopItemByValue, type StockMovementPoint } from '@/lib/api/inventory';
@@ -135,10 +134,6 @@ export default function Dashboard() {
   }, [chartTab, dashboardTab]);
 
   useEffect(() => {
-    if (isAdminAccount(accountType)) {
-      router.replace('/admin/dashboard');
-      return;
-    }
     let cancelled = false;
     setLoading(true);
     setError('');

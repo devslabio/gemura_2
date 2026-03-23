@@ -3,17 +3,17 @@
 import { useEffect, useState, useMemo, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { usePermission } from '@/hooks/usePermission';
 import { adminApi, type RoleItem } from '@/lib/api/admin';
 import { useAuthStore } from '@/store/auth';
+import { usePermission } from '@/hooks/usePermission';
 import Icon, { faLock, faChevronDown, faChevronUp } from '@/app/components/Icon';
 import FilterBar, { FilterBarSearch } from '@/app/components/FilterBar';
 import { TableSkeleton } from '@/app/components/SkeletonLoader';
 
 export default function AdminRolesPage() {
   const router = useRouter();
-  const { canManageUsers, isAdmin } = usePermission();
   const { currentAccount } = useAuthStore();
+  const { canManageUsers, isAdmin } = usePermission();
   const [loading, setLoading] = useState(true);
   const [roles, setRoles] = useState<RoleItem[]>([]);
   const [error, setError] = useState('');

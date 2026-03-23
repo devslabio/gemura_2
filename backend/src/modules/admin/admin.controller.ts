@@ -82,8 +82,10 @@ export class AdminController {
   async getDashboardStats(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
   ) {
-    return this.adminService.getDashboardStats(user, accountId);
+    return this.adminService.getDashboardStats(user, accountId, dateFrom, dateTo);
   }
 
   @Get('roles')

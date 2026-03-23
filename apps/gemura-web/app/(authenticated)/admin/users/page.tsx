@@ -36,8 +36,8 @@ const PAGE_SIZES = [10, 20, 50, 100];
 
 export default function UsersPage() {
   const router = useRouter();
-  const { canManageUsers, isAdmin } = usePermission();
   const { currentAccount } = useAuthStore();
+  const { canManageUsers, isAdmin } = usePermission();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
@@ -99,7 +99,7 @@ export default function UsersPage() {
     }
   }, []);
 
-  // Initial load and permission check (run once; canManageUsers/isAdmin are stable in behavior)
+  // Initial load and permission check
   useEffect(() => {
     if (!canManageUsers() && !isAdmin()) {
       router.push('/dashboard');
