@@ -7,6 +7,30 @@ import { CreateTransactionDto, TransactionType } from './dto/create-transaction.
 export class TransactionsService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Chart of account IDs that scope P&L and the finance transaction list to one farm/tenant ledger
+   * (same rules as ReportsService income statement).
+   */
+  private async getAccountScopedChartIds(defaultAccountId: string): Promise<string[]> {
+    const defaultAccount = await this.prisma.account.findUnique({
+      where: { id: defaultAccountId },
+    });
+    if (!defaultAccount) return [];
+    const prefix = defaultAccount.code || defaultAccount.id.substring(0, 8).toUpperCase();
+    const accountCharts = await this.prisma.chartOfAccount.findMany({
+      where: {
+        is_active: true,
+        OR: [
+          { code: { startsWith: `CASH-${prefix}` } },
+          { code: { startsWith: `REV-${prefix}` } },
+          { code: { startsWith: `EXP-${prefix}` } },
+        ],
+      },
+      select: { id: true },
+    });
+    return accountCharts.map((c) => c.id);
+  }
+
   async createTransaction(user: User, createDto: CreateTransactionDto) {
     if (!user.default_account_id) {
       throw new BadRequestException({
@@ -186,29 +210,8 @@ export class TransactionsService {
       });
     }
 
-    // Get cash account for this user's default account
-    const defaultAccount = await this.prisma.account.findUnique({
-      where: { id: user.default_account_id },
-    });
-
-    if (!defaultAccount) {
-      throw new BadRequestException({
-        code: 400,
-        status: 'error',
-        message: 'Default account not found.',
-      });
-    }
-
-    const cashAccountCode = `CASH-${defaultAccount.code || defaultAccount.id.substring(0, 8).toUpperCase()}`;
-    const cashAccount = await this.prisma.chartOfAccount.findFirst({
-      where: {
-        code: cashAccountCode,
-        account_type: 'Asset',
-        is_active: true,
-      },
-    });
-
-    if (!cashAccount) {
+    const accountScopedChartIds = await this.getAccountScopedChartIds(user.default_account_id);
+    if (accountScopedChartIds.length === 0) {
       return {
         code: 200,
         status: 'success',
@@ -217,17 +220,24 @@ export class TransactionsService {
       };
     }
 
-    // Find transactions that involve the cash account
+    const from = filters?.date_from ? new Date(filters.date_from) : undefined;
+    let to: Date | undefined;
+    if (filters?.date_to) {
+      to = new Date(filters.date_to);
+      to.setHours(23, 59, 59, 999);
+    }
+
+    // Same ledger scope as income statement: any journal touching this account's CASH/REV/EXP charts.
+    // Exclude created_by so all farm activities (sales, payments, other users) appear in the list.
     const transactions = await this.prisma.accountingTransaction.findMany({
       where: {
         entries: {
           some: {
-            account_id: cashAccount.id,
+            account_id: { in: accountScopedChartIds },
           },
         },
-        ...(filters?.date_from && { transaction_date: { gte: new Date(filters.date_from) } }),
-        ...(filters?.date_to && { transaction_date: { lte: new Date(filters.date_to) } }),
-        created_by: user.id,
+        ...(from && { transaction_date: { gte: from } }),
+        ...(to && { transaction_date: { lte: to } }),
       },
       include: {
         entries: {
@@ -336,8 +346,16 @@ export class TransactionsService {
       });
     }
 
-    // Verify transaction belongs to user
-    if (transaction.created_by !== user.id) {
+    if (!user.default_account_id) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'No valid default account found.',
+      });
+    }
+    const scopedIds = await this.getAccountScopedChartIds(user.default_account_id);
+    const touchesLedger = transaction.entries.some((e) => scopedIds.includes(e.account_id));
+    if (!touchesLedger) {
       throw new BadRequestException({
         code: 403,
         status: 'error',

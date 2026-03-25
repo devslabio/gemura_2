@@ -123,7 +123,8 @@ export class TransactionsController {
   @Get()
   @ApiOperation({
     summary: 'Get revenue and expense transactions',
-    description: 'Retrieves a list of revenue and expense transactions for the authenticated user. Supports filtering by type, date range, and limiting results. Transactions are linked to the user\'s default account.',
+    description:
+      'Lists journal activity that drives the income statement for the user\'s default account (CASH/REV/EXP chart lines): manual entries, milk-sale revenue, payments, etc. Scoped to the farm ledger, not to the logged-in user who created the entry.',
   })
   @ApiQuery({
     name: 'type',
