@@ -11,7 +11,7 @@ const PRICE = 400;
 
 const hex = () => randomBytes(3).toString('hex').toUpperCase();
 
-/** Farmers selling to Manzi — 250788301001–020 (matches SuppliersService). */
+/** Farmers selling to Manzi — 250788301001–060. */
 const SUPPLIERS = `
 Theogene Dusabe,250788301001
 Consolee Nyirahabimana,250788301002
@@ -33,6 +33,46 @@ Valens Niyonkuru,250788301017
 Speciose Ingabire,250788301018
 Leon Ntawukuriryayo,250788301019
 Yves Rukundo,250788301020
+Augustin Ndayisenga,250788301021
+Beatrice Mukarugwiza,250788301022
+Celestin Nsengiyumva,250788301023
+Dorothee Uwanyirigira,250788301024
+Evariste Nkundabagenzi,250788301025
+Fabiola Mukasine,250788301026
+Gaspard Nteziryayo,250788301027
+Helene Uwimbabazi,250788301028
+Ignace Nsanzumuhire,250788301029
+Jeannette Mukamurego,250788301030
+Kenneth Ndayambaje,250788301031
+Liliane Uwimana,250788301032
+Moise Nkurikiye,250788301033
+Nathalie Mukamana,250788301034
+Oscar Ndayishimiye,250788301035
+Philomene Ishimwe,250788301036
+Richard Ntwari,250788301037
+Solange Mukeshimana,250788301038
+Thomas Bizimana,250788301039
+Uwineza Claudine,250788301040
+Victor Nsengimana,250788301041
+Winifred Uwera,250788301042
+Xavier Ntambara,250788301043
+Yolande Nkurikiye,250788301044
+Zephaniah Mukamazimpaka,250788301045
+Adelphine Ndagijimana,250788301046
+Blaise Uwimbabazi,250788301047
+Chantal Munyaneza,250788301048
+Didier Mutoni,250788301049
+Eugenie Nkusi,250788301050
+Felix Habimana,250788301051
+Gertrude Mukantagara,250788301052
+Hubert Nsanzimana,250788301053
+Ines Uwimana,250788301054
+Jacques Nkurunziza,250788301055
+Ketty Mukamana,250788301056
+Lambert Ndayishimiye,250788301057
+Marceline Ishimwe,250788301058
+Norbert Ntwari,250788301059
+Odette Mukeshimana,250788301060
 `
   .trim()
   .split('\n')

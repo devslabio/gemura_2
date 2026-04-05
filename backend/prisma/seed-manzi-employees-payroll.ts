@@ -8,8 +8,8 @@ const ACTING_USER = process.env.MANZI_USER_CODE ?? 'U_MFZ';
 const SEED_RUN_PREFIX = '[seed-manzi-payroll]';
 const MILK_SEED_NOTES = '[seed-manzi-milk]';
 
-/** How many past full calendar months get a completed + paid payroll run (default 6). */
-const PAYROLL_MONTHS = parseInt(process.env.MANZI_PAYROLL_SEED_MONTHS ?? '6', 10);
+/** How many past full calendar months get a completed + paid payroll run (default 18 ≈ 3× former 6). */
+const PAYROLL_MONTHS = parseInt(process.env.MANZI_PAYROLL_SEED_MONTHS ?? '18', 10);
 
 type EmployeeRow = { name: string; phone: string; code: string; role: 'manager' | 'admin' | 'collector' | 'viewer' | 'agent' };
 
@@ -19,6 +19,16 @@ const EMPLOYEES: EmployeeRow[] = [
   { name: 'Sandrine Mukamana', phone: '250788302003', code: 'U_MFZ_COL', role: 'collector' },
   { name: 'Pacifique Ndayishimiye', phone: '250788302004', code: 'U_MFZ_VWR', role: 'viewer' },
   { name: 'Joseph Niyonsaba', phone: '250788302005', code: 'U_MFZ_AGT', role: 'agent' },
+  { name: 'Claudette Mukamana', phone: '250788302006', code: 'U_MFZ_E06', role: 'manager' },
+  { name: 'Denis Nkurunziza', phone: '250788302007', code: 'U_MFZ_E07', role: 'collector' },
+  { name: 'Evelyne Uwimana', phone: '250788302008', code: 'U_MFZ_E08', role: 'manager' },
+  { name: 'Francois Ndayisaba', phone: '250788302009', code: 'U_MFZ_E09', role: 'viewer' },
+  { name: 'Gloria Ishimwe', phone: '250788302010', code: 'U_MFZ_E10', role: 'agent' },
+  { name: 'Hilaire Ntwari', phone: '250788302011', code: 'U_MFZ_E11', role: 'admin' },
+  { name: 'Ingrid Mukeshimana', phone: '250788302012', code: 'U_MFZ_E12', role: 'collector' },
+  { name: 'Jules Bizimana', phone: '250788302013', code: 'U_MFZ_E13', role: 'manager' },
+  { name: 'Kelly Uwera', phone: '250788302014', code: 'U_MFZ_E14', role: 'viewer' },
+  { name: 'Leon Mugisha', phone: '250788302015', code: 'U_MFZ_E15', role: 'agent' },
 ];
 
 function lastNFullMonthsDesc(n: number): { y: number; m: number; label: string; start: Date; end: Date }[] {
@@ -218,7 +228,7 @@ async function main() {
   }
 
   console.log(
-    `Employees: ${EMPLOYEES.length} on ${BUYER_ACCOUNT} (Pass123, phones 250788302001–005). ` +
+    `Employees: ${EMPLOYEES.length} on ${BUYER_ACCOUNT} (Pass123, phones 250788302001–015). ` +
       `Payroll: ${inbound.length} milk suppliers on payroll; ` +
       `${runs} runs, ${payslips} payslips (${months.length} full months, seed milk in range settled as paid).`,
   );

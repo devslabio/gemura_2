@@ -92,6 +92,34 @@ async function main() {
     },
   });
 
+  const extraCharges: { name: string; desc: string; kind: string; amountType: string; amount: number; recurrence: string | null }[] = [
+    { name: 'Equipment lease share', desc: 'Shared equipment fee per payroll', kind: 'recurring', amountType: 'fixed', amount: 1200, recurrence: 'per_payroll' },
+    { name: 'Cold chain top-up', desc: 'Monthly cold storage', kind: 'recurring', amountType: 'fixed', amount: 1800, recurrence: 'monthly' },
+    { name: 'Lab test pool (pct)', desc: 'Milk testing fund', kind: 'recurring', amountType: 'percentage', amount: 1.25, recurrence: 'per_payroll' },
+    { name: 'Cooperative dues', desc: 'Fixed cooperative contribution', kind: 'recurring', amountType: 'fixed', amount: 3500, recurrence: 'monthly' },
+    { name: 'Security / night watch', desc: 'Site security share', kind: 'recurring', amountType: 'fixed', amount: 800, recurrence: 'per_payroll' },
+    { name: 'Fuel adjustment', desc: 'Transport fuel pass-through', kind: 'recurring', amountType: 'fixed', amount: 2200, recurrence: 'monthly' },
+    { name: 'Training levy', desc: 'Staff training fund', kind: 'recurring', amountType: 'percentage', amount: 0.75, recurrence: 'per_payroll' },
+    { name: 'Weighbridge service', desc: 'Weighing fee per period', kind: 'recurring', amountType: 'fixed', amount: 650, recurrence: 'per_payroll' },
+  ];
+  for (const ec of extraCharges) {
+    await prisma.charge.create({
+      data: {
+        customer_account_id: manzi.id,
+        name: `${CHARGE_PREFIX}${ec.name}`,
+        description: ec.desc,
+        kind: ec.kind as 'recurring',
+        amount_type: ec.amountType as 'fixed' | 'percentage',
+        amount: new Prisma.Decimal(ec.amount),
+        recurrence: ec.recurrence,
+        apply_to_all_suppliers: true,
+        effective_from: CHARGES_FROM,
+        is_active: true,
+        created_by: actor.id,
+      },
+    });
+  }
+
   const selective = await prisma.charge.create({
     data: {
       customer_account_id: manzi.id,
@@ -108,7 +136,7 @@ async function main() {
     },
   });
   await prisma.chargeSupplier.createMany({
-    data: inbound.slice(0, 6).map((r) => ({
+    data: inbound.slice(0, Math.min(18, inbound.length)).map((r) => ({
       charge_id: selective.id,
       supplier_account_id: r.supplier_account_id,
     })),
@@ -253,8 +281,57 @@ async function main() {
     `${LOAN_TAG} disburse ${loan4.id.slice(0, 8)}`,
   );
 
+  const ib = (i: number) =>
+    inbound[Math.min(i, Math.max(0, inbound.length - 1))]!.supplier_account_id;
+  const ob = (i: number) =>
+    outbound[Math.min(i, Math.max(0, outbound.length - 1))]!.customer_account_id;
+
+  type LoanSeed = {
+    borrower: 'supplier' | 'customer';
+    accountId: string;
+    principal: number;
+    disb: Date;
+    due: Date;
+    note: string;
+  };
+  const extraLoans: LoanSeed[] = [
+    { borrower: 'supplier', accountId: ib(1), principal: 95000, disb: cal(2022, 7, 1), due: cal(2024, 7, 1), note: 'Season top-up — supplier (2022)' },
+    { borrower: 'supplier', accountId: ib(5), principal: 120000, disb: cal(2023, 2, 15), due: cal(2025, 2, 15), note: 'Input bundle — supplier (2023)' },
+    { borrower: 'customer', accountId: ob(1), principal: 45000, disb: cal(2023, 5, 20), due: cal(2024, 5, 20), note: 'Trade credit — customer (2023)' },
+    { borrower: 'supplier', accountId: ib(9), principal: 200000, disb: cal(2023, 11, 8), due: cal(2026, 11, 8), note: 'Herd expansion — supplier (2023)' },
+    { borrower: 'supplier', accountId: ib(13), principal: 88000, disb: cal(2024, 2, 28), due: cal(2025, 8, 28), note: 'Feed advance — supplier (2024)' },
+    { borrower: 'customer', accountId: ob(6), principal: 72000, disb: cal(2024, 6, 11), due: cal(2025, 6, 11), note: 'Stocking loan — customer (2024)' },
+    { borrower: 'supplier', accountId: ib(17), principal: 155000, disb: cal(2024, 10, 3), due: cal(2026, 10, 3), note: 'Equipment share — supplier (2024)' },
+    { borrower: 'supplier', accountId: ib(21), principal: 64000, disb: cal(2025, 1, 9), due: cal(2025, 7, 9), note: 'Bridge — supplier (2025)' },
+    { borrower: 'customer', accountId: ob(10), principal: 33000, disb: cal(2025, 8, 19), due: cal(2026, 2, 19), note: 'Retail float — customer (2025)' },
+    { borrower: 'supplier', accountId: ib(29), principal: 110000, disb: cal(2025, 11, 30), due: cal(2027, 5, 30), note: 'Dry season input — supplier (2025)' },
+  ];
+  for (const el of extraLoans) {
+    const row = await prisma.loan.create({
+      data: {
+        lender_account_id: manzi.id,
+        borrower_type: el.borrower,
+        borrower_account_id: el.accountId,
+        principal: new Prisma.Decimal(el.principal),
+        amount_repaid: new Prisma.Decimal(0),
+        disbursement_date: el.disb,
+        due_date: el.due,
+        notes: `${LOAN_TAG} ${el.note}`,
+        created_by: actor.id,
+      },
+    });
+    await postLoanDisbursement(
+      prisma,
+      manzi,
+      actor.id,
+      el.principal,
+      el.disb,
+      `${LOAN_TAG} disburse ${row.id.slice(0, 8)}`,
+    );
+  }
+
   console.log(
-    `Charges: 4 (effective ${CHARGES_FROM.toISOString().slice(0, 10)}). Loans: 5 across 2022–2026 (1 partial repayment). ${BUYER_ACCOUNT}`,
+    `Charges: 12 (effective ${CHARGES_FROM.toISOString().slice(0, 10)}). Loans: 15 across 2022–2027 (1 partial repayment). ${BUYER_ACCOUNT}`,
   );
 }
 

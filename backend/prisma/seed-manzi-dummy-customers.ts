@@ -10,7 +10,7 @@ const PRICE = 400;
 
 const hex = () => randomBytes(3).toString('hex').toUpperCase();
 
-/** name,phone per line — 20 Rwandan-style dummy buyers for Manzi (250788300001–020). */
+/** name,phone per line — 60 Rwandan-style dummy buyers for Manzi (250788300001–060). */
 const CUSTOMERS = `
 Jean Pierre Mugisha,250788300001
 Marie Therese Mukamana,250788300002
@@ -32,6 +32,46 @@ Vestine Uwimbabazi,250788300017
 Samuel Munyaneza,250788300018
 Delphine Mutoni,250788300019
 Albert Nkusi,250788300020
+Adeline Mukantagara,250788300021
+Benjamin Nsanzimana,250788300022
+Charlotte Uwimana,250788300023
+Dominique Nkurunziza,250788300024
+Esther Mukamana,250788300025
+Fabrice Ndayishimiye,250788300026
+Grace Ishimwe,250788300027
+Herve Ntwari,250788300028
+Immaculee Mukeshimana,250788300029
+Jean Baptiste Bizimana,250788300030
+Kelly Uwera,250788300031
+Laetitia Ntambara,250788300032
+Marc Nkurikiye,250788300033
+Nadine Mukamazimpaka,250788300034
+Oscar Ndagijimana,250788300035
+Prisca Uwimbabazi,250788300036
+Quentin Munyaneza,250788300037
+Rebecca Mutoni,250788300038
+Steven Nkusi,250788300039
+Therese Mukantagara,250788300040
+Uwineza Ange,250788300041
+Valentine Nsanzimana,250788300042
+William Uwimana,250788300043
+Xavera Nkurunziza,250788300044
+Yvette Mukamana,250788300045
+Zacharie Ndayishimiye,250788300046
+Aline Ishimwe,250788300047
+Bosco Ntwari,250788300048
+Celine Mukeshimana,250788300049
+David Bizimana,250788300050
+Edith Uwera,250788300051
+Frank Ntambara,250788300052
+Gisele Nkurikiye,250788300053
+Henri Mukamazimpaka,250788300054
+Irene Ndagijimana,250788300055
+James Uwimbabazi,250788300056
+Karine Munyaneza,250788300057
+Lambert Mutoni,250788300058
+Mireille Nkusi,250788300059
+Noel Habimana,250788300060
 `
   .trim()
   .split('\n')

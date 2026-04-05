@@ -10,8 +10,8 @@ const PRODUCT_PREFIX = '[seed-manzi] ';
 
 const START_YEAR = parseInt(process.env.MANZI_HISTORY_START_YEAR ?? '2022', 10);
 const START_MONTH = parseInt(process.env.MANZI_HISTORY_START_MONTH ?? '0', 10);
-/** Paid inventory sales per calendar month (spread across the month). */
-const SALES_PER_MONTH = parseInt(process.env.MANZI_INV_SALES_PER_MONTH ?? '5', 10);
+/** Paid inventory sales per calendar month (spread across the month). Default 15 ≈ 3× former 5. */
+const SALES_PER_MONTH = parseInt(process.env.MANZI_INV_SALES_PER_MONTH ?? '15', 10);
 
 function daysInMonth(y: number, m: number) {
   return new Date(y, m + 1, 0).getDate();
@@ -36,13 +36,13 @@ function* eachMonth(fromY: number, fromM: number, to: Date): Generator<MonthCurs
   }
 }
 
-/** Stock sized for ~5 sales/month since Jan 2022 (~60 months × 5 × qty). */
+/** Stock sized for ~15 sales/month × ~52 months × qty (3× prior headroom). */
 const CATALOG: { name: string; unit: string; price: number; stock: number }[] = [
-  { name: `${PRODUCT_PREFIX}Maize Bran`, unit: 'kg', price: 600, stock: 12000 },
-  { name: `${PRODUCT_PREFIX}Salt Block 5kg`, unit: 'pcs', price: 3500, stock: 2500 },
-  { name: `${PRODUCT_PREFIX}Ivermectin`, unit: 'dose', price: 2500, stock: 5000 },
-  { name: `${PRODUCT_PREFIX}Milk Can 50L`, unit: 'pcs', price: 45000, stock: 400 },
-  { name: `${PRODUCT_PREFIX}Molasses`, unit: 'L', price: 1200, stock: 4000 },
+  { name: `${PRODUCT_PREFIX}Maize Bran`, unit: 'kg', price: 600, stock: 36000 },
+  { name: `${PRODUCT_PREFIX}Salt Block 5kg`, unit: 'pcs', price: 3500, stock: 7500 },
+  { name: `${PRODUCT_PREFIX}Ivermectin`, unit: 'dose', price: 2500, stock: 15000 },
+  { name: `${PRODUCT_PREFIX}Milk Can 50L`, unit: 'pcs', price: 45000, stock: 1200 },
+  { name: `${PRODUCT_PREFIX}Molasses`, unit: 'L', price: 1200, stock: 12000 },
 ];
 
 async function main() {
