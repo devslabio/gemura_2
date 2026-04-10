@@ -35,7 +35,7 @@ export default function CollectionsPage() {
     status: searchParams.get('status') || undefined,
     date_from: searchParams.get('date_from') || undefined,
     date_to: searchParams.get('date_to') || undefined,
-    supplier_account_code: searchParams.get('supplier') || undefined,
+    supplier_name: searchParams.get('supplier_name') || undefined,
   });
 
   const loadCollections = useCallback(async () => {
@@ -83,7 +83,6 @@ export default function CollectionsPage() {
     }).format(amount);
   };
 
-  /** Supplier display name: avoid showing "System"; use code or — when name is empty or "System". */
   const supplierDisplayName = (row: Collection) => {
     const name = row.supplier_account?.name?.trim();
     const code = row.supplier_account?.code?.trim();
@@ -169,7 +168,6 @@ export default function CollectionsPage() {
 
   return (
     <div className="space-y-4">
-      {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Collections</h1>
@@ -235,7 +233,6 @@ export default function CollectionsPage() {
         />
       </Modal>
 
-      {/* Filters (admin/users style) */}
       <FilterBar>
         <FilterBarGroup label="Status">
           <select
@@ -268,12 +265,12 @@ export default function CollectionsPage() {
             className="input h-9 min-h-[2.25rem] !py-1.5 !px-3 text-sm w-full text-gray-900"
           />
         </FilterBarGroup>
-        <FilterBarGroup label="Supplier Code">
+        <FilterBarGroup label="Supplier Name">
           <input
             type="text"
-            value={filters.supplier_account_code || ''}
-            onChange={(e) => handleFilterChange('supplier_account_code', e.target.value)}
-            placeholder="A_ABC123"
+            value={filters.supplier_name || ''}
+            onChange={(e) => handleFilterChange('supplier_name', e.target.value)}
+            placeholder="Search supplier name..."
             className="input h-9 min-h-[2.25rem] !py-1.5 !px-3 text-sm w-full text-gray-900"
           />
         </FilterBarGroup>
@@ -294,14 +291,12 @@ export default function CollectionsPage() {
         />
       </FilterBar>
 
-      {/* Error Message */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-sm p-4">
           <p className="text-sm text-red-600">{error}</p>
         </div>
       )}
 
-      {/* Collections Table */}
       <DataTableWithPagination<Collection>
         data={collections}
         columns={columns}

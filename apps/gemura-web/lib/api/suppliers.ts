@@ -8,6 +8,8 @@ export interface Supplier {
   email?: string;
   nid?: string;
   address?: string;
+  bank_name?: string;
+  bank_account_number?: string;
   account: {
     id: string;
     code: string;
@@ -24,6 +26,8 @@ export interface SupplierDetails {
   account_id: string;
   account_code: string;
   name: string;
+  bank_name?: string;
+  bank_account_number?: string;
   type: string;
   status: string;
   user: {
@@ -51,12 +55,16 @@ export interface CreateSupplierData {
   email?: string;
   nid?: string;
   address?: string;
+  bank_name?: string;
+  bank_account_number?: string;
 }
 
 export interface UpdateSupplierData {
   supplier_account_code: string;
   price_per_liter?: number;
   relationship_status?: 'active' | 'inactive';
+  bank_name?: string;
+  bank_account_number?: string;
 }
 
 export interface SuppliersResponse {

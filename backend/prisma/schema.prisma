@@ -245,6 +245,8 @@ model Account {
   legacy_id  BigInt?       @unique @map("legacy_id") // For migration reference
   code       String?       @unique
   name       String
+  bank_name  String?       @map("bank_name")
+  bank_account_number String? @map("bank_account_number")
   type       AccountType   @default(tenant)
   parent_id  String?       @map("parent_id") @db.Uuid
   status     AccountStatus @default(active)

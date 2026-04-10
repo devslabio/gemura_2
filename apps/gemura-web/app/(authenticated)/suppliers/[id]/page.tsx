@@ -171,6 +171,16 @@ export default function SupplierDetailsPage() {
                 </div>
 
                 <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Bank Name</label>
+                  <span className="text-gray-900">{supplier.bank_name || 'N/A'}</span>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-500 mb-1">Bank Account Number</label>
+                  <span className="text-gray-900">{supplier.bank_account_number || 'N/A'}</span>
+                </div>
+
+                <div>
                   <label className="block text-sm font-medium text-gray-500 mb-1">Account Status</label>
                   <span className={`px-2 py-1 rounded text-xs font-medium ${
                     supplier.status === 'active'

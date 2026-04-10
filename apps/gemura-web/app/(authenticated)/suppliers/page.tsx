@@ -62,6 +62,8 @@ export default function SuppliersPage() {
           (s.code && s.code.toLowerCase().includes(q)) ||
           (s.phone && s.phone.includes(q)) ||
           (s.email && s.email.toLowerCase().includes(q)) ||
+            (s.bank_name && s.bank_name.toLowerCase().includes(q)) ||
+            (s.bank_account_number && s.bank_account_number.toLowerCase().includes(q)) ||
           (s.account?.code && s.account.code.toLowerCase().includes(q)) ||
           (s.account?.name && s.account.name.toLowerCase().includes(q))
       );
@@ -129,6 +131,32 @@ export default function SuppliersPage() {
         <div className="flex items-center text-gray-900">
           <Icon icon={faDollarSign} size="sm" className="mr-2 text-gray-400" />
           <span>{formatCurrency(Number(value))}</span>
+        </div>
+      ) : (
+        <span className="text-gray-400">N/A</span>
+      ),
+    },
+    {
+      key: 'bank_name',
+      label: 'Bank',
+      sortable: true,
+      render: (value) => value ? (
+        <div className="flex items-center text-gray-900">
+          <Icon icon={faBuilding} size="sm" className="mr-2 text-gray-400" />
+          <span>{String(value)}</span>
+        </div>
+      ) : (
+        <span className="text-gray-400">N/A</span>
+      ),
+    },
+    {
+      key: 'bank_account_number',
+      label: 'Bank Account',
+      sortable: true,
+      render: (value) => value ? (
+        <div className="flex items-center text-gray-900">
+          <Icon icon={faBuilding} size="sm" className="mr-2 text-gray-400" />
+          <span>{String(value)}</span>
         </div>
       ) : (
         <span className="text-gray-400">N/A</span>
@@ -210,6 +238,8 @@ export default function SuppliersPage() {
           { key: 'email', label: 'Email' },
           { key: 'nid', label: 'NID' },
           { key: 'address', label: 'Address' },
+          { key: 'bank_name', label: 'Bank name' },
+          { key: 'bank_account_number', label: 'Bank account number' },
         ]}
         onDownloadTemplate={() => suppliersApi.downloadTemplate()}
         onBulkCreate={(rows) => {
@@ -220,6 +250,8 @@ export default function SuppliersPage() {
             email: row.email != null ? String(row.email) : undefined,
             nid: row.nid != null ? String(row.nid) : undefined,
             address: row.address != null ? String(row.address) : undefined,
+            bank_name: row.bank_name != null ? String(row.bank_name) : undefined,
+            bank_account_number: row.bank_account_number != null ? String(row.bank_account_number) : undefined,
           }));
           return suppliersApi.bulkCreate(data).then((r) => r.data);
         }}
@@ -230,6 +262,8 @@ export default function SuppliersPage() {
           email: row.email || undefined,
           nid: row.nid || undefined,
           address: row.address || undefined,
+          bank_name: row.bank_name || undefined,
+          bank_account_number: row.bank_account_number || undefined,
         })}
         onSuccess={loadSuppliers}
       />
@@ -273,6 +307,8 @@ export default function SuppliersPage() {
             { key: 'phone', label: 'Phone' },
             { key: 'email', label: 'Email', getValue: (r) => r.email ?? '' },
             { key: 'price_per_liter', label: 'Price/Liter', getValue: (r) => r.price_per_liter != null ? String(r.price_per_liter) : '' },
+            { key: 'bank_name', label: 'Bank Name', getValue: (r) => r.bank_name ?? '' },
+            { key: 'bank_account_number', label: 'Bank Account Number', getValue: (r) => r.bank_account_number ?? '' },
             { key: 'relationship_status', label: 'Status' },
           ]}
           disabled={loading}
