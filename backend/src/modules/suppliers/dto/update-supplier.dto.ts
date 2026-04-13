@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, Min, MaxLength } from 'class-validator';
 
 export class UpdateSupplierDto {
   @ApiProperty({
@@ -29,5 +29,25 @@ export class UpdateSupplierDto {
   @IsString()
   @IsOptional()
   relationship_status?: 'active' | 'inactive';
+
+  @ApiProperty({
+    description: 'Bank name for supplier payout',
+    example: 'Bank of Kigali',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(120)
+  bank_name?: string;
+
+  @ApiProperty({
+    description: 'Bank account number for supplier payout',
+    example: '0123456789012',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  @MaxLength(64)
+  bank_account_number?: string;
 }
 

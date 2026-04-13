@@ -28,6 +28,8 @@ export default function EditSupplierPage() {
     supplier_account_code: '',
     price_per_liter: 0,
     relationship_status: 'active',
+    bank_name: '',
+    bank_account_number: '',
     type: '',
   });
 
@@ -53,6 +55,8 @@ export default function EditSupplierPage() {
           supplier_account_code: supplierData.account_code,
           price_per_liter: supplierData.relationship.price_per_liter,
           relationship_status: supplierData.relationship.relationship_status as 'active' | 'inactive',
+          bank_name: supplierData.bank_name || '',
+          bank_account_number: supplierData.bank_account_number || '',
           type: supplierData.type ?? '',
         });
       } else {
@@ -80,6 +84,11 @@ export default function EditSupplierPage() {
       return false;
     }
 
+    if (formData.bank_account_number && formData.bank_account_number.trim().length < 5) {
+      setError('Bank account number looks too short');
+      return false;
+    }
+
     return true;
   };
 
@@ -94,7 +103,12 @@ export default function EditSupplierPage() {
     setSaving(true);
 
     try {
-      const { type: _type, ...payload } = formData;
+      const { type: _type, ...rawPayload } = formData;
+      const payload: UpdateSupplierData = {
+        ...rawPayload,
+        bank_name: rawPayload.bank_name?.trim() || undefined,
+        bank_account_number: rawPayload.bank_account_number?.trim() || undefined,
+      };
       const response = await suppliersApi.updateSupplier(payload);
 
       if (response.code === 200) {
@@ -193,6 +207,38 @@ export default function EditSupplierPage() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label htmlFor="bank_name" className="block text-sm font-medium text-gray-700 mb-2">
+                Bank Name
+              </label>
+              <input
+                id="bank_name"
+                name="bank_name"
+                type="text"
+                value={formData.bank_name || ''}
+                onChange={handleChange}
+                className="input w-full"
+                placeholder="e.g. Bank of Kigali"
+                disabled={saving}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="bank_account_number" className="block text-sm font-medium text-gray-700 mb-2">
+                Bank Account Number
+              </label>
+              <input
+                id="bank_account_number"
+                name="bank_account_number"
+                type="text"
+                value={formData.bank_account_number || ''}
+                onChange={handleChange}
+                className="input w-full"
+                placeholder="e.g. 0123456789012"
+                disabled={saving}
+              />
             </div>
           </div>
         </div>

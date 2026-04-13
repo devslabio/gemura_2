@@ -23,6 +23,8 @@ export default function CreateSupplierForm({ onSuccess, onCancel }: CreateSuppli
     email: '',
     nid: '',
     address: '',
+    bank_name: '',
+    bank_account_number: '',
     type: '',
   });
   const [nidTouched, setNidTouched] = useState(false);
@@ -79,6 +81,10 @@ export default function CreateSupplierForm({ onSuccess, onCancel }: CreateSuppli
       setError('Invalid email format');
       return false;
     }
+    if (formData.bank_account_number && formData.bank_account_number.trim().length < 5) {
+      setError('Bank account number looks too short');
+      return false;
+    }
     return true;
   };
 
@@ -96,6 +102,8 @@ export default function CreateSupplierForm({ onSuccess, onCancel }: CreateSuppli
         email: formData.email || undefined,
         nid: formData.nid,
         address: formData.address || undefined,
+        bank_name: formData.bank_name?.trim() || undefined,
+        bank_account_number: formData.bank_account_number?.trim() || undefined,
       };
       const response = await suppliersApi.createSupplier(finalData);
       if (response.code === 200 || response.code === 201) {
@@ -174,6 +182,32 @@ export default function CreateSupplierForm({ onSuccess, onCancel }: CreateSuppli
         <div className="sm:col-span-2">
           <label htmlFor="supplier-address" className="block text-sm font-medium text-gray-700 mb-1">Address</label>
           <input id="supplier-address" name="address" type="text" value={formData.address} onChange={handleChange} className="input w-full" placeholder="Optional" disabled={loading} />
+        </div>
+        <div>
+          <label htmlFor="supplier-bank-name" className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
+          <input
+            id="supplier-bank-name"
+            name="bank_name"
+            type="text"
+            value={formData.bank_name || ''}
+            onChange={handleChange}
+            className="input w-full"
+            placeholder="e.g. Bank of Kigali"
+            disabled={loading}
+          />
+        </div>
+        <div>
+          <label htmlFor="supplier-bank-account" className="block text-sm font-medium text-gray-700 mb-1">Bank Account Number</label>
+          <input
+            id="supplier-bank-account"
+            name="bank_account_number"
+            type="text"
+            value={formData.bank_account_number || ''}
+            onChange={handleChange}
+            className="input w-full"
+            placeholder="e.g. 0123456789012"
+            disabled={loading}
+          />
         </div>
       </div>
       <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">

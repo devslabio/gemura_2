@@ -122,6 +122,8 @@ export class PayrollRunsService {
                 id: true,
                 code: true,
                 name: true,
+                bank_name: true,
+                bank_account_number: true,
               },
             },
           },
@@ -129,6 +131,30 @@ export class PayrollRunsService {
       },
       orderBy: { run_date: 'desc' },
     });
+
+    const milkSalesMap = new Map<string, number>();
+
+    for (const run of runs) {
+      for (const payslip of run.payslips) {
+        const totalLitersResult = await this.prisma.milkSale.aggregate({
+          _sum: {
+            quantity: true,
+          },
+          where: {
+            supplier_account_id: payslip.supplier_account_id,
+            sale_at: {
+              gte: payslip.period_start,
+              lte: payslip.period_end,
+            },
+          },
+        });
+        
+        const totalLiters = totalLitersResult._sum.quantity 
+          ? Number(totalLitersResult._sum.quantity) 
+          : 0;
+        milkSalesMap.set(payslip.id, totalLiters);
+      }
+    }
 
     return {
       code: 200,
@@ -148,10 +174,13 @@ export class PayrollRunsService {
           id: p.id,
           supplier: p.supplier_account.name,
           supplier_code: p.supplier_account.code,
+          bank_name: p.supplier_account.bank_name,
+          bank_account_number: p.supplier_account.bank_account_number,
           gross_amount: Number(p.gross_amount),
           total_deductions: Number(p.total_deductions),
           net_amount: Number(p.net_amount),
           milk_sales_count: p.milk_sales_count,
+          total_liters: milkSalesMap.get(p.id) || 0,
           period_start: p.period_start,
           period_end: p.period_end,
           status: p.status,
@@ -202,7 +231,15 @@ export class PayrollRunsService {
     const p = await this.prisma.payrollPayslip.findFirst({
       where: { id: payslipId, run_id: runId },
       include: {
-        supplier_account: { select: { id: true, code: true, name: true } },
+        supplier_account: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            bank_name: true,
+            bank_account_number: true,
+          },
+        },
         deductions: {
           include: {
             charge: { select: { id: true, name: true, description: true } },
@@ -255,6 +292,7 @@ export class PayrollRunsService {
         reason,
       };
     });
+    const totalLiters = milkSales.reduce((sum, m) => sum + Number(m.quantity), 0);
     return {
       code: 200,
       status: 'success',
@@ -263,10 +301,13 @@ export class PayrollRunsService {
         id: p.id,
         supplier: p.supplier_account.name,
         supplier_code: p.supplier_account.code,
+        bank_name: p.supplier_account.bank_name,
+        bank_account_number: p.supplier_account.bank_account_number,
         gross_amount: Number(p.gross_amount),
         total_deductions: Number(p.total_deductions),
         net_amount: Number(p.net_amount),
         milk_sales_count: p.milk_sales_count,
+        total_liters: totalLiters,
         period_start: periodStart,
         period_end: periodEnd,
         status: p.status,
@@ -1260,6 +1301,8 @@ export class PayrollRunsService {
                 id: true,
                 code: true,
                 name: true,
+                bank_name: true,
+                bank_account_number: true,
               },
             },
             deductions: true,
@@ -1292,9 +1335,25 @@ export class PayrollRunsService {
       : 'N/A';
     const runDate = new Date(run.run_date).toLocaleDateString();
 
+    const totalLitersByPayslip = new Map<string, number>();
+    for (const payslip of run.payslips) {
+      const litersAgg = await this.prisma.milkSale.aggregate({
+        _sum: { quantity: true },
+        where: {
+          supplier_account_id: payslip.supplier_account_id,
+          customer_account_id: run.account_id ?? undefined,
+          sale_at: {
+            gte: payslip.period_start,
+            lte: payslip.period_end,
+          },
+          status: { not: 'deleted' },
+        },
+      });
+      totalLitersByPayslip.set(payslip.id, Number(litersAgg._sum.quantity || 0));
+    }
+
     if (exportFormat === 'pdf') {
-      // Generate PDF
-      const doc = new PDFDocument({ margin: 50 });
+      const doc = new PDFDocument({ margin: 40, size: 'A4', layout: 'landscape' });
       const filename = `payroll_${run.id.substring(0, 8)}_${Date.now()}.pdf`;
 
       res.setHeader('Content-Type', 'application/pdf');
@@ -1302,7 +1361,6 @@ export class PayrollRunsService {
 
       doc.pipe(res);
 
-      // Header
       doc.fontSize(20).text('Payroll Report', { align: 'center' });
       doc.moveDown();
       doc.fontSize(12);
@@ -1313,65 +1371,67 @@ export class PayrollRunsService {
       doc.text(`Total Amount: ${Number(run.total_amount).toLocaleString()} Frw`, { align: 'center' });
       doc.moveDown(2);
 
-      // Payslips table
       let yPos = doc.y;
       doc.fontSize(10);
-      
-      // Table header
-      doc.text('Supplier', 50, yPos);
-      doc.text('Code', 200, yPos);
-      doc.text('Gross', 280, yPos, { width: 80, align: 'right' });
-      doc.text('Deductions', 370, yPos, { width: 80, align: 'right' });
-      doc.text('Net Amount', 460, yPos, { width: 80, align: 'right' });
-      doc.text('Status', 550, yPos);
+
+      doc.text('Supplier', 40, yPos, { width: 100 });
+      doc.text('Code', 140, yPos, { width: 70 });
+      doc.text('Bank', 210, yPos, { width: 110 });
+      doc.text('Bank Account', 320, yPos, { width: 90 });
+      doc.text('Liters', 410, yPos, { width: 55, align: 'right' });
+      doc.text('Gross', 465, yPos, { width: 85, align: 'right' });
+      doc.text('Deductions', 550, yPos, { width: 85, align: 'right' });
+      doc.text('Net Amount', 635, yPos, { width: 85, align: 'right' });
+      doc.text('Status', 725, yPos, { width: 70 });
       
       yPos += 20;
-      doc.moveTo(50, yPos).lineTo(630, yPos).stroke();
+      doc.moveTo(40, yPos).lineTo(800, yPos).stroke();
       yPos += 10;
 
-      // Table rows
       for (const payslip of run.payslips) {
-        if (yPos > 700) {
+        if (yPos > 540) {
           doc.addPage();
-          yPos = 50;
+          yPos = 40;
         }
 
         const supplierName = payslip.supplier_account?.name || 'Unknown';
         const supplierCode = payslip.supplier_account?.code || 'N/A';
+        const bankName = payslip.supplier_account?.bank_name || 'N/A';
+        const bankAccount = payslip.supplier_account?.bank_account_number || 'N/A';
+        const totalLiters = totalLitersByPayslip.get(payslip.id) || 0;
         const grossAmount = Number(payslip.gross_amount).toLocaleString();
         const deductions = Number(payslip.total_deductions).toLocaleString();
         const netAmount = Number(payslip.net_amount).toLocaleString();
 
-        doc.text(supplierName.substring(0, 20), 50, yPos, { width: 140 });
-        doc.text(supplierCode, 200, yPos, { width: 70 });
-        doc.text(grossAmount, 280, yPos, { width: 80, align: 'right' });
-        doc.text(deductions, 370, yPos, { width: 80, align: 'right' });
-        doc.text(netAmount, 460, yPos, { width: 80, align: 'right' });
-        doc.text(payslip.status, 550, yPos, { width: 70 });
+        doc.text(supplierName.substring(0, 22), 40, yPos, { width: 100 });
+        doc.text(supplierCode.substring(0, 10), 140, yPos, { width: 70 });
+        doc.text(bankName.substring(0, 18), 210, yPos, { width: 110 });
+        doc.text(bankAccount.substring(0, 18), 320, yPos, { width: 90 });
+        doc.text(totalLiters.toLocaleString(undefined, { maximumFractionDigits: 2 }), 410, yPos, { width: 55, align: 'right' });
+        doc.text(grossAmount, 465, yPos, { width: 85, align: 'right' });
+        doc.text(deductions, 550, yPos, { width: 85, align: 'right' });
+        doc.text(netAmount, 635, yPos, { width: 85, align: 'right' });
+        doc.text(payslip.status, 725, yPos, { width: 70 });
 
         yPos += 20;
       }
 
-      // Footer
       yPos += 10;
-      doc.moveTo(50, yPos).lineTo(630, yPos).stroke();
+      doc.moveTo(40, yPos).lineTo(800, yPos).stroke();
       yPos += 15;
       doc.fontSize(12);
-      doc.text(`Total: ${Number(run.total_amount).toLocaleString()} Frw`, 460, yPos, { width: 80, align: 'right' });
+      doc.text(`Total: ${Number(run.total_amount).toLocaleString()} Frw`, 635, yPos, { width: 85, align: 'right' });
 
       doc.end();
     } else {
-      // Generate Excel
       const workbook = new ExcelJS.Workbook();
       const worksheet = workbook.addWorksheet('Payroll Report');
 
-      // Header row
-      worksheet.mergeCells('A1:F1');
+      worksheet.mergeCells('A1:J1');
       worksheet.getCell('A1').value = 'Payroll Report';
       worksheet.getCell('A1').font = { size: 16, bold: true };
       worksheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
 
-      // Period info
       worksheet.getCell('A2').value = 'Period:';
       worksheet.getCell('B2').value = periodName;
       worksheet.getCell('A3').value = 'Date Range:';
@@ -1384,9 +1444,8 @@ export class PayrollRunsService {
       worksheet.getCell('B6').value = Number(run.total_amount);
       worksheet.getCell('B6').numFmt = '#,##0.00';
 
-      // Table header
       const headerRow = worksheet.getRow(8);
-      headerRow.values = ['Supplier', 'Code', 'Gross Amount', 'Deductions', 'Net Amount', 'Milk Sales', 'Status', 'Payment Date'];
+      headerRow.values = ['Supplier', 'Code', 'Bank', 'Bank Account', 'Total Liters (L)', 'Gross Amount', 'Deductions', 'Net Amount', 'Milk Sales', 'Status', 'Payment Date'];
       headerRow.font = { bold: true };
       headerRow.fill = {
         type: 'pattern',
@@ -1394,23 +1453,27 @@ export class PayrollRunsService {
         fgColor: { argb: 'FFE0E0E0' },
       };
 
-      // Column widths
       worksheet.getColumn(1).width = 30;
       worksheet.getColumn(2).width = 15;
-      worksheet.getColumn(3).width = 15;
-      worksheet.getColumn(4).width = 15;
+      worksheet.getColumn(3).width = 20;
+      worksheet.getColumn(4).width = 22;
       worksheet.getColumn(5).width = 15;
-      worksheet.getColumn(6).width = 12;
-      worksheet.getColumn(7).width = 12;
+      worksheet.getColumn(6).width = 15;
+      worksheet.getColumn(7).width = 15;
       worksheet.getColumn(8).width = 15;
+      worksheet.getColumn(9).width = 12;
+      worksheet.getColumn(10).width = 12;
+      worksheet.getColumn(11).width = 15;
 
-      // Data rows
       let rowIndex = 9;
       for (const payslip of run.payslips) {
         const row = worksheet.getRow(rowIndex);
         row.values = [
           payslip.supplier_account?.name || 'Unknown',
           payslip.supplier_account?.code || 'N/A',
+          payslip.supplier_account?.bank_name || 'N/A',
+          payslip.supplier_account?.bank_account_number || 'N/A',
+          totalLitersByPayslip.get(payslip.id) || 0,
           Number(payslip.gross_amount),
           Number(payslip.total_deductions),
           Number(payslip.net_amount),
@@ -1420,9 +1483,10 @@ export class PayrollRunsService {
         ];
 
         // Format amount columns
-        row.getCell(3).numFmt = '#,##0.00';
-        row.getCell(4).numFmt = '#,##0.00';
         row.getCell(5).numFmt = '#,##0.00';
+        row.getCell(6).numFmt = '#,##0.00';
+        row.getCell(7).numFmt = '#,##0.00';
+        row.getCell(8).numFmt = '#,##0.00';
 
         rowIndex++;
       }
@@ -1431,9 +1495,9 @@ export class PayrollRunsService {
       const totalRow = worksheet.getRow(rowIndex + 1);
       totalRow.getCell(1).value = 'TOTAL';
       totalRow.getCell(1).font = { bold: true };
-      totalRow.getCell(5).value = Number(run.total_amount);
-      totalRow.getCell(5).numFmt = '#,##0.00';
-      totalRow.getCell(5).font = { bold: true };
+      totalRow.getCell(8).value = Number(run.total_amount);
+      totalRow.getCell(8).numFmt = '#,##0.00';
+      totalRow.getCell(8).font = { bold: true };
 
       const filename = `payroll_${run.id.substring(0, 8)}_${Date.now()}.xlsx`;
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
