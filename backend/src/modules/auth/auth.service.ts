@@ -237,7 +237,7 @@ export class AuthService {
             data: {
               user_id: updatedUser.id,
               account_id: account.id,
-              role: role || 'customer',
+              role: role || 'owner',
               permissions: userPermissions,
               status: 'active',
               created_by: updatedUser.id,
@@ -258,7 +258,7 @@ export class AuthService {
             });
           }
 
-          // Update user_account role and permissions if provided
+          // Update user_account role and permissions only when explicitly provided.
           if (existingUserAccount && (role || permissions)) {
             const updateData: any = {
               role: role || existingUserAccount.role,
@@ -383,7 +383,7 @@ export class AuthService {
         data: {
           user_id: user.id,
           account_id: account.id,
-          role: role || 'customer',
+          role: role || 'owner',
           permissions: userPermissions,
           status: 'active',
           created_by: user.id,

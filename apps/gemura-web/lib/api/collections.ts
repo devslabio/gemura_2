@@ -32,7 +32,7 @@ export interface Collection {
 }
 
 export interface CollectionsFilters {
-  supplier_account_code?: string;
+  supplier_name?: string;
   status?: string;
   date_from?: string;
   date_to?: string;
@@ -77,7 +77,7 @@ export const collectionsApi = {
   getCollections: async (filters?: CollectionsFilters, accountId?: string): Promise<CollectionsResponse> => {
     const params = new URLSearchParams();
     if (accountId) params.append('account_id', accountId);
-    if (filters?.supplier_account_code) params.append('supplier_account_code', filters.supplier_account_code);
+    if (filters?.supplier_name) params.append('supplier_name', filters.supplier_name);
     if (filters?.status) params.append('status', filters.status);
     if (filters?.date_from) params.append('date_from', filters.date_from);
     if (filters?.date_to) params.append('date_to', filters.date_to);

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsNumber, IsOptional, Length, Matches } from 'class-validator';
+import { IsNotEmpty, IsString, IsNumber, IsOptional, Length, Matches, MaxLength } from 'class-validator';
 
 export class CreateSupplierDto {
   @ApiProperty({
@@ -62,5 +62,25 @@ export class CreateSupplierDto {
   @IsOptional()
   @IsString({ message: 'Address must be a string' })
   address?: string;
+
+  @ApiProperty({
+    description: 'Bank name for supplier payout (optional)',
+    example: 'Bank of Kigali',
+    required: false,
+  })
+  @IsOptional()
+  @IsString({ message: 'Bank name must be a string' })
+  @MaxLength(120, { message: 'Bank name must be at most 120 characters' })
+  bank_name?: string;
+
+  @ApiProperty({
+    description: 'Bank account number for supplier payout (optional)',
+    example: '0123456789012',
+    required: false,
+  })
+  @IsOptional()
+  @IsString({ message: 'Bank account number must be a string' })
+  @MaxLength(64, { message: 'Bank account number must be at most 64 characters' })
+  bank_account_number?: string;
 }
 

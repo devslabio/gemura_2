@@ -22,6 +22,12 @@ export default function PayrollHistoryPage() {
   const [runIdToConfirm, setRunIdToConfirm] = useState<string | null>(null);
   const [payslipDetail, setPayslipDetail] = useState<PayslipDetail | null>(null);
   const [payslipDetailLoading, setPayslipDetailLoading] = useState(false);
+  const [payslipRowExtras, setPayslipRowExtras] = useState<Record<string, {
+    loading: boolean;
+    totalLiters?: number;
+    bankName?: string;
+    bankAccountNumber?: string;
+  }>>({});
 
   const loadRuns = useCallback(async () => {
     try {
@@ -43,6 +49,97 @@ export default function PayrollHistoryPage() {
   useEffect(() => {
     loadRuns();
   }, [loadRuns]);
+
+  useEffect(() => {
+    if (!detailRun?.id) return;
+
+    const payslips = detailRun.payslips || [];
+    const missing = payslips.filter((p) => {
+      if (!p.id) return false;
+      if (payslipRowExtras[p.id]) return false;
+      return true;
+    });
+
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+
+    // Mark missing rows as loading before making requests.
+    setPayslipRowExtras((prev) => {
+      const next = { ...prev };
+      missing.forEach((p) => {
+        if (!p.id) return;
+        next[p.id] = { loading: true };
+      });
+      return next;
+    });
+
+    const hydrateRows = async () => {
+      await Promise.all(
+        missing.map(async (p) => {
+          if (!p.id) return;
+
+          const typedTotalLiters = p.total_liters;
+          const typedBankName = p.bank_name;
+          const typedBankAccountNumber = p.bank_account_number;
+
+          if (typedTotalLiters != null || typedBankName || typedBankAccountNumber) {
+            if (!cancelled) {
+              setPayslipRowExtras((prev) => ({
+                ...prev,
+                [p.id]: {
+                  loading: false,
+                  totalLiters: typedTotalLiters != null ? Number(typedTotalLiters) : undefined,
+                  bankName: typedBankName,
+                  bankAccountNumber: typedBankAccountNumber,
+                },
+              }));
+            }
+            return;
+          }
+
+          try {
+            const res = await payrollApi.getPayslipDetail(detailRun.id, p.id, currentAccount?.account_id);
+            const detail = res?.data as PayslipDetail & {
+              bank_account_number?: string;
+            };
+
+            const totalLiters = (detail.earnings || []).reduce(
+              (sum, earning) => sum + Number(earning.quantity || 0),
+              0,
+            );
+
+            if (!cancelled) {
+              setPayslipRowExtras((prev) => ({
+                ...prev,
+                [p.id]: {
+                  loading: false,
+                  totalLiters,
+                  bankName: detail.bank_name,
+                  bankAccountNumber: detail.bank_account_number,
+                },
+              }));
+            }
+          } catch {
+            if (!cancelled) {
+              setPayslipRowExtras((prev) => ({
+                ...prev,
+                [p.id]: {
+                  loading: false,
+                },
+              }));
+            }
+          }
+        }),
+      );
+    };
+
+    hydrateRows();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [detailRun, currentAccount?.account_id]);
 
   const handleMarkPaid = async (runId: string) => {
     setRunIdToConfirm(runId);
@@ -100,6 +197,11 @@ export default function PayrollHistoryPage() {
     } catch {
       return dateStr;
     }
+  };
+
+  const formatLiters = (liters?: number) => {
+    if (liters == null) return '—';
+    return `${liters.toLocaleString(undefined, { maximumFractionDigits: 2 })} L`;
   };
 
   const openPayslipDetail = async (runId: string, payslipId: string) => {
@@ -406,13 +508,19 @@ export default function PayrollHistoryPage() {
               <h3 className="text-sm font-semibold text-gray-900 mb-2">
                 Payroll list ({detailRun.payslips?.length ?? 0} people)
               </h3>
+              <p className="text-xs text-gray-500 mb-2">
+                Total liters are computed from milk collection entries in each payslip.
+              </p>
               <div className="border border-gray-200 rounded-sm overflow-hidden">
                 <div className="overflow-x-auto max-h-[min(70vh,28rem)] overflow-y-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-100 sticky top-0">
                       <tr>
                         <th className="text-left py-2 px-3 font-medium text-gray-700">Supplier</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-700">Bank</th>
+                        <th className="text-left py-2 px-3 font-medium text-gray-700">Bank Account</th>
                         <th className="text-right py-2 px-3 font-medium text-gray-700">Collections</th>
+                        <th className="text-right py-2 px-3 font-medium text-gray-700">Total Liters (L)</th>
                         <th className="text-right py-2 px-3 font-medium text-gray-700">Gross</th>
                         <th className="text-right py-2 px-3 font-medium text-gray-700">Deductions</th>
                         <th className="text-right py-2 px-3 font-medium text-gray-700">Net</th>
@@ -429,8 +537,31 @@ export default function PayrollHistoryPage() {
                           onKeyDown={(e) => e.key === 'Enter' && detailRun?.id && openPayslipDetail(detailRun.id, p.id)}
                           className="hover:bg-gray-50/50 cursor-pointer"
                         >
-                          <td className="py-2 px-3 font-medium text-gray-900">{p.supplier ?? p.supplier_code ?? 'Unknown'}</td>
-                          <td className="py-2 px-3 text-right text-gray-600">{p.milk_sales_count ?? 0}</td>
+                          {(() => {
+                            const extra = p.id ? payslipRowExtras[p.id] : undefined;
+                            const bankName = p.bank_name || extra?.bankName;
+                            const bankAccountNumber = p.bank_account_number || extra?.bankAccountNumber;
+                            const totalLiters = p.total_liters != null ? Number(p.total_liters) : extra?.totalLiters;
+
+                            return (
+                              <>
+                                <td className="py-2 px-3 font-medium text-gray-900">{p.supplier ?? p.supplier_code ?? 'Unknown'}</td>
+                                <td className="py-2 px-3 text-gray-600">{bankName || '—'}</td>
+                                <td className="py-2 px-3 text-gray-600">{bankAccountNumber || '—'}</td>
+                                <td className="py-2 px-3 text-right text-gray-600">{p.milk_sales_count ?? 0}</td>
+                                <td className="py-2 px-3 text-right text-gray-600">
+                                  {extra?.loading ? (
+                                    <span className="inline-flex items-center gap-1">
+                                      <Icon icon={faSpinner} size="xs" spin className="text-gray-400" />
+                                      <span className="text-gray-400">Loading</span>
+                                    </span>
+                                  ) : (
+                                    formatLiters(totalLiters)
+                                  )}
+                                </td>
+                              </>
+                            );
+                          })()}
                           <td className="py-2 px-3 text-right text-gray-600">{formatAmount(p.gross_amount ?? 0)}</td>
                           <td className="py-2 px-3 text-right text-gray-600">{formatAmount(p.total_deductions ?? 0)}</td>
                           <td className="py-2 px-3 text-right font-medium text-[var(--primary)]">{formatAmount(p.net_amount ?? 0)}</td>

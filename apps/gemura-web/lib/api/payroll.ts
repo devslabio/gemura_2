@@ -20,6 +20,9 @@ export interface GeneratePayrollResult {
     supplier?: string;
     supplier_code?: string;
     milk_sales_count?: number;
+    total_liters?: number;
+    bank_name?: string;
+    bank_account_number?: string;
     net_amount?: number;
     gross_amount?: number;
     deductions?: number;
@@ -42,6 +45,9 @@ export interface PayrollRun {
     supplier?: string;
     supplier_code?: string;
     milk_sales_count?: number;
+    total_liters?: number;
+    bank_name?: string;
+    bank_account_number?: string;
     gross_amount?: number;
     total_deductions?: number;
     net_amount?: number;
@@ -57,6 +63,9 @@ export interface PayslipDetail {
   total_deductions: number;
   net_amount: number;
   milk_sales_count: number;
+  total_liters?: number;
+  bank_name?: string;
+  bank_account_number?: string;
   period_start: string;
   period_end: string;
   status: string;

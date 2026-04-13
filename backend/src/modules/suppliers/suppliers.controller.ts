@@ -34,6 +34,8 @@ export class SuppliersController {
           email: 'supplier@example.com',
           nid: '1199887766554433',
           address: 'Kigali, Rwanda',
+          bank_name: 'Bank of Kigali',
+          bank_account_number: '0123456789012',
         },
       },
       minimalSupplier: {
@@ -60,6 +62,8 @@ export class SuppliersController {
           name: 'John Doe',
           phone: '250788123456',
           price_per_liter: 390.0,
+          bank_name: 'Bank of Kigali',
+          bank_account_number: '0123456789012',
         },
       },
     },
@@ -112,8 +116,8 @@ export class SuppliersController {
   })
   async getTemplate(@Res() res: Response) {
     const csv =
-      'name,phone,price_per_liter,email,nid,address\n' +
-      'Example Supplier,250788123456,390,supplier@example.com,1199887766554433,Kigali Rwanda';
+      'name,phone,price_per_liter,email,nid,address,bank_name,bank_account_number\n' +
+      'Example Supplier,250788123456,390,supplier@example.com,1199887766554433,Kigali Rwanda,Bank of Kigali,0123456789012';
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="suppliers-template.csv"');
     res.send(csv);
@@ -364,6 +368,8 @@ export class SuppliersController {
         value: {
           supplier_account_code: 'A_ABC123',
           price_per_liter: 400.0,
+          bank_name: 'Bank of Kigali',
+          bank_account_number: '0123456789012',
         },
       },
       updateStatus: {

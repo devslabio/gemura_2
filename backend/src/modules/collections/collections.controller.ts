@@ -417,13 +417,13 @@ export class CollectionsController {
   @Get()
   @ApiOperation({
     summary: 'Get all collections',
-    description: 'Retrieve all milk collections for the authenticated user\'s default account (as customer/collector buying from suppliers). Supports filtering by supplier account code, status, date range, quantity range, and price range. Data is scoped to the user\'s default account.',
+    description: 'Retrieve all milk collections for the authenticated user\'s default account (as customer/collector buying from suppliers). Supports filtering by supplier name, status, date range, quantity range, and price range. Data is scoped to the user\'s default account.',
   })
   @ApiQuery({
-    name: 'supplier_account_code',
+    name: 'supplier_name',
     required: false,
-    description: 'Filter by supplier account code',
-    example: 'A_ABC123',
+    description: 'Filter by supplier name using a partial, case-insensitive match',
+    example: 'Jean',
     type: String,
   })
   @ApiQuery({
@@ -540,9 +540,9 @@ export class CollectionsController {
       message: 'Access denied. Token is required.',
     },
   })
-  async getCollections(@CurrentUser() user: User, @Query('account_id') accountId?: string, @Query('supplier_account_code') supplierAccountCode?: string, @Query('status') status?: string, @Query('date_from') dateFrom?: string, @Query('date_to') dateTo?: string, @Query('quantity_min') quantityMin?: number, @Query('quantity_max') quantityMax?: number, @Query('price_min') priceMin?: number, @Query('price_max') priceMax?: number) {
+  async getCollections(@CurrentUser() user: User, @Query('account_id') accountId?: string, @Query('supplier_name') supplierName?: string, @Query('status') status?: string, @Query('date_from') dateFrom?: string, @Query('date_to') dateTo?: string, @Query('quantity_min') quantityMin?: number, @Query('quantity_max') quantityMax?: number, @Query('price_min') priceMin?: number, @Query('price_max') priceMax?: number) {
     const filters: any = {};
-    if (supplierAccountCode) filters.supplier_account_code = supplierAccountCode;
+    if (supplierName) filters.supplier_name = supplierName;
     if (status) filters.status = status;
     if (dateFrom) filters.date_from = dateFrom;
     if (dateTo) filters.date_to = dateTo;

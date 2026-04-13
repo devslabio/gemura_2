@@ -700,7 +700,7 @@ export class CollectionsService {
   }
 
   async getCollections(user: User, filters?: {
-    supplier_account_code?: string;
+    supplier_name?: string;
     status?: string;
     date_from?: string;
     date_to?: string;
@@ -746,14 +746,15 @@ export class CollectionsService {
     };
 
     if (filters) {
-      // Filter by supplier account code
-      if (filters.supplier_account_code) {
-        const supplierAccount = await this.prisma.account.findUnique({
-          where: { code: filters.supplier_account_code },
-        });
-        if (supplierAccount) {
-          where.supplier_account_id = supplierAccount.id;
-        }
+      if (filters.supplier_name) {
+        where.supplier_account = {
+          is: {
+            name: {
+              contains: filters.supplier_name.trim(),
+              mode: 'insensitive',
+            },
+          },
+        };
       }
 
       if (filters.status) {

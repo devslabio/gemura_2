@@ -11,7 +11,9 @@ export class SuppliersService {
   constructor(private prisma: PrismaService) {}
 
   async createOrUpdateSupplier(user: User, createDto: CreateSupplierDto) {
-    const { name, phone, price_per_liter, email, nid, address } = createDto;
+    const { name, phone, price_per_liter, email, nid, address, bank_name, bank_account_number } = createDto;
+    const normalizedBankName = bank_name?.trim() || null;
+    const normalizedBankAccountNumber = bank_account_number?.trim() || null;
 
     // Check if user has a valid default account
     if (!user.default_account_id) {
@@ -62,6 +64,8 @@ export class SuppliersService {
           data: {
             code: accountCode,
             name: existingUser.name || name,
+            bank_name: normalizedBankName,
+            bank_account_number: normalizedBankAccountNumber,
             type: 'tenant',
             status: 'active',
             created_by: user.id,
@@ -134,6 +138,8 @@ export class SuppliersService {
         data: {
           code: accountCode,
           name,
+          bank_name: normalizedBankName,
+          bank_account_number: normalizedBankAccountNumber,
           type: 'tenant',
           status: 'active',
           created_by: user.id,
@@ -174,6 +180,17 @@ export class SuppliersService {
       supplierAccountId = newAccount.id;
       supplierAccountCode = accountCode;
       supplierName = name;
+    }
+
+    if (normalizedBankName || normalizedBankAccountNumber) {
+      await this.prisma.account.update({
+        where: { id: supplierAccountId },
+        data: {
+          ...(normalizedBankName ? { bank_name: normalizedBankName } : {}),
+          ...(normalizedBankAccountNumber ? { bank_account_number: normalizedBankAccountNumber } : {}),
+          updated_by: user.id,
+        },
+      });
     }
 
     // Create or update supplier-customer relationship
@@ -218,6 +235,8 @@ export class SuppliersService {
           name: supplierName,
           phone: normalizedPhone,
           price_per_liter: price_per_liter,
+          bank_name: normalizedBankName,
+          bank_account_number: normalizedBankAccountNumber,
         },
       },
     };
@@ -337,6 +356,8 @@ export class SuppliersService {
           code: rel.supplier_account.code,
           name: rel.supplier_account.name,
         },
+        bank_name: rel.supplier_account.bank_name,
+        bank_account_number: rel.supplier_account.bank_account_number,
         price_per_liter: Number(rel.price_per_liter),
         average_supply_quantity: Number(rel.average_supply_quantity),
         relationship_status: rel.relationship_status,
@@ -419,6 +440,8 @@ export class SuppliersService {
           account_id: supplierAccount.id,
           account_code: supplierAccount.code,
           name: supplierAccount.name,
+          bank_name: supplierAccount.bank_name,
+          bank_account_number: supplierAccount.bank_account_number,
           type: supplierAccount.type,
           status: supplierAccount.status,
           user: supplierUser ? {
@@ -518,6 +541,8 @@ export class SuppliersService {
           account_id: supplierAccount.id,
           account_code: supplierAccount.code,
           name: supplierAccount.name,
+          bank_name: supplierAccount.bank_name,
+          bank_account_number: supplierAccount.bank_account_number,
           type: supplierAccount.type,
           status: supplierAccount.status,
           user: supplierUser ? {
@@ -581,8 +606,13 @@ export class SuppliersService {
       });
     }
 
-    // Build update data
+    // Build relationship update data
     const updateData: any = {
+      updated_by: user.id,
+    };
+
+    // Build supplier account update data
+    const accountUpdateData: any = {
       updated_by: user.id,
     };
 
@@ -594,7 +624,18 @@ export class SuppliersService {
       updateData.relationship_status = updateDto.relationship_status as any;
     }
 
-    if (Object.keys(updateData).length === 1) {
+    if (updateDto.bank_name !== undefined) {
+      accountUpdateData.bank_name = updateDto.bank_name?.trim() || null;
+    }
+
+    if (updateDto.bank_account_number !== undefined) {
+      accountUpdateData.bank_account_number = updateDto.bank_account_number?.trim() || null;
+    }
+
+    const hasRelationshipUpdate = Object.keys(updateData).length > 1;
+    const hasAccountUpdate = Object.keys(accountUpdateData).length > 1;
+
+    if (!hasRelationshipUpdate && !hasAccountUpdate) {
       // Only updated_by, no actual fields to update
       throw new BadRequestException({
         code: 400,
@@ -603,14 +644,37 @@ export class SuppliersService {
       });
     }
 
-    const updatedRelationship = await this.prisma.supplierCustomer.update({
-      where: { id: relationship.id },
-      data: updateData,
-      include: {
-        supplier_account: true,
-        customer_account: true,
-      },
-    });
+    if (hasAccountUpdate) {
+      await this.prisma.account.update({
+        where: { id: supplierAccount.id },
+        data: accountUpdateData,
+      });
+    }
+
+    const updatedRelationship = hasRelationshipUpdate
+      ? await this.prisma.supplierCustomer.update({
+          where: { id: relationship.id },
+          data: updateData,
+          include: {
+            supplier_account: true,
+            customer_account: true,
+          },
+        })
+      : await this.prisma.supplierCustomer.findUnique({
+          where: { id: relationship.id },
+          include: {
+            supplier_account: true,
+            customer_account: true,
+          },
+        });
+
+    if (!updatedRelationship) {
+      throw new InternalServerErrorException({
+        code: 500,
+        status: 'error',
+        message: 'Failed to update supplier.',
+      });
+    }
 
     return {
       code: 200,
@@ -619,6 +683,8 @@ export class SuppliersService {
       data: {
         supplier: {
           account_code: updatedRelationship.supplier_account.code,
+          bank_name: updatedRelationship.supplier_account.bank_name,
+          bank_account_number: updatedRelationship.supplier_account.bank_account_number,
           price_per_liter: Number(updatedRelationship.price_per_liter),
           relationship_status: updatedRelationship.relationship_status,
         },
