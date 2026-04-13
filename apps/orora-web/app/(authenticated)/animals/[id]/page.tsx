@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import {
@@ -22,6 +22,7 @@ import { milkProductionApi, MilkProductionRecord, MILK_PRODUCTION_SESSIONS } fro
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
 import Modal from '@/app/components/Modal';
+import SectionRecordsModal, { SECTION_PREVIEW_LIMIT } from '@/app/components/SectionRecordsModal';
 import DatePicker from '@/app/components/DatePicker';
 import DateTimePicker from '@/app/components/DateTimePicker';
 import Select from '@/app/components/Select';
@@ -38,8 +39,10 @@ import Icon, {
   faBox,
   faHeart,
   faBaby,
+  faList,
 } from '@/app/components/Icon';
 import { DetailPageSkeleton } from '@/app/components/SkeletonLoader';
+import type { TableColumn } from '@/app/components/DataTable';
 
 const HEALTH_EVENT_LABELS: Record<HealthEventType, string> = {
   vaccination: 'Vaccination',
@@ -105,6 +108,8 @@ export default function AnimalDetailPage() {
   });
   const [maleAnimals, setMaleAnimals] = useState<Animal[]>([]);
   const [allAnimals, setAllAnimals] = useState<Animal[]>([]);
+  type ViewMoreSection = 'weights' | 'health' | 'production' | 'breeding' | 'calving';
+  const [viewMoreSection, setViewMoreSection] = useState<ViewMoreSection | null>(null);
 
   const loadAnimal = useCallback(async () => {
     try {
@@ -353,6 +358,152 @@ export default function AnimalDetailPage() {
     }
   };
 
+  // All hooks must run before any conditional return (Rules of Hooks)
+  const weightTableColumns: TableColumn<AnimalWeight>[] = useMemo(
+    () => [
+      { key: 'recorded_at', label: 'Date', sortable: true, render: (v) => new Date(String(v)).toLocaleDateString() },
+      { key: 'weight_kg', label: 'Weight (kg)', sortable: true, render: (v) => Number(v) },
+      { key: 'notes', label: 'Notes', sortable: true, render: (v) => (v ? String(v) : '—') },
+    ],
+    []
+  );
+  const weightExportColumns = useMemo(
+    () => [
+      { key: 'recorded_at', label: 'Date', getValue: (r: AnimalWeight) => new Date(r.recorded_at).toLocaleDateString() },
+      { key: 'weight_kg', label: 'Weight (kg)', getValue: (r: AnimalWeight) => String(Number(r.weight_kg)) },
+      { key: 'notes', label: 'Notes', getValue: (r: AnimalWeight) => r.notes ?? '' },
+    ],
+    []
+  );
+
+  const healthTableColumns: TableColumn<AnimalHealth>[] = useMemo(
+    () => [
+      { key: 'event_type', label: 'Type', sortable: true, render: (v, r) => HEALTH_EVENT_LABELS[r.event_type] ?? r.event_type },
+      { key: 'event_date', label: 'Date', sortable: true, render: (v) => new Date(String(v)).toLocaleDateString() },
+      { key: 'description', label: 'Description', sortable: true },
+      { key: 'treatment', label: 'Treatment', sortable: true, render: (v) => (v ? String(v) : '—') },
+      { key: 'medicine_name', label: 'Medicine', sortable: true, render: (v) => (v ? String(v) : '—') },
+      {
+        key: 'vet',
+        label: 'Vet',
+        sortable: true,
+        render: (_, r) =>
+          [r.vet_first_name, r.vet_last_name].filter(Boolean).join(' ') || (r.vet_phone ? String(r.vet_phone) : '—'),
+      },
+    ],
+    []
+  );
+  const healthExportColumns = useMemo(
+    () => [
+      { key: 'event_type', label: 'Type', getValue: (r: AnimalHealth) => HEALTH_EVENT_LABELS[r.event_type] ?? r.event_type },
+      { key: 'event_date', label: 'Date', getValue: (r: AnimalHealth) => new Date(r.event_date).toLocaleDateString() },
+      { key: 'description', label: 'Description', getValue: (r: AnimalHealth) => r.description },
+      { key: 'treatment', label: 'Treatment', getValue: (r: AnimalHealth) => r.treatment ?? '' },
+      { key: 'medicine_name', label: 'Medicine', getValue: (r: AnimalHealth) => r.medicine_name ?? '' },
+    ],
+    []
+  );
+
+  const productionTableColumns: TableColumn<MilkProductionRecord>[] = useMemo(
+    () => [
+      { key: 'production_date', label: 'Date', sortable: true, render: (v) => new Date(String(v)).toLocaleDateString() },
+      {
+        key: 'session',
+        label: 'Session',
+        sortable: true,
+        render: (v) => (v ? MILK_PRODUCTION_SESSIONS.find((s) => s.value === v)?.label ?? v : '—'),
+      },
+      { key: 'quantity_litres', label: 'Quantity (L)', sortable: true, render: (v) => Number(v) },
+      { key: 'notes', label: 'Notes', sortable: true, render: (v) => (v ? String(v) : '—') },
+    ],
+    []
+  );
+  const productionExportColumns = useMemo(
+    () => [
+      { key: 'production_date', label: 'Date', getValue: (r: MilkProductionRecord) => new Date(r.production_date).toLocaleDateString() },
+      {
+        key: 'session',
+        label: 'Session',
+        getValue: (r: MilkProductionRecord) => (r.session ? MILK_PRODUCTION_SESSIONS.find((s) => s.value === r.session)?.label ?? r.session : ''),
+      },
+      { key: 'quantity_litres', label: 'Quantity (L)', getValue: (r: MilkProductionRecord) => String(Number(r.quantity_litres)) },
+      { key: 'notes', label: 'Notes', getValue: (r: MilkProductionRecord) => r.notes ?? '' },
+    ],
+    []
+  );
+
+  const breedingTableColumns: TableColumn<AnimalBreeding>[] = useMemo(
+    () => [
+      { key: 'breeding_date', label: 'Date', sortable: true, render: (v) => new Date(String(v)).toLocaleDateString() },
+      { key: 'method', label: 'Method', sortable: true, render: (v) => String(v).replace('_', ' ') },
+      {
+        key: 'bull',
+        label: 'Bull',
+        sortable: true,
+        render: (_, r) =>
+          r.bull_animal ? `${r.bull_animal.tag_number} ${r.bull_animal.name || ''}`.trim() : r.bull_name || '—',
+      },
+      {
+        key: 'heat_date',
+        label: 'Heat date',
+        sortable: true,
+        render: (v) => (v ? new Date(String(v)).toLocaleDateString() : '—'),
+      },
+      {
+        key: 'expected_calving_date',
+        label: 'Expected calving',
+        sortable: true,
+        render: (v) => (v ? new Date(String(v)).toLocaleDateString() : '—'),
+      },
+      { key: 'outcome', label: 'Outcome', sortable: true, render: (v) => (v && v !== 'unknown' ? String(v).replace('_', ' ') : '—') },
+    ],
+    []
+  );
+  const breedingExportColumns = useMemo(
+    () => [
+      { key: 'breeding_date', label: 'Date', getValue: (r: AnimalBreeding) => new Date(r.breeding_date).toLocaleDateString() },
+      { key: 'method', label: 'Method', getValue: (r: AnimalBreeding) => r.method.replace('_', ' ') },
+      {
+        key: 'bull',
+        label: 'Bull',
+        getValue: (r: AnimalBreeding) =>
+          r.bull_animal ? `${r.bull_animal.tag_number} ${r.bull_animal.name || ''}`.trim() : r.bull_name ?? '',
+      },
+      { key: 'heat_date', label: 'Heat date', getValue: (r: AnimalBreeding) => (r.heat_date ? new Date(r.heat_date).toLocaleDateString() : '') },
+      { key: 'expected_calving_date', label: 'Expected calving', getValue: (r: AnimalBreeding) => (r.expected_calving_date ? new Date(r.expected_calving_date).toLocaleDateString() : '') },
+      { key: 'outcome', label: 'Outcome', getValue: (r: AnimalBreeding) => (r.outcome && r.outcome !== 'unknown' ? r.outcome.replace('_', ' ') : '') },
+    ],
+    []
+  );
+
+  const calvingTableColumns: TableColumn<AnimalCalving>[] = useMemo(
+    () => [
+      { key: 'calving_date', label: 'Date', sortable: true, render: (v) => new Date(String(v)).toLocaleDateString() },
+      { key: 'outcome', label: 'Outcome', sortable: true, render: (v) => String(v).charAt(0).toUpperCase() + String(v).slice(1) },
+      {
+        key: 'calf',
+        label: 'Calf',
+        sortable: true,
+        render: (_, r) => (r.calf ? `${r.calf.tag_number} ${r.calf.name || ''}`.trim() : '—'),
+      },
+      { key: 'gender', label: 'Gender', sortable: true, render: (v) => (v ? String(v) : '—') },
+      { key: 'weight_kg', label: 'Birth weight (kg)', sortable: true, render: (v) => (v != null ? Number(v) : '—') },
+      { key: 'notes', label: 'Notes', sortable: true, render: (v) => (v ? String(v) : '—') },
+    ],
+    []
+  );
+  const calvingExportColumns = useMemo(
+    () => [
+      { key: 'calving_date', label: 'Date', getValue: (r: AnimalCalving) => new Date(r.calving_date).toLocaleDateString() },
+      { key: 'outcome', label: 'Outcome', getValue: (r: AnimalCalving) => r.outcome },
+      { key: 'calf', label: 'Calf', getValue: (r: AnimalCalving) => (r.calf ? `${r.calf.tag_number} ${r.calf.name || ''}`.trim() : '') },
+      { key: 'gender', label: 'Gender', getValue: (r: AnimalCalving) => r.gender ?? '' },
+      { key: 'weight_kg', label: 'Birth weight (kg)', getValue: (r: AnimalCalving) => (r.weight_kg != null ? String(Number(r.weight_kg)) : '') },
+      { key: 'notes', label: 'Notes', getValue: (r: AnimalCalving) => r.notes ?? '' },
+    ],
+    []
+  );
+
   if (loading && !animal) return <DetailPageSkeleton />;
 
   if (error && !animal) {
@@ -493,39 +644,53 @@ export default function AnimalDetailPage() {
             {weights.length === 0 ? (
               <p className="text-sm text-gray-500">No weight records yet.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-left text-gray-500">
-                      <th className="py-2 pr-4">Date</th>
-                      <th className="py-2 pr-4">Weight (kg)</th>
-                      <th className="py-2 pr-4">Notes</th>
-                      <th className="py-2 w-10" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {weights.map((w) => (
-                      <tr key={w.id} className="border-b border-gray-100">
-                        <td className="py-2 pr-4 text-gray-900">
-                          {new Date(w.recorded_at).toLocaleDateString()}
-                        </td>
-                        <td className="py-2 pr-4 font-medium">{Number(w.weight_kg)}</td>
-                        <td className="py-2 pr-4 text-gray-600">{w.notes || '—'}</td>
-                        <td className="py-2">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteWeight(w.id)}
-                            className="text-gray-400 hover:text-red-600 p-1"
-                            title="Delete"
-                          >
-                            <Icon icon={faTrash} size="sm" />
-                          </button>
-                        </td>
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-left text-gray-500">
+                        <th className="py-2 pr-4">Date</th>
+                        <th className="py-2 pr-4">Weight (kg)</th>
+                        <th className="py-2 pr-4">Notes</th>
+                        <th className="py-2 w-10" />
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {(weights.length > SECTION_PREVIEW_LIMIT ? weights.slice(0, SECTION_PREVIEW_LIMIT) : weights).map((w) => (
+                        <tr key={w.id} className="border-b border-gray-100">
+                          <td className="py-2 pr-4 text-gray-900">
+                            {new Date(w.recorded_at).toLocaleDateString()}
+                          </td>
+                          <td className="py-2 pr-4 font-medium">{Number(w.weight_kg)}</td>
+                          <td className="py-2 pr-4 text-gray-600">{w.notes || '—'}</td>
+                          <td className="py-2">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteWeight(w.id)}
+                              className="text-gray-400 hover:text-red-600 p-1"
+                              title="Delete"
+                            >
+                              <Icon icon={faTrash} size="sm" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {weights.length > SECTION_PREVIEW_LIMIT && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => setViewMoreSection('weights')}
+                      className="btn btn-secondary text-sm"
+                    >
+                      <Icon icon={faList} size="sm" className="mr-1" />
+                      View more ({weights.length} records)
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -547,45 +712,59 @@ export default function AnimalDetailPage() {
             {healthRecords.length === 0 ? (
               <p className="text-sm text-gray-500">No health records yet.</p>
             ) : (
-              <div className="space-y-3">
-                {healthRecords.map((h) => (
-                  <div
-                    key={h.id}
-                    className="border border-gray-100 rounded-sm p-3 flex items-start justify-between gap-2"
-                  >
-                    <div>
-                      <span className="text-xs font-medium text-gray-500 uppercase">
-                        {HEALTH_EVENT_LABELS[h.event_type] ?? h.event_type}
-                      </span>
-                      <span className="text-gray-500 text-sm ml-2">
-                        {new Date(h.event_date).toLocaleDateString()}
-                      </span>
-                      <p className="text-gray-900 mt-1">{h.description}</p>
-                      {h.treatment && (
-                        <p className="text-sm text-gray-600 mt-1">Treatment: {h.treatment}</p>
-                      )}
-                      {h.medicine_name && (
-                        <p className="text-sm text-gray-600">Medicine: {h.medicine_name}</p>
-                      )}
-                      {(h.vet_first_name || h.vet_last_name || h.vet_phone) && (
-                        <p className="text-sm text-gray-600 mt-1">
-                          Vet:{' '}
-                          {[h.vet_first_name, h.vet_last_name].filter(Boolean).join(' ')}
-                          {h.vet_phone ? ` · ${h.vet_phone}` : ''}
-                        </p>
-                      )}
+              <>
+                <div className="space-y-3">
+                  {(healthRecords.length > SECTION_PREVIEW_LIMIT ? healthRecords.slice(0, SECTION_PREVIEW_LIMIT) : healthRecords).map((h) => (
+                    <div
+                      key={h.id}
+                      className="border border-gray-100 rounded-sm p-3 flex items-start justify-between gap-2"
+                    >
+                      <div>
+                        <span className="text-xs font-medium text-gray-500 uppercase">
+                          {HEALTH_EVENT_LABELS[h.event_type] ?? h.event_type}
+                        </span>
+                        <span className="text-gray-500 text-sm ml-2">
+                          {new Date(h.event_date).toLocaleDateString()}
+                        </span>
+                        <p className="text-gray-900 mt-1">{h.description}</p>
+                        {h.treatment && (
+                          <p className="text-sm text-gray-600 mt-1">Treatment: {h.treatment}</p>
+                        )}
+                        {h.medicine_name && (
+                          <p className="text-sm text-gray-600">Medicine: {h.medicine_name}</p>
+                        )}
+                        {(h.vet_first_name || h.vet_last_name || h.vet_phone) && (
+                          <p className="text-sm text-gray-600 mt-1">
+                            Vet:{' '}
+                            {[h.vet_first_name, h.vet_last_name].filter(Boolean).join(' ')}
+                            {h.vet_phone ? ` · ${h.vet_phone}` : ''}
+                          </p>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteHealth(h.id)}
+                        className="text-gray-400 hover:text-red-600 p-1 shrink-0"
+                        title="Delete"
+                      >
+                        <Icon icon={faTrash} size="sm" />
+                      </button>
                     </div>
+                  ))}
+                </div>
+                {healthRecords.length > SECTION_PREVIEW_LIMIT && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
                     <button
                       type="button"
-                      onClick={() => handleDeleteHealth(h.id)}
-                      className="text-gray-400 hover:text-red-600 p-1 shrink-0"
-                      title="Delete"
+                      onClick={() => setViewMoreSection('health')}
+                      className="btn btn-secondary text-sm"
                     >
-                      <Icon icon={faTrash} size="sm" />
+                      <Icon icon={faList} size="sm" className="mr-1" />
+                      View more ({healthRecords.length} records)
                     </button>
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
 
@@ -604,34 +783,48 @@ export default function AnimalDetailPage() {
             {productionList.length === 0 ? (
               <p className="text-sm text-gray-500">No production records yet.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-left text-gray-500">
-                      <th className="py-2 pr-4">Date</th>
-                      <th className="py-2 pr-4">Session</th>
-                      <th className="py-2 pr-4">Quantity (L)</th>
-                      <th className="py-2 pr-4">Notes</th>
-                      <th className="py-2 w-10" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {productionList.map((p) => (
-                      <tr key={p.id} className="border-b border-gray-100">
-                        <td className="py-2 pr-4 text-gray-900">{new Date(p.production_date).toLocaleDateString()}</td>
-                        <td className="py-2 pr-4 text-gray-600">{p.session ? MILK_PRODUCTION_SESSIONS.find((s) => s.value === p.session)?.label ?? p.session : '—'}</td>
-                        <td className="py-2 pr-4 font-medium">{Number(p.quantity_litres)}</td>
-                        <td className="py-2 pr-4 text-gray-600">{p.notes || '—'}</td>
-                        <td className="py-2">
-                          <button type="button" onClick={() => handleDeleteProduction(p.id)} className="text-gray-400 hover:text-red-600 p-1" title="Delete">
-                            <Icon icon={faTrash} size="sm" />
-                          </button>
-                        </td>
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 text-left text-gray-500">
+                        <th className="py-2 pr-4">Date</th>
+                        <th className="py-2 pr-4">Session</th>
+                        <th className="py-2 pr-4">Quantity (L)</th>
+                        <th className="py-2 pr-4">Notes</th>
+                        <th className="py-2 w-10" />
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {(productionList.length > SECTION_PREVIEW_LIMIT ? productionList.slice(0, SECTION_PREVIEW_LIMIT) : productionList).map((p) => (
+                        <tr key={p.id} className="border-b border-gray-100">
+                          <td className="py-2 pr-4 text-gray-900">{new Date(p.production_date).toLocaleDateString()}</td>
+                          <td className="py-2 pr-4 text-gray-600">{p.session ? MILK_PRODUCTION_SESSIONS.find((s) => s.value === p.session)?.label ?? p.session : '—'}</td>
+                          <td className="py-2 pr-4 font-medium">{Number(p.quantity_litres)}</td>
+                          <td className="py-2 pr-4 text-gray-600">{p.notes || '—'}</td>
+                          <td className="py-2">
+                            <button type="button" onClick={() => handleDeleteProduction(p.id)} className="text-gray-400 hover:text-red-600 p-1" title="Delete">
+                              <Icon icon={faTrash} size="sm" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {productionList.length > SECTION_PREVIEW_LIMIT && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => setViewMoreSection('production')}
+                      className="btn btn-secondary text-sm"
+                    >
+                      <Icon icon={faList} size="sm" className="mr-1" />
+                      View more ({productionList.length} records)
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -651,31 +844,45 @@ export default function AnimalDetailPage() {
               {breedingList.length === 0 ? (
                 <p className="text-sm text-gray-500">No breeding records yet.</p>
               ) : (
-                <div className="space-y-3">
-                  {breedingList.map((b) => (
-                    <div key={b.id} className="border border-gray-100 rounded-sm p-3 flex items-start justify-between gap-2">
-                      <div>
-                        <span className="text-sm font-medium text-gray-900">{new Date(b.breeding_date).toLocaleDateString()}</span>
-                        <span className="text-gray-500 text-sm ml-2">{b.method.replace('_', ' ')}</span>
-                        {(b.bull_animal || b.bull_name) && (
-                          <p className="text-sm text-gray-600 mt-0.5">Bull: {b.bull_animal ? `${b.bull_animal.tag_number} ${b.bull_animal.name || ''}` : b.bull_name || '—'}</p>
-                        )}
-                        {b.heat_date && (
-                          <p className="text-xs text-gray-500">Heat: {new Date(b.heat_date).toLocaleDateString()}</p>
-                        )}
-                        {b.expected_calving_date && (
-                          <p className="text-xs text-gray-500">Expected calving: {new Date(b.expected_calving_date).toLocaleDateString()}</p>
-                        )}
-                        {b.outcome && b.outcome !== 'unknown' && (
-                          <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">{b.outcome.replace('_', ' ')}</span>
-                        )}
+                <>
+                  <div className="space-y-3">
+                    {(breedingList.length > SECTION_PREVIEW_LIMIT ? breedingList.slice(0, SECTION_PREVIEW_LIMIT) : breedingList).map((b) => (
+                      <div key={b.id} className="border border-gray-100 rounded-sm p-3 flex items-start justify-between gap-2">
+                        <div>
+                          <span className="text-sm font-medium text-gray-900">{new Date(b.breeding_date).toLocaleDateString()}</span>
+                          <span className="text-gray-500 text-sm ml-2">{b.method.replace('_', ' ')}</span>
+                          {(b.bull_animal || b.bull_name) && (
+                            <p className="text-sm text-gray-600 mt-0.5">Bull: {b.bull_animal ? `${b.bull_animal.tag_number} ${b.bull_animal.name || ''}` : b.bull_name || '—'}</p>
+                          )}
+                          {b.heat_date && (
+                            <p className="text-xs text-gray-500">Heat: {new Date(b.heat_date).toLocaleDateString()}</p>
+                          )}
+                          {b.expected_calving_date && (
+                            <p className="text-xs text-gray-500">Expected calving: {new Date(b.expected_calving_date).toLocaleDateString()}</p>
+                          )}
+                          {b.outcome && b.outcome !== 'unknown' && (
+                            <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-700">{b.outcome.replace('_', ' ')}</span>
+                          )}
+                        </div>
+                        <button type="button" onClick={() => handleDeleteBreeding(b.id)} className="text-gray-400 hover:text-red-600 p-1 shrink-0" title="Delete">
+                          <Icon icon={faTrash} size="sm" />
+                        </button>
                       </div>
-                      <button type="button" onClick={() => handleDeleteBreeding(b.id)} className="text-gray-400 hover:text-red-600 p-1 shrink-0" title="Delete">
-                        <Icon icon={faTrash} size="sm" />
+                    ))}
+                  </div>
+                  {breedingList.length > SECTION_PREVIEW_LIMIT && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <button
+                        type="button"
+                        onClick={() => setViewMoreSection('breeding')}
+                        className="btn btn-secondary text-sm"
+                      >
+                        <Icon icon={faList} size="sm" className="mr-1" />
+                        View more ({breedingList.length} records)
                       </button>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -696,27 +903,41 @@ export default function AnimalDetailPage() {
               {calvingList.length === 0 ? (
                 <p className="text-sm text-gray-500">No calving records yet.</p>
               ) : (
-                <div className="space-y-3">
-                  {calvingList.map((c) => (
-                    <div key={c.id} className="border border-gray-100 rounded-sm p-3 flex items-start justify-between gap-2">
-                      <div>
-                        <span className="text-sm font-medium text-gray-900">{new Date(c.calving_date).toLocaleDateString()}</span>
-                        <span className="text-gray-500 text-sm ml-2 capitalize">{c.outcome}</span>
-                        {c.calf && (
-                          <p className="text-sm text-gray-600 mt-0.5">
-                            Calf: <Link href={`/animals/${c.calf.id}`} className="text-[var(--primary)] hover:underline">{c.calf.tag_number} {c.calf.name || ''}</Link>
-                          </p>
-                        )}
-                        {(c.gender || c.weight_kg != null) && (
-                          <p className="text-xs text-gray-500">{[c.gender, c.weight_kg != null ? `${c.weight_kg} kg` : null].filter(Boolean).join(' · ')}</p>
-                        )}
+                <>
+                  <div className="space-y-3">
+                    {(calvingList.length > SECTION_PREVIEW_LIMIT ? calvingList.slice(0, SECTION_PREVIEW_LIMIT) : calvingList).map((c) => (
+                      <div key={c.id} className="border border-gray-100 rounded-sm p-3 flex items-start justify-between gap-2">
+                        <div>
+                          <span className="text-sm font-medium text-gray-900">{new Date(c.calving_date).toLocaleDateString()}</span>
+                          <span className="text-gray-500 text-sm ml-2 capitalize">{c.outcome}</span>
+                          {c.calf && (
+                            <p className="text-sm text-gray-600 mt-0.5">
+                              Calf: <Link href={`/animals/${c.calf.id}`} className="text-[var(--primary)] hover:underline">{c.calf.tag_number} {c.calf.name || ''}</Link>
+                            </p>
+                          )}
+                          {(c.gender || c.weight_kg != null) && (
+                            <p className="text-xs text-gray-500">{[c.gender, c.weight_kg != null ? `${c.weight_kg} kg` : null].filter(Boolean).join(' · ')}</p>
+                          )}
+                        </div>
+                        <button type="button" onClick={() => handleDeleteCalving(c.id)} className="text-gray-400 hover:text-red-600 p-1 shrink-0" title="Delete">
+                          <Icon icon={faTrash} size="sm" />
+                        </button>
                       </div>
-                      <button type="button" onClick={() => handleDeleteCalving(c.id)} className="text-gray-400 hover:text-red-600 p-1 shrink-0" title="Delete">
-                        <Icon icon={faTrash} size="sm" />
+                    ))}
+                  </div>
+                  {calvingList.length > SECTION_PREVIEW_LIMIT && (
+                    <div className="mt-3 pt-3 border-t border-gray-100">
+                      <button
+                        type="button"
+                        onClick={() => setViewMoreSection('calving')}
+                        className="btn btn-secondary text-sm"
+                      >
+                        <Icon icon={faList} size="sm" className="mr-1" />
+                        View more ({calvingList.length} records)
                       </button>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -1127,6 +1348,77 @@ export default function AnimalDetailPage() {
           </div>
         </form>
       </Modal>
+
+      {viewMoreSection === 'weights' && (
+        <SectionRecordsModal<AnimalWeight>
+          open
+          onClose={() => setViewMoreSection(null)}
+          title={`Weight history – ${animal.tag_number}`}
+          data={weights}
+          columns={weightTableColumns}
+          exportColumns={weightExportColumns}
+          exportFilename={`animal-${animal.tag_number}-weight-history`}
+          emptyMessage="No weight records"
+          itemLabel="weight records"
+          searchPlaceholder="Search dates, weight, notes..."
+        />
+      )}
+      {viewMoreSection === 'health' && (
+        <SectionRecordsModal<AnimalHealth>
+          open
+          onClose={() => setViewMoreSection(null)}
+          title={`Health records – ${animal.tag_number}`}
+          data={healthRecords}
+          columns={healthTableColumns}
+          exportColumns={healthExportColumns}
+          exportFilename={`animal-${animal.tag_number}-health-records`}
+          emptyMessage="No health records"
+          itemLabel="health records"
+          searchPlaceholder="Search type, date, description..."
+        />
+      )}
+      {viewMoreSection === 'production' && (
+        <SectionRecordsModal<MilkProductionRecord>
+          open
+          onClose={() => setViewMoreSection(null)}
+          title={`Milk production – ${animal.tag_number}`}
+          data={productionList}
+          columns={productionTableColumns}
+          exportColumns={productionExportColumns}
+          exportFilename={`animal-${animal.tag_number}-milk-production`}
+          emptyMessage="No production records"
+          itemLabel="production records"
+          searchPlaceholder="Search date, session, quantity..."
+        />
+      )}
+      {viewMoreSection === 'breeding' && (
+        <SectionRecordsModal<AnimalBreeding>
+          open
+          onClose={() => setViewMoreSection(null)}
+          title={`Breeding records – ${animal.tag_number}`}
+          data={breedingList}
+          columns={breedingTableColumns}
+          exportColumns={breedingExportColumns}
+          exportFilename={`animal-${animal.tag_number}-breeding-records`}
+          emptyMessage="No breeding records"
+          itemLabel="breeding records"
+          searchPlaceholder="Search date, method, bull..."
+        />
+      )}
+      {viewMoreSection === 'calving' && (
+        <SectionRecordsModal<AnimalCalving>
+          open
+          onClose={() => setViewMoreSection(null)}
+          title={`Calving records – ${animal.tag_number}`}
+          data={calvingList}
+          columns={calvingTableColumns}
+          exportColumns={calvingExportColumns}
+          exportFilename={`animal-${animal.tag_number}-calving-records`}
+          emptyMessage="No calving records"
+          itemLabel="calving records"
+          searchPlaceholder="Search date, outcome, calf..."
+        />
+      )}
     </div>
   );
 }

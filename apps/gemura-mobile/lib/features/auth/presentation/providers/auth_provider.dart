@@ -85,13 +85,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       final userData = response['data']['user'];
       final accountData = response['data']['account'];
       
-                            // Debug: Print the actual API response
-                      // print('🔍 DEBUG: Login API Response:');
-                      // print('🔍 DEBUG: userData: $userData');
-                      // print('🔍 DEBUG: accountData: $accountData');
-                      // print('🔍 DEBUG: accountData[type]: ${accountData['type']}');
-                      // print('🔍 DEBUG: accountData[code]: ${accountData['code']}');
-      
       // Create user from login response data, which already contains complete profile info
       final userDataWithRole = Map<String, dynamic>.from(userData);
       userDataWithRole['role'] = accountData['type']?.toString() ?? 'owner';
