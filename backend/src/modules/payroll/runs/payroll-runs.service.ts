@@ -146,6 +146,7 @@ export class PayrollRunsService {
               gte: payslip.period_start,
               lte: payslip.period_end,
             },
+            status: 'accepted',
           },
         });
         
@@ -262,6 +263,7 @@ export class PayrollRunsService {
       where: {
         supplier_account_id: p.supplier_account_id,
         sale_at: { gte: periodStart, lte: periodEnd },
+        status: 'accepted',
       },
       orderBy: { sale_at: 'asc' },
       select: {
@@ -422,7 +424,7 @@ export class PayrollRunsService {
             gte: supplierStartDate,
             lte: supplierEndDate,
           },
-          status: { not: 'deleted' },
+          status: 'accepted',
           payment_status: { not: 'paid' },
         },
         orderBy: {
@@ -709,9 +711,8 @@ export class PayrollRunsService {
       console.log(`Processing supplier: ${payrollSupplier.supplier_account.name} (${payrollSupplier.supplier_account.code})`);
       const supplierPaymentTerms = payrollSupplier.payment_terms_days || paymentTermsDays;
 
-      // Get milk sales for this supplier
-      // Exclude deleted sales, but include pending, accepted, rejected, and cancelled
-      // (rejected and cancelled might need to be reviewed, but we include them for now)
+      // Get only accepted milk sales for this supplier.
+      // Pending/rejected/cancelled collections must not affect payroll.
       console.log(`Querying milk sales for supplier ${payrollSupplier.supplier_account_id}, customer ${accountId}, dates ${startDate.toISOString()} to ${endDate.toISOString()}`);
       const milkSales = await this.prisma.milkSale.findMany({
         where: {
@@ -721,7 +722,7 @@ export class PayrollRunsService {
             gte: startDate,
             lte: endDate,
           },
-          status: { not: 'deleted' },
+          status: 'accepted',
           payment_status: { not: 'paid' },
         },
         orderBy: {
@@ -1095,7 +1096,7 @@ export class PayrollRunsService {
               gte: payslip.period_start,
               lte: payslip.period_end,
             },
-            status: { not: 'deleted' },
+            status: 'accepted',
             payment_status: { not: 'paid' },
           },
         });
@@ -1235,7 +1236,7 @@ export class PayrollRunsService {
               gte: payslip.period_start,
               lte: payslip.period_end,
             },
-            status: { not: 'deleted' },
+            status: 'accepted',
             payment_status: { not: 'paid' },
           },
         });
@@ -1346,7 +1347,7 @@ export class PayrollRunsService {
             gte: payslip.period_start,
             lte: payslip.period_end,
           },
-          status: { not: 'deleted' },
+          status: 'accepted',
         },
       });
       totalLitersByPayslip.set(payslip.id, Number(litersAgg._sum.quantity || 0));

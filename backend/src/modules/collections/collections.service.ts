@@ -288,6 +288,8 @@ export class CollectionsService {
 
     // Create milk sale (collection)
     try {
+      const collectionStatus = status || 'accepted';
+      const isFinanceEligible = collectionStatus === 'accepted';
       const totalAmount = quantity * Number(unitPrice);
       const amountPaid = payment_status === 'paid' ? totalAmount : 0;
       const finalPaymentStatus = payment_status || 'unpaid';
@@ -301,7 +303,7 @@ export class CollectionsService {
           milk_production_id: validatedMilkProductionId,
           quantity: quantity,
           unit_price: unitPrice,
-          status: (status || 'accepted') as any,
+          status: collectionStatus as any,
           sale_at: new Date(collection_at),
           notes: notes || null,
           amount_paid: amountPaid,
@@ -312,8 +314,8 @@ export class CollectionsService {
         },
       });
 
-      // Create accounting entries based on payment status
-      if (totalAmount > 0) {
+      // Create accounting entries only for accepted collections.
+      if (isFinanceEligible && totalAmount > 0) {
         try {
           if (finalPaymentStatus === 'paid') {
             // Paid: Direct to Expense and Cash
@@ -570,6 +572,15 @@ export class CollectionsService {
     }
 
     const totalAmount = Number(collection.quantity) * Number(collection.unit_price);
+
+    if (collection.status !== 'accepted') {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Payments can only be recorded for accepted collections.',
+      });
+    }
+
     const currentPaid = Number(collection.amount_paid || 0);
     const newPayment = Number(paymentDto.amount);
 

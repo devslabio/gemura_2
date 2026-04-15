@@ -34,7 +34,7 @@ export class ReceivablesPayablesService {
     const milkWhere: any = {
       supplier_account_id: user.default_account_id,
       payment_status: { not: 'paid' },
-      status: { not: 'deleted' },
+      status: 'accepted',
     };
 
     if (filters?.customer_account_id) {
@@ -289,7 +289,7 @@ export class ReceivablesPayablesService {
     const where: any = {
       customer_account_id: user.default_account_id,
       payment_status: { not: 'paid' },
-      status: { not: 'deleted' },
+      status: 'accepted',
     };
 
     // Apply filters
