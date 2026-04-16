@@ -49,6 +49,7 @@ export interface CreateCollectionData {
   collection_at: string;
   notes?: string;
   payment_status?: 'paid' | 'unpaid';
+  rejection_reason?: string;
 }
 
 export interface UpdateCollectionData {
@@ -57,6 +58,24 @@ export interface UpdateCollectionData {
   status?: string;
   collection_at?: string;
   notes?: string;
+  rejection_reason?: string;
+}
+
+export interface RejectionReason {
+  id: string;
+  name: string;
+  description?: string;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RejectionReasonsResponse {
+  code: number;
+  status: string;
+  message: string;
+  data: RejectionReason[];
 }
 
 export interface CollectionsResponse {
@@ -139,5 +158,9 @@ export const collectionsApi = {
     data: { amount: number; payment_date?: string; notes?: string }
   ): Promise<{ code: number; status: string; message: string; data?: { payment_status: string } }> => {
     return apiClient.post(`/collections/${collectionId}/payment`, data);
+  },
+
+  getRejectionReasons: async (): Promise<RejectionReasonsResponse> => {
+    return apiClient.get('/collections/rejection-reasons');
   },
 };
