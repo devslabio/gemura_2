@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
 import {
   isBusinessAccount,
+  isAdminRole,
   isExternalSupplier,
   isExternalCustomer,
 } from '@/lib/config/nav.config';
@@ -31,6 +32,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
   const { hasPermission, isAdmin } = usePermission();
   const accountType = currentAccount?.account_type ?? '';
   const accountId = currentAccount?.account_id ?? '';
+  const role = currentAccount?.role ?? '';
 
   const pathKey = useMemo(
     () => Object.keys(OPERATIONS_PATH_PERMISSION).find((p) => pathname === p || pathname.startsWith(p + '/')),
@@ -53,7 +55,10 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
       setAllowed(null);
     }
     if (!accountId) return;
-    if (isAdmin()) {
+    // Same rule as Sidebar: farm owner/admin are not "portal-only" admins; they use operations routes.
+    const portalOnlyAdmin =
+      isAdmin() && !(isBusinessAccount(accountType) && isAdminRole(role));
+    if (portalOnlyAdmin) {
       router.replace('/admin/dashboard');
       return;
     }

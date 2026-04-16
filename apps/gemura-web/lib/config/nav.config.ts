@@ -26,6 +26,7 @@ import {
   faClipboardList,
   faHandHoldingDollar,
   faTag,
+  faIdCard,
 } from '@/app/components/Icon';
 
 /** Account types that see user/operations menu (filtered by role + permissions) */
@@ -75,6 +76,7 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
   { icon: faHandHoldingDollar, label: 'Loans', href: '/loans', section: 'operations' },
   { icon: faChartLine, label: 'Finance', href: '/finance', section: 'operations' },
   { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'operations' },
+  { icon: faIdCard, label: 'IMMIS', href: '/immis', section: 'operations' },
   { icon: faCog, label: 'Settings', href: '/settings', section: 'operations' },
 ];
 

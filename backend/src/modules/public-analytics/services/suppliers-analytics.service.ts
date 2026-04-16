@@ -93,14 +93,23 @@ export class SuppliersAnalyticsService extends BaseAnalyticsService {
     ]);
 
     // Get total value
-    const totalValueResult = await this.prisma.$queryRaw<{ total_value: number }[]>`
-      SELECT COALESCE(SUM(quantity * unit_price), 0) as total_value
-      FROM milk_sales
-      WHERE customer_account_id = ANY(${context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000']}::uuid[])
-        AND sale_at >= ${context.startDate}
-        AND sale_at <= ${context.endDate}
-        AND status != 'deleted'
-    `;
+    const totalValueResult =
+      context.accountIds.length > 0
+        ? await this.prisma.$queryRaw<{ total_value: number }[]>`
+            SELECT COALESCE(SUM(quantity * unit_price), 0) as total_value
+            FROM milk_sales
+            WHERE customer_account_id = ANY(${context.accountIds}::uuid[])
+              AND sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+          `
+        : await this.prisma.$queryRaw<{ total_value: number }[]>`
+            SELECT COALESCE(SUM(quantity * unit_price), 0) as total_value
+            FROM milk_sales
+            WHERE sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+          `;
 
     return {
       total_suppliers: totalSuppliers,
@@ -279,31 +288,54 @@ export class SuppliersAnalyticsService extends BaseAnalyticsService {
           sale_at: true,
         },
       }),
-      this.prisma.$queryRaw<{ supplier_account_id: string; outstanding: number }[]>`
-        SELECT 
-          supplier_account_id,
-          COALESCE(SUM(quantity * unit_price) - SUM(amount_paid), 0) as outstanding
-        FROM milk_sales
-        WHERE customer_account_id = ANY(${context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000']}::uuid[])
-          AND supplier_account_id = ANY(${supplierIds}::uuid[])
-          AND status NOT IN ('deleted', 'cancelled')
-        GROUP BY supplier_account_id
-      `,
+      context.accountIds.length > 0
+        ? this.prisma.$queryRaw<{ supplier_account_id: string; outstanding: number }[]>`
+            SELECT 
+              supplier_account_id,
+              COALESCE(SUM(quantity * unit_price) - SUM(amount_paid), 0) as outstanding
+            FROM milk_sales
+            WHERE customer_account_id = ANY(${context.accountIds}::uuid[])
+              AND supplier_account_id = ANY(${supplierIds}::uuid[])
+              AND status NOT IN ('deleted', 'cancelled')
+            GROUP BY supplier_account_id
+          `
+        : this.prisma.$queryRaw<{ supplier_account_id: string; outstanding: number }[]>`
+            SELECT 
+              supplier_account_id,
+              COALESCE(SUM(quantity * unit_price) - SUM(amount_paid), 0) as outstanding
+            FROM milk_sales
+            WHERE supplier_account_id = ANY(${supplierIds}::uuid[])
+              AND status NOT IN ('deleted', 'cancelled')
+            GROUP BY supplier_account_id
+          `,
     ]);
 
     // Get total values
-    const totalValues = await this.prisma.$queryRaw<{ supplier_account_id: string; total_value: number }[]>`
-      SELECT 
-        supplier_account_id,
-        COALESCE(SUM(quantity * unit_price), 0) as total_value
-      FROM milk_sales
-      WHERE customer_account_id = ANY(${context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000']}::uuid[])
-        AND supplier_account_id = ANY(${supplierIds}::uuid[])
-        AND sale_at >= ${context.startDate}
-        AND sale_at <= ${context.endDate}
-        AND status != 'deleted'
-      GROUP BY supplier_account_id
-    `;
+    const totalValues =
+      context.accountIds.length > 0
+        ? await this.prisma.$queryRaw<{ supplier_account_id: string; total_value: number }[]>`
+            SELECT 
+              supplier_account_id,
+              COALESCE(SUM(quantity * unit_price), 0) as total_value
+            FROM milk_sales
+            WHERE customer_account_id = ANY(${context.accountIds}::uuid[])
+              AND supplier_account_id = ANY(${supplierIds}::uuid[])
+              AND sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+            GROUP BY supplier_account_id
+          `
+        : await this.prisma.$queryRaw<{ supplier_account_id: string; total_value: number }[]>`
+            SELECT 
+              supplier_account_id,
+              COALESCE(SUM(quantity * unit_price), 0) as total_value
+            FROM milk_sales
+            WHERE supplier_account_id = ANY(${supplierIds}::uuid[])
+              AND sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+            GROUP BY supplier_account_id
+          `;
 
     const statsMap = new Map(collectionStats.map((s) => [s.supplier_account_id, s]));
     const outstandingMap = new Map(outstandingPayables.map((o) => [o.supplier_account_id, this.formatDecimal(o.outstanding)]));

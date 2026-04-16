@@ -55,8 +55,11 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
 
     const showAdminDashboard = canViewDashboard() || isAdmin();
     const showAdminUsers = canManageUsers() || isAdmin();
+    // Owner/admin on a farm/business account use the operations app; do not trap them in admin-portal-only nav.
+    const useOperationsNavForAdminRole =
+      isBusinessAccount(accountType) && isAdminRole(role);
 
-    if (showAdminDashboard || showAdminUsers) {
+    if ((showAdminDashboard || showAdminUsers) && !useOperationsNavForAdminRole) {
       ADMIN_NAV_ITEMS.forEach((item) => {
         if (item.href === '/admin/dashboard') {
           if (!showAdminDashboard) return;

@@ -11,7 +11,7 @@ export interface ImmisApiResponse {
 @Injectable()
 export class ImmisService {
   private readonly logger = new Logger(ImmisService.name);
-  private readonly baseUrl = 'https://immis.hillygeeks.com/api/integration';
+  private readonly baseUrl = 'https://immis.rw/api/integration';
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -59,7 +59,7 @@ export class ImmisService {
 
   private async performRequest<T>(method: 'GET', path: string, apiKey: string): Promise<T> {
     const options: https.RequestOptions = {
-      hostname: 'immis.hillygeeks.com',
+      hostname: 'immis.rw',
       port: 443,
       path: `/api/integration${path}`,
       method,

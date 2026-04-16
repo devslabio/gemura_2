@@ -95,14 +95,23 @@ export class CollectionsAnalyticsService extends BaseAnalyticsService {
     ]);
 
     // Calculate total value using raw query for better precision
-    const totalValueResult = await this.prisma.$queryRaw<{ total_value: number }[]>`
-      SELECT COALESCE(SUM(quantity * unit_price), 0) as total_value
-      FROM milk_sales
-      WHERE customer_account_id = ANY(${context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000']}::uuid[])
-        AND sale_at >= ${context.startDate}
-        AND sale_at <= ${context.endDate}
-        AND status != 'deleted'
-    `;
+    const totalValueResult =
+      context.accountIds.length > 0
+        ? await this.prisma.$queryRaw<{ total_value: number }[]>`
+            SELECT COALESCE(SUM(quantity * unit_price), 0) as total_value
+            FROM milk_sales
+            WHERE customer_account_id = ANY(${context.accountIds}::uuid[])
+              AND sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+          `
+        : await this.prisma.$queryRaw<{ total_value: number }[]>`
+            SELECT COALESCE(SUM(quantity * unit_price), 0) as total_value
+            FROM milk_sales
+            WHERE sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+          `;
 
     const statusMap = new Map(statusCounts.map((s) => [s.status, s._count.id]));
     const acceptedCount = statusMap.get('accepted') || 0;

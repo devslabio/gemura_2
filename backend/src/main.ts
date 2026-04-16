@@ -160,7 +160,12 @@ async function bootstrap() {
   // Swagger / OpenAPI documentation – all endpoints are documented (discovered from all controllers)
   const config = new DocumentBuilder()
     .setTitle('Gemura API')
-    .setDescription('Gemura Financial Services API. All endpoints are documented below. Use the Authorize button to set a Bearer token for authenticated routes, or X-API-Key for Public Analytics (v1/analytics/*).')
+    .setDescription(
+      'Gemura Financial Services API. All endpoints are documented below. ' +
+        'Use the Authorize button for a Bearer **user token** on authenticated routes. ' +
+        'For **Public Analytics** (`/api/v1/analytics/*`), send `X-API-Key: <key>` or `Authorization: Bearer <api-key>` (same value as X-API-Key). ' +
+        'Per-key rate limits apply (see API key `rate_limit`, default per hour).',
+    )
     .setVersion('2.0')
     .addBearerAuth()
     .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'X-API-Key')

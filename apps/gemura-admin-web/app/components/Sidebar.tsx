@@ -33,18 +33,20 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
   }, [user, currentAccount]);
 
   const menuItems = useMemo(() => {
-    const items: Array<{ href: string; label: string; icon: any; requireManageUsers?: boolean }> = [];
+    const items: Array<{ href: string; label: string; icon: any }> = [];
 
     if (canViewDashboard() || isAdmin()) {
       items.push({ href: '/admin/dashboard', label: 'Dashboard', icon: faChartLine });
     }
 
     if (canManageUsers() || isAdmin()) {
-      items.push({ href: '/admin/users', label: 'Users', icon: faUsers, requireManageUsers: true });
-      items.push({ href: '/admin/roles', label: 'Roles', icon: faUserShield, requireManageUsers: true });
-      items.push({ href: '/admin/permissions', label: 'Permissions', icon: faLock, requireManageUsers: true });
-      items.push({ href: '/admin/immis', label: 'IMMIS', icon: faUsers, requireManageUsers: true });
+      items.push({ href: '/admin/users', label: 'Users', icon: faUsers });
+      items.push({ href: '/admin/roles', label: 'Roles', icon: faUserShield });
+      items.push({ href: '/admin/permissions', label: 'Permissions', icon: faLock });
     }
+
+    // IMMIS is visible to any authenticated admin-portal user.
+    items.push({ href: '/admin/immis', label: 'IMMIS', icon: faUsers });
 
     // Farms & accounts are token-guarded; keep visible for quick switching.
     items.push({ href: '/admin/farms', label: 'Farms', icon: faWarehouse });

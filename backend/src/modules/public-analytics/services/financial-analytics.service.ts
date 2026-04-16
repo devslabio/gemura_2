@@ -80,28 +80,48 @@ export class FinancialAnalyticsService extends BaseAnalyticsService {
     // Get milk collections (expense - where account is customer buying from suppliers)
     const [collectionsData, salesData, inventorySalesData, loanData, payrollData] = await Promise.all([
       // Collections expense
-      this.prisma.$queryRaw<{ total_value: number; amount_paid: number }[]>`
-        SELECT 
-          COALESCE(SUM(quantity * unit_price), 0) as total_value,
-          COALESCE(SUM(amount_paid), 0) as amount_paid
-        FROM milk_sales
-        WHERE customer_account_id = ANY(${context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000']}::uuid[])
-          AND sale_at >= ${context.startDate}
-          AND sale_at <= ${context.endDate}
-          AND status != 'deleted'
-      `,
+      context.accountIds.length > 0
+        ? this.prisma.$queryRaw<{ total_value: number; amount_paid: number }[]>`
+            SELECT 
+              COALESCE(SUM(quantity * unit_price), 0) as total_value,
+              COALESCE(SUM(amount_paid), 0) as amount_paid
+            FROM milk_sales
+            WHERE customer_account_id = ANY(${context.accountIds}::uuid[])
+              AND sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+          `
+        : this.prisma.$queryRaw<{ total_value: number; amount_paid: number }[]>`
+            SELECT 
+              COALESCE(SUM(quantity * unit_price), 0) as total_value,
+              COALESCE(SUM(amount_paid), 0) as amount_paid
+            FROM milk_sales
+            WHERE sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+          `,
 
       // Sales revenue
-      this.prisma.$queryRaw<{ total_value: number; amount_paid: number }[]>`
-        SELECT 
-          COALESCE(SUM(quantity * unit_price), 0) as total_value,
-          COALESCE(SUM(amount_paid), 0) as amount_paid
-        FROM milk_sales
-        WHERE supplier_account_id = ANY(${context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000']}::uuid[])
-          AND sale_at >= ${context.startDate}
-          AND sale_at <= ${context.endDate}
-          AND status != 'deleted'
-      `,
+      context.accountIds.length > 0
+        ? this.prisma.$queryRaw<{ total_value: number; amount_paid: number }[]>`
+            SELECT 
+              COALESCE(SUM(quantity * unit_price), 0) as total_value,
+              COALESCE(SUM(amount_paid), 0) as amount_paid
+            FROM milk_sales
+            WHERE supplier_account_id = ANY(${context.accountIds}::uuid[])
+              AND sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+          `
+        : this.prisma.$queryRaw<{ total_value: number; amount_paid: number }[]>`
+            SELECT 
+              COALESCE(SUM(quantity * unit_price), 0) as total_value,
+              COALESCE(SUM(amount_paid), 0) as amount_paid
+            FROM milk_sales
+            WHERE sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+          `,
 
       // Inventory sales revenue
       this.prisma.inventorySale.aggregate({
@@ -189,8 +209,6 @@ export class FinancialAnalyticsService extends BaseAnalyticsService {
   async getBreakdown(context: AnalyticsContext): Promise<FinancialBreakdown[]> {
     const dateGroupExpr = this.getDateGroupExpression('sale_at', context.groupBy);
 
-    const accountCondition = context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000'];
-
     // Revenue (sales where account is supplier)
     const revenueQuery = `
       SELECT 
@@ -201,6 +219,19 @@ export class FinancialAnalyticsService extends BaseAnalyticsService {
       WHERE supplier_account_id = ANY($1::uuid[])
         AND sale_at >= $2
         AND sale_at <= $3
+        AND status != 'deleted'
+      GROUP BY ${dateGroupExpr}
+      ORDER BY period_date ASC
+    `;
+
+    const revenueQueryAllAccounts = `
+      SELECT 
+        ${dateGroupExpr} as period_date,
+        COALESCE(SUM(quantity * unit_price), 0) as total_value,
+        COALESCE(SUM(amount_paid), 0) as amount_paid
+      FROM milk_sales
+      WHERE sale_at >= $1
+        AND sale_at <= $2
         AND status != 'deleted'
       GROUP BY ${dateGroupExpr}
       ORDER BY period_date ASC
@@ -221,10 +252,47 @@ export class FinancialAnalyticsService extends BaseAnalyticsService {
       ORDER BY period_date ASC
     `;
 
-    const [revenueResults, expenseResults] = await Promise.all([
-      this.prisma.$queryRawUnsafe<any[]>(revenueQuery, accountCondition, context.startDate, context.endDate),
-      this.prisma.$queryRawUnsafe<any[]>(expenseQuery, accountCondition, context.startDate, context.endDate),
-    ]);
+    const expenseQueryAllAccounts = `
+      SELECT 
+        ${dateGroupExpr} as period_date,
+        COALESCE(SUM(quantity * unit_price), 0) as total_value,
+        COALESCE(SUM(amount_paid), 0) as amount_paid
+      FROM milk_sales
+      WHERE sale_at >= $1
+        AND sale_at <= $2
+        AND status != 'deleted'
+      GROUP BY ${dateGroupExpr}
+      ORDER BY period_date ASC
+    `;
+
+    const [revenueResults, expenseResults] =
+      context.accountIds.length > 0
+        ? await Promise.all([
+            this.prisma.$queryRawUnsafe<any[]>(
+              revenueQuery,
+              context.accountIds,
+              context.startDate,
+              context.endDate,
+            ),
+            this.prisma.$queryRawUnsafe<any[]>(
+              expenseQuery,
+              context.accountIds,
+              context.startDate,
+              context.endDate,
+            ),
+          ])
+        : await Promise.all([
+            this.prisma.$queryRawUnsafe<any[]>(
+              revenueQueryAllAccounts,
+              context.startDate,
+              context.endDate,
+            ),
+            this.prisma.$queryRawUnsafe<any[]>(
+              expenseQueryAllAccounts,
+              context.startDate,
+              context.endDate,
+            ),
+          ]);
 
     // Merge results
     const resultMap = new Map<string, FinancialBreakdown>();
@@ -309,28 +377,47 @@ export class FinancialAnalyticsService extends BaseAnalyticsService {
    * Get accounts payable details (amounts owed to suppliers)
    */
   async getPayablesDetails(context: AnalyticsContext): Promise<PayablesDetail[]> {
-    const accountCondition = context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000'];
-
-    const payables = await this.prisma.$queryRaw<any[]>`
-      SELECT 
-        ms.supplier_account_id,
-        a.code as supplier_code,
-        a.name as supplier_name,
-        COALESCE(SUM(ms.quantity * ms.unit_price), 0) as total_amount_due,
-        COALESCE(SUM(ms.amount_paid), 0) as amount_paid,
-        COALESCE(SUM(ms.quantity * ms.unit_price) - SUM(ms.amount_paid), 0) as outstanding_amount,
-        MIN(CASE WHEN ms.payment_status != 'paid' THEN ms.sale_at END) as oldest_unpaid_date,
-        COUNT(*) as transaction_count
-      FROM milk_sales ms
-      JOIN accounts a ON a.id = ms.supplier_account_id
-      WHERE ms.customer_account_id = ANY(${accountCondition}::uuid[])
-        AND ms.status NOT IN ('deleted', 'cancelled')
-      GROUP BY ms.supplier_account_id, a.code, a.name
-      HAVING SUM(ms.quantity * ms.unit_price) - SUM(ms.amount_paid) > 0
-      ORDER BY outstanding_amount DESC
-      LIMIT ${context.limit}
-      OFFSET ${(context.page - 1) * context.limit}
-    `;
+    const payables =
+      context.accountIds.length > 0
+        ? await this.prisma.$queryRaw<any[]>`
+            SELECT 
+              ms.supplier_account_id,
+              a.code as supplier_code,
+              a.name as supplier_name,
+              COALESCE(SUM(ms.quantity * ms.unit_price), 0) as total_amount_due,
+              COALESCE(SUM(ms.amount_paid), 0) as amount_paid,
+              COALESCE(SUM(ms.quantity * ms.unit_price) - SUM(ms.amount_paid), 0) as outstanding_amount,
+              MIN(CASE WHEN ms.payment_status != 'paid' THEN ms.sale_at END) as oldest_unpaid_date,
+              COUNT(*) as transaction_count
+            FROM milk_sales ms
+            JOIN accounts a ON a.id = ms.supplier_account_id
+            WHERE ms.customer_account_id = ANY(${context.accountIds}::uuid[])
+              AND ms.status NOT IN ('deleted', 'cancelled')
+            GROUP BY ms.supplier_account_id, a.code, a.name
+            HAVING SUM(ms.quantity * ms.unit_price) - SUM(ms.amount_paid) > 0
+            ORDER BY outstanding_amount DESC
+            LIMIT ${context.limit}
+            OFFSET ${(context.page - 1) * context.limit}
+          `
+        : await this.prisma.$queryRaw<any[]>`
+            SELECT 
+              ms.supplier_account_id,
+              a.code as supplier_code,
+              a.name as supplier_name,
+              COALESCE(SUM(ms.quantity * ms.unit_price), 0) as total_amount_due,
+              COALESCE(SUM(ms.amount_paid), 0) as amount_paid,
+              COALESCE(SUM(ms.quantity * ms.unit_price) - SUM(ms.amount_paid), 0) as outstanding_amount,
+              MIN(CASE WHEN ms.payment_status != 'paid' THEN ms.sale_at END) as oldest_unpaid_date,
+              COUNT(*) as transaction_count
+            FROM milk_sales ms
+            JOIN accounts a ON a.id = ms.supplier_account_id
+            WHERE ms.status NOT IN ('deleted', 'cancelled')
+            GROUP BY ms.supplier_account_id, a.code, a.name
+            HAVING SUM(ms.quantity * ms.unit_price) - SUM(ms.amount_paid) > 0
+            ORDER BY outstanding_amount DESC
+            LIMIT ${context.limit}
+            OFFSET ${(context.page - 1) * context.limit}
+          `;
 
     return payables.map((p) => ({
       supplier_id: p.supplier_account_id,
@@ -348,28 +435,47 @@ export class FinancialAnalyticsService extends BaseAnalyticsService {
    * Get accounts receivable details (amounts owed by customers)
    */
   async getReceivablesDetails(context: AnalyticsContext): Promise<ReceivablesDetail[]> {
-    const accountCondition = context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000'];
-
-    const receivables = await this.prisma.$queryRaw<any[]>`
-      SELECT 
-        ms.customer_account_id,
-        a.code as customer_code,
-        a.name as customer_name,
-        COALESCE(SUM(ms.quantity * ms.unit_price), 0) as total_amount_due,
-        COALESCE(SUM(ms.amount_paid), 0) as amount_received,
-        COALESCE(SUM(ms.quantity * ms.unit_price) - SUM(ms.amount_paid), 0) as outstanding_amount,
-        MIN(CASE WHEN ms.payment_status != 'paid' THEN ms.sale_at END) as oldest_unpaid_date,
-        COUNT(*) as transaction_count
-      FROM milk_sales ms
-      JOIN accounts a ON a.id = ms.customer_account_id
-      WHERE ms.supplier_account_id = ANY(${accountCondition}::uuid[])
-        AND ms.status NOT IN ('deleted', 'cancelled')
-      GROUP BY ms.customer_account_id, a.code, a.name
-      HAVING SUM(ms.quantity * ms.unit_price) - SUM(ms.amount_paid) > 0
-      ORDER BY outstanding_amount DESC
-      LIMIT ${context.limit}
-      OFFSET ${(context.page - 1) * context.limit}
-    `;
+    const receivables =
+      context.accountIds.length > 0
+        ? await this.prisma.$queryRaw<any[]>`
+            SELECT 
+              ms.customer_account_id,
+              a.code as customer_code,
+              a.name as customer_name,
+              COALESCE(SUM(ms.quantity * ms.unit_price), 0) as total_amount_due,
+              COALESCE(SUM(ms.amount_paid), 0) as amount_received,
+              COALESCE(SUM(ms.quantity * ms.unit_price) - SUM(ms.amount_paid), 0) as outstanding_amount,
+              MIN(CASE WHEN ms.payment_status != 'paid' THEN ms.sale_at END) as oldest_unpaid_date,
+              COUNT(*) as transaction_count
+            FROM milk_sales ms
+            JOIN accounts a ON a.id = ms.customer_account_id
+            WHERE ms.supplier_account_id = ANY(${context.accountIds}::uuid[])
+              AND ms.status NOT IN ('deleted', 'cancelled')
+            GROUP BY ms.customer_account_id, a.code, a.name
+            HAVING SUM(ms.quantity * ms.unit_price) - SUM(ms.amount_paid) > 0
+            ORDER BY outstanding_amount DESC
+            LIMIT ${context.limit}
+            OFFSET ${(context.page - 1) * context.limit}
+          `
+        : await this.prisma.$queryRaw<any[]>`
+            SELECT 
+              ms.customer_account_id,
+              a.code as customer_code,
+              a.name as customer_name,
+              COALESCE(SUM(ms.quantity * ms.unit_price), 0) as total_amount_due,
+              COALESCE(SUM(ms.amount_paid), 0) as amount_received,
+              COALESCE(SUM(ms.quantity * ms.unit_price) - SUM(ms.amount_paid), 0) as outstanding_amount,
+              MIN(CASE WHEN ms.payment_status != 'paid' THEN ms.sale_at END) as oldest_unpaid_date,
+              COUNT(*) as transaction_count
+            FROM milk_sales ms
+            JOIN accounts a ON a.id = ms.customer_account_id
+            WHERE ms.status NOT IN ('deleted', 'cancelled')
+            GROUP BY ms.customer_account_id, a.code, a.name
+            HAVING SUM(ms.quantity * ms.unit_price) - SUM(ms.amount_paid) > 0
+            ORDER BY outstanding_amount DESC
+            LIMIT ${context.limit}
+            OFFSET ${(context.page - 1) * context.limit}
+          `;
 
     return receivables.map((r) => ({
       customer_id: r.customer_account_id,

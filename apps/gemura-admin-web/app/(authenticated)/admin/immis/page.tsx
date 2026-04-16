@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { usePermission } from '@/hooks/usePermission';
 import { adminApi } from '@/lib/api/admin';
 import { immisApi, type ImmisMember } from '@/lib/api/immis';
@@ -23,12 +22,7 @@ const TYPE_OPTIONS = [
 
 export default function ImmisPage() {
   const showToast = useToastStore((s) => s.show);
-  const router = useRouter();
-  const { canManageUsers, isAdmin, currentAccount } = usePermission();
-
-  useEffect(() => {
-    if (!canManageUsers() && !isAdmin()) router.push('/dashboard');
-  }, [router, currentAccount?.account_id]);
+  const { canManageUsers, currentAccount } = usePermission();
 
   const [loading, setLoading] = useState(true);
   const [members, setMembers] = useState<ImmisMember[]>([]);
