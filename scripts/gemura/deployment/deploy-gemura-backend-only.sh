@@ -1,6 +1,7 @@
 #!/bin/bash
 #
-# Deploy Gemura backend (API) only to Kwezi. Does not touch gemura-ui.
+# Deploy Gemura backend (API) only to Kwezi. Does not rebuild or restart gemura-ui or
+# gemura-admin-ui (use this when you want production web UIs left unchanged).
 #
 # Usage (from project root):
 #   ./scripts/gemura/deployment/deploy-gemura-backend-only.sh
