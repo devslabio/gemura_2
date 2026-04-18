@@ -2,26 +2,103 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import Icon, { faCog, faUser, faLock, faEnvelope, faPhone, faSpinner, faCheckCircle, faUsers, faUserPlus, faEdit, faUserMinus } from '@/app/components/Icon';
+import Icon, { faCog, faUser, faLock, faEnvelope, faPhone, faSpinner, faCheckCircle, faUsers, faUserShield, faUserPlus, faEdit, faUserMinus } from '@/app/components/Icon';
 import { SkeletonBar } from '@/app/components/SkeletonLoader';
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
 import { usePermission } from '@/hooks/usePermission';
 import { fullNameFromParts, splitFullName } from '@/lib/utils/name';
 import { profileApi, UpdateProfilePayload } from '@/lib/api/profile';
-import { employeesApi, type EmployeeItem, type RoleOption } from '@/lib/api/employees';
+import { employeesApi, type EmployeeItem } from '@/lib/api/employees';
 import Modal from '@/app/components/Modal';
 import ConfirmDialog from '@/app/components/ConfirmDialog';
 
-const ROLE_LABELS: Record<string, string> = {
-  owner: 'Owner',
-  admin: 'Admin',
-  manager: 'Manager',
-  accountant: 'Accountant',
-  collector: 'Collector',
-  viewer: 'Viewer',
-  agent: 'Agent',
+type TeamAccessGroup = 'general_access' | 'limited_access';
+type TeamProfileKey = 'manager' | 'accountant' | 'milk_receptionist' | 'veterinary';
+
+const TEAM_ROLE_PROFILES: Record<TeamProfileKey, {
+  key: TeamProfileKey;
+  label: string;
+  description: string;
+  accessGroup: TeamAccessGroup;
+  backendRole: 'manager' | 'accountant' | 'collector' | 'agent';
+}> = {
+  manager: {
+    key: 'manager',
+    label: 'Manager',
+    description: 'Oversees center-wide activities and team operations.',
+    accessGroup: 'general_access',
+    backendRole: 'manager',
+  },
+  accountant: {
+    key: 'accountant',
+    label: 'Accountant',
+    description: 'Manages financial and operational records across the center.',
+    accessGroup: 'general_access',
+    backendRole: 'accountant',
+  },
+  milk_receptionist: {
+    key: 'milk_receptionist',
+    label: 'Milk Receptionist',
+    description: 'Handles milk operations at the branch level.',
+    accessGroup: 'limited_access',
+    backendRole: 'collector',
+  },
+  veterinary: {
+    key: 'veterinary',
+    label: 'Veterinary',
+    description: 'Supports field and operational activities with receptionist-level system access.',
+    accessGroup: 'limited_access',
+    backendRole: 'agent',
+  },
 };
+
+const TEAM_PROFILE_OPTIONS: TeamProfileKey[] = ['manager', 'accountant', 'milk_receptionist', 'veterinary'];
+
+const profileFromEmployee = (employee: EmployeeItem): TeamProfileKey => {
+  if (employee.role === 'manager') return 'manager';
+  if (employee.role === 'accountant') return 'accountant';
+  if (employee.role === 'agent') return 'veterinary';
+  return 'milk_receptionist';
+};
+
+const ROLE_DEFINITIONS = [
+  {
+    name: 'Milk Receptionist',
+    description: 'Handles milk operations at the branch level.',
+    permissionGroup: 'Limited Access',
+  },
+  {
+    name: 'Veterinary',
+    description: 'Supports field and operational activities with receptionist-level system access.',
+    permissionGroup: 'Limited Access',
+  },
+  {
+    name: 'Accountant',
+    description: 'Manages financial and operational records across the center.',
+    permissionGroup: 'General Access',
+  },
+  {
+    name: 'Manager',
+    description: 'Oversees center-wide activities and team operations.',
+    permissionGroup: 'General Access',
+  },
+];
+
+const PERMISSION_GROUPS = [
+  {
+    name: 'General Access',
+    summary: 'Allowed to view all sidebar tabs.',
+    grantedTo: ['Manager', 'Accountant'],
+    tabs: ['All sidebar tabs'],
+  },
+  {
+    name: 'Limited Access',
+    summary: 'Operational access with role-based limits inside core workflows.',
+    grantedTo: ['Milk Receptionist', 'Veterinary'],
+    tabs: ['Dashboard', 'Sales', 'Collections', 'Suppliers', 'Customers', 'Inventory'],
+  },
+];
 
 export default function SettingsPage() {
   const { user, setUser, currentAccount } = useAuthStore();
@@ -37,21 +114,27 @@ export default function SettingsPage() {
   });
   const [employees, setEmployees] = useState<EmployeeItem[]>([]);
   const [employeesLoading, setEmployeesLoading] = useState(false);
-  const [roles, setRoles] = useState<RoleOption[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editEmployee, setEditEmployee] = useState<EmployeeItem | null>(null);
   const [deactivateEmployee, setDeactivateEmployee] = useState<EmployeeItem | null>(null);
-  const [inviteForm, setInviteForm] = useState({ name: '', email: '', phone: '', password: '', role: 'viewer' });
-  const [editRole, setEditRole] = useState('');
-  type TabId = 'profile' | 'password' | 'team' | 'preferences';
+  const [inviteForm, setInviteForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    password: '',
+    profileKey: 'milk_receptionist' as TeamProfileKey,
+  });
+  const [editProfileKey, setEditProfileKey] = useState<TeamProfileKey>('milk_receptionist');
+  type TabId = 'profile' | 'password' | 'team' | 'roles_permissions' | 'preferences';
   const [activeTab, setActiveTab] = useState<TabId>('profile');
 
-  const canManageEmployees = currentAccount?.account_id && (canManageUsers() || isAdmin() || hasRole('owner') || hasRole('admin'));
+  const canManageEmployees = !!currentAccount?.account_id;
 
   const tabs: { id: TabId; label: string; icon: typeof faUser }[] = [
     { id: 'profile', label: 'Profile', icon: faUser },
     { id: 'password', label: 'Password', icon: faLock },
     ...(canManageEmployees ? [{ id: 'team' as const, label: 'Team', icon: faUsers }] : []),
+    ...(canManageEmployees ? [{ id: 'roles_permissions' as const, label: 'Roles & Permissions', icon: faUserShield }] : []),
     { id: 'preferences', label: 'Preferences', icon: faCog },
   ];
 
@@ -69,22 +152,11 @@ export default function SettingsPage() {
     }
   }, [currentAccount?.account_id]);
 
-  const loadRoles = useCallback(async () => {
-    if (!currentAccount?.account_id) return;
-    try {
-      const res = await employeesApi.getRoles(currentAccount.account_id);
-      if (res.code === 200 && res.data?.roles) setRoles(res.data.roles);
-    } catch {
-      setRoles([]);
-    }
-  }, [currentAccount?.account_id]);
-
   useEffect(() => {
     if (canManageEmployees) {
       loadEmployees();
-      loadRoles();
     }
-  }, [canManageEmployees, loadEmployees, loadRoles]);
+  }, [canManageEmployees, loadEmployees]);
 
   useEffect(() => {
     profileApi
@@ -157,18 +229,20 @@ export default function SettingsPage() {
     }
     setSaving(true);
     try {
+      const selectedProfile = TEAM_ROLE_PROFILES[inviteForm.profileKey];
       const res = await employeesApi.inviteEmployee({
         name: inviteForm.name.trim(),
         email: inviteForm.email.trim() || undefined,
         phone: inviteForm.phone.trim() || undefined,
         password: inviteForm.password.trim() || undefined,
-        role: inviteForm.role,
+        role: selectedProfile.backendRole,
+        access_group: selectedProfile.accessGroup,
         account_id: currentAccount?.account_id,
       });
       if (res.code === 201 || res.code === 200) {
         showToast('Team member added successfully', 'success');
         setInviteOpen(false);
-        setInviteForm({ name: '', email: '', phone: '', password: '', role: 'viewer' });
+        setInviteForm({ name: '', email: '', phone: '', password: '', profileKey: 'milk_receptionist' });
         loadEmployees();
       } else {
         showToast((res as any).message || 'Failed to add team member', 'error');
@@ -184,7 +258,15 @@ export default function SettingsPage() {
     if (!editEmployee) return;
     setSaving(true);
     try {
-      const res = await employeesApi.updateEmployee(editEmployee.id, { role: editRole }, currentAccount?.account_id);
+      const selectedProfile = TEAM_ROLE_PROFILES[editProfileKey];
+      const res = await employeesApi.updateEmployee(
+        editEmployee.id,
+        {
+          role: selectedProfile.backendRole,
+          access_group: selectedProfile.accessGroup,
+        },
+        currentAccount?.account_id,
+      );
       if (res.code === 200) {
         showToast('Role updated', 'success');
         setEditEmployee(null);
@@ -239,8 +321,8 @@ export default function SettingsPage() {
                 flex items-center gap-2 px-5 py-4 text-sm font-medium whitespace-nowrap
                 border-b-2 transition-colors
                 ${activeTab === tab.id
-                  ? 'bg-white text-[var(--primary)] border-[var(--primary)]'
-                  : 'border-transparent text-gray-600 hover:bg-white hover:text-[var(--primary)]'
+                  ? 'bg-white text-(--primary) border-(--primary)'
+                  : 'border-transparent text-gray-600 hover:bg-white hover:text-(--primary)'
                 }
               `}
             >
@@ -388,29 +470,128 @@ export default function SettingsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {employees.map((emp) => (
-                      <tr key={emp.id} className="bg-white hover:bg-gray-50/50">
-                        <td className="py-3 px-4 text-gray-900">{emp.user?.name ?? '—'}</td>
-                        <td className="py-3 px-4 text-gray-600">{emp.user?.email ?? '—'}</td>
-                        <td className="py-3 px-4 text-gray-600">{emp.user?.phone ?? '—'}</td>
-                        <td className="py-3 px-4"><span className="capitalize">{ROLE_LABELS[emp.role] ?? emp.role}</span></td>
-                        <td className="py-3 px-4">
-                          <span className={emp.status === 'active' ? 'text-green-600 font-medium' : 'text-gray-500'}>{emp.status === 'active' ? 'Active' : 'Inactive'}</span>
-                        </td>
-                        <td className="py-3 px-4">
-                          {emp.status === 'active' && (
-                            <span className="inline-flex gap-1">
-                              <button type="button" onClick={() => { setEditEmployee(emp); setEditRole(emp.role); }} className="p-1.5 text-gray-500 hover:text-[var(--primary)] rounded" title="Edit role"><Icon icon={faEdit} size="sm" /></button>
-                              <button type="button" onClick={() => setDeactivateEmployee(emp)} className="p-1.5 text-gray-500 hover:text-red-600 rounded" title="Deactivate"><Icon icon={faUserMinus} size="sm" /></button>
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {employees.map((emp) => {
+                      const isOwner = emp.is_owner === true;
+                      return (
+                        <tr key={emp.id} className={`${isOwner ? 'bg-blue-50' : 'bg-white'} hover:bg-gray-50/50`}>
+                          <td className="py-3 px-4 text-gray-900">{emp.user?.name ?? '—'}</td>
+                          <td className="py-3 px-4 text-gray-600">{emp.user?.email ?? '—'}</td>
+                          <td className="py-3 px-4 text-gray-600">{emp.user?.phone ?? '—'}</td>
+                          <td className="py-3 px-4">
+                            {isOwner ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                Owner
+                              </span>
+                            ) : (
+                              <span className="capitalize">{TEAM_ROLE_PROFILES[profileFromEmployee(emp)].label}</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={emp.status === 'active' ? 'text-green-600 font-medium' : 'text-gray-500'}>{emp.status === 'active' ? 'Active' : 'Inactive'}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {isOwner ? (
+                              <span className="text-xs text-gray-500" title="Owner cannot be edited">—</span>
+                            ) : emp.status === 'active' ? (
+                              <span className="inline-flex gap-1">
+                                <button type="button" onClick={() => { setEditEmployee(emp); setEditProfileKey(profileFromEmployee(emp)); }} className="p-1.5 text-gray-500 hover:text-(--primary) rounded" title="Edit role"><Icon icon={faEdit} size="sm" /></button>
+                                <button type="button" onClick={() => setDeactivateEmployee(emp)} className="p-1.5 text-gray-500 hover:text-red-600 rounded" title="Deactivate"><Icon icon={faUserMinus} size="sm" /></button>
+                              </span>
+                            ) : null}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Roles & Permissions tab */}
+        {activeTab === 'roles_permissions' && canManageEmployees && (
+          <div className="p-6 sm:p-8 space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 m-0">Roles & Permissions</h3>
+              <p className="mt-1 text-sm text-gray-600 m-0">Definitions for roles and access groups used in this account.</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white border border-gray-200 rounded-sm p-4">
+                <p className="text-sm text-gray-600">Roles</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">4</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-sm p-4">
+                <p className="text-sm text-gray-600">Permission Groups</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">2</p>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-sm p-4">
+                <p className="text-sm text-gray-600">Restricted Tabs (Receptionist Access)</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">6</p>
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-sm p-5">
+              <h4 className="text-base font-semibold text-gray-900">Roles</h4>
+              <p className="text-sm text-gray-600 mt-1">These are the primary user roles currently used in this dashboard.</p>
+
+              <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {ROLE_DEFINITIONS.map((role) => (
+                  <div key={role.name} className="border border-gray-200 rounded-sm p-4 bg-gray-50/40">
+                    <div className="flex items-center justify-between gap-3">
+                      <h5 className="font-semibold text-gray-900">{role.name}</h5>
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 text-xs font-medium">
+                        {role.permissionGroup}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-2">{role.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-sm p-5">
+              <h4 className="text-base font-semibold text-gray-900">Permission Groups</h4>
+              <p className="text-sm text-gray-600 mt-1">Access is assigned through these permission groups.</p>
+
+              <div className="mt-4 space-y-4">
+                {PERMISSION_GROUPS.map((group) => (
+                  <div key={group.name} className="border border-gray-200 rounded-sm p-4">
+                    <h5 className="font-semibold text-gray-900">{group.name}</h5>
+                    <p className="text-sm text-gray-600 mt-1">{group.summary}</p>
+
+                    <div className="mt-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-500 font-medium">Granted To</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {group.grantedTo.map((role) => (
+                          <span
+                            key={role}
+                            className="inline-flex items-center px-2.5 py-1 rounded-full bg-gray-100 text-gray-800 text-xs font-medium"
+                          >
+                            {role}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mt-3">
+                      <p className="text-xs uppercase tracking-wide text-gray-500 font-medium">Sidebar Tabs</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {group.tabs.map((tab) => (
+                          <span
+                            key={tab}
+                            className="inline-flex items-center px-2.5 py-1 rounded-full bg-green-50 text-green-800 text-xs font-medium"
+                          >
+                            {tab}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
@@ -477,20 +658,19 @@ export default function SettingsPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
             <select
-              value={inviteForm.role}
-              onChange={(e) => setInviteForm((f) => ({ ...f, role: e.target.value }))}
+              value={inviteForm.profileKey}
+              onChange={(e) => setInviteForm((f) => ({ ...f, profileKey: e.target.value as TeamProfileKey }))}
               className="input w-full"
             >
-              {roles.length > 0
-                ? roles.map((r) => (
-                    <option key={r.code} value={r.code}>
-                      {r.name}
-                    </option>
-                  ))
-                : Object.entries(ROLE_LABELS).filter(([k]) => !['supplier', 'customer'].includes(k)).map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
+              {TEAM_PROFILE_OPTIONS.map((profileKey) => (
+                <option key={profileKey} value={profileKey}>
+                  {TEAM_ROLE_PROFILES[profileKey].label}
+                </option>
+              ))}
             </select>
+            <p className="text-xs text-gray-500 mt-1">
+              {TEAM_ROLE_PROFILES[inviteForm.profileKey].description}
+            </p>
           </div>
           <div className="flex gap-2 justify-end pt-2">
             <button type="button" onClick={() => setInviteOpen(false)} className="btn btn-secondary" disabled={saving}>
@@ -511,18 +691,17 @@ export default function SettingsPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
               <select
-                value={editRole}
-                onChange={(e) => setEditRole(e.target.value)}
+                value={editProfileKey}
+                onChange={(e) => setEditProfileKey(e.target.value as TeamProfileKey)}
                 className="input w-full"
               >
-                {roles.length > 0
-                  ? roles.map((r) => (
-                      <option key={r.code} value={r.code}>{r.name}</option>
-                    ))
-                  : Object.entries(ROLE_LABELS).filter(([k]) => !['supplier', 'customer'].includes(k)).map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
+                {TEAM_PROFILE_OPTIONS.map((profileKey) => (
+                  <option key={profileKey} value={profileKey}>{TEAM_ROLE_PROFILES[profileKey].label}</option>
+                ))}
               </select>
+              <p className="text-xs text-gray-500 mt-1">
+                {TEAM_ROLE_PROFILES[editProfileKey].description}
+              </p>
             </div>
             <div className="flex gap-2 justify-end pt-2">
               <button type="button" onClick={() => setEditEmployee(null)} className="btn btn-secondary" disabled={saving}>Cancel</button>

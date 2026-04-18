@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
+import { getRoleLabel } from '@/lib/utils/role';
 import Icon, { faBars, faChevronRight, faChevronDown, faUser } from './Icon';
 import type { NavItem } from '@/lib/config/nav.config';
 import {
@@ -27,6 +28,9 @@ interface SidebarProps {
   onCollapsedChange: (collapsed: boolean) => void;
 }
 
+const FORCE_OPERATIONS_DASHBOARD =
+  (process.env.NEXT_PUBLIC_FORCE_OPERATIONS_DASHBOARD || '').toLowerCase() === 'true';
+
 export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange }: SidebarProps) {
   const pathname = usePathname();
   const { user, currentAccount } = useAuthStore();
@@ -44,7 +48,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     if (user) {
       setUserName(`${user.firstName} ${user.lastName}`);
       setUserEmail(user.email);
-      setUserRole(currentAccount?.role || 'User');
+      setUserRole(getRoleLabel(currentAccount?.role));
     }
   }, [user, currentAccount]);
 
@@ -52,17 +56,18 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
   // Admin portal is shown based on role/permissions (manage_users + dashboard.view), matching backend.
   const menuItems = useMemo(() => {
     const items: NavItem[] = [];
+    const preferOperationsSidebar = FORCE_OPERATIONS_DASHBOARD && isBusinessAccount(accountType);
 
     const showAdminDashboard = canViewDashboard() || isAdmin();
     const showAdminUsers = canManageUsers() || isAdmin();
 
-    if (showAdminDashboard || showAdminUsers) {
+    if (!preferOperationsSidebar && (showAdminDashboard || showAdminUsers)) {
       ADMIN_NAV_ITEMS.forEach((item) => {
         if (item.href === '/admin/dashboard') {
           if (!showAdminDashboard) return;
         }
 
-        if (item.href === '/admin/users' || item.href === '/admin/roles' || item.href === '/admin/permissions') {
+        if (item.href === '/admin/users') {
           if (!showAdminUsers) return;
         }
 
@@ -169,8 +174,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
       {/* Overlay for mobile - full viewport height to avoid gap at bottom */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden min-h-screen min-h-[100dvh]"
-          style={{ minHeight: '100dvh' }}
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden min-h-dvh"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -181,8 +185,8 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
           fixed top-0 left-0 z-50
           flex flex-col overflow-y-auto overflow-x-hidden
           transition-all duration-300 ease-in-out
-          h-full min-h-[100dvh]
-          w-[280px] max-w-[85vw]
+          h-full min-h-dvh
+          w-70 max-w-[85vw]
           lg:max-w-none
           lg:translate-x-0
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -193,14 +197,14 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
         `}
       >
         {/* Logo Section */}
-        <div className="p-4 sm:p-5 border-b border-[#031a3a] flex-shrink-0 mb-2 sm:mb-4">
+        <div className="p-4 sm:p-5 border-b border-[#031a3a] shrink-0 mb-2 sm:mb-4">
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
             <Link
               href="/dashboard"
-              className={`flex items-center gap-3 min-h-[44px] ${collapsed ? 'flex-1 justify-center' : 'flex-1'}`}
+              className={`flex items-center gap-3 min-h-11 ${collapsed ? 'flex-1 justify-center' : 'flex-1'}`}
               onClick={handleLinkClick}
             >
-              <div className="relative flex-shrink-0 bg-transparent flex items-center justify-center overflow-hidden rounded-full">
+              <div className="relative shrink-0 bg-transparent flex items-center justify-center overflow-hidden rounded-full">
                 <Image
                   src="/logo.png"
                   alt="Gemura"
@@ -223,7 +227,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
                 <button
                   type="button"
                   onClick={handleCollapseToggle}
-                  className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-[#031a3a] rounded-sm transition-colors text-gray-300 hover:text-white"
+                  className="p-2 min-w-11 min-h-11 flex items-center justify-center hover:bg-[#031a3a] rounded-sm transition-colors text-gray-300 hover:text-white"
                   aria-label="Expand sidebar"
                   title="Expand sidebar"
                 >
@@ -233,7 +237,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
                 <button
                   type="button"
                   onClick={handleCollapseToggle}
-                  className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-[#031a3a] rounded-sm transition-colors text-gray-300 hover:text-white"
+                  className="p-2 min-w-11 min-h-11 flex items-center justify-center hover:bg-[#031a3a] rounded-sm transition-colors text-gray-300 hover:text-white"
                   aria-label="Collapse sidebar"
                 >
                   <Icon icon={faBars} size="sm" />
@@ -244,7 +248,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
         </div>
 
         {/* User block */}
-        <div className={`flex-shrink-0 flex flex-col items-center gap-3 sm:gap-4 mb-2 sm:mb-4 p-4 sm:p-6 ${collapsed ? 'lg:px-3' : ''}`}>
+        <div className={`shrink-0 flex flex-col items-center gap-3 sm:gap-4 mb-2 sm:mb-4 p-4 sm:p-6 ${collapsed ? 'lg:px-3' : ''}`}>
           <div
             className={`
               rounded-full flex items-center justify-center text-white
@@ -261,7 +265,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
             <div className="text-center w-full min-w-0">
               <div className="text-sm font-semibold text-white mb-0.5 truncate">{userName}</div>
               {userEmail && (
-                <div className="text-xs text-gray-300 truncate max-w-[200px] mx-auto">{userEmail}</div>
+                <div className="text-xs text-gray-300 truncate max-w-50 mx-auto">{userEmail}</div>
               )}
               <div className="text-xs text-white/80 font-medium uppercase tracking-wide mt-0.5">{userRole}</div>
             </div>
@@ -325,10 +329,10 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
                                   href={child.href}
                                   onClick={handleLinkClick}
                                   className={`
-                                    flex items-center gap-2 min-h-[44px] py-2.5 pl-10 sm:pl-12 pr-3 sm:pr-4 text-sm
+                                    flex items-center gap-2 min-h-11 py-2.5 pl-10 sm:pl-12 pr-3 sm:pr-4 text-sm
                                     transition-all duration-200
                                     ${childActive
-                                      ? 'bg-[#031a3a] text-white border-l-4 border-white/30 -ml-0.5 pl-[3.25rem]'
+                                      ? 'bg-[#031a3a] text-white border-l-4 border-white/30 -ml-0.5 pl-13'
                                       : 'text-gray-400 hover:bg-[#031a3a] hover:text-white active:bg-[#031a3a]'
                                     }
                                   `}

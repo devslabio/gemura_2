@@ -20,6 +20,9 @@ const OPERATIONS_PATH_PERMISSION: Record<string, string> = {
   '/analytics': 'view_analytics',
 };
 
+const FORCE_OPERATIONS_DASHBOARD =
+  (process.env.NEXT_PUBLIC_FORCE_OPERATIONS_DASHBOARD || '').toLowerCase() === 'true';
+
 /**
  * Operations paths: only for non-admin accounts; visibility by role/permissions.
  * Does not render children for protected paths until access is confirmed (avoids flicker).
@@ -53,7 +56,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
       setAllowed(null);
     }
     if (!accountId) return;
-    if (isAdmin()) {
+    if (isAdmin() && !FORCE_OPERATIONS_DASHBOARD) {
       router.replace('/admin/dashboard');
       return;
     }

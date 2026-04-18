@@ -98,6 +98,12 @@ export default function LoginPage() {
                 Create Account
               </Link>
             </p>
+            <p className="text-sm text-gray-600 mt-2">
+              Setting up a new business profile?{' '}
+              <Link href="/auth/onboarding" className="text-primary hover:text-primary-600 font-medium">
+                Start Onboarding Wizard
+              </Link>
+            </p>
           </div>
 
           {successMessage && (

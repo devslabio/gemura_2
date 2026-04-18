@@ -12,6 +12,7 @@ export interface EmployeeItem {
   permissions: string[] | Record<string, boolean> | null;
   status: string;
   created_at: string;
+  is_owner?: boolean;
 }
 
 export interface EmployeesResponse {
@@ -27,12 +28,14 @@ export interface InviteEmployeeData {
   phone?: string;
   password?: string;
   role: string;
+  access_group?: 'general_access' | 'limited_access';
   permissions?: string[];
   account_id?: string;
 }
 
 export interface UpdateEmployeeData {
   role?: string;
+  access_group?: 'general_access' | 'limited_access';
   permissions?: string[];
   status?: 'active' | 'inactive';
 }

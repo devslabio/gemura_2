@@ -46,6 +46,7 @@ enum UserAccountRole {
   owner
   admin
   manager
+  accountant
   collector
   supplier
   customer

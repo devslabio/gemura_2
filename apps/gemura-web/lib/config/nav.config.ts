@@ -15,7 +15,6 @@ import {
   faUsers,
   faCog,
   faUserShield,
-  faLock,
   faReceipt,
   faBox,
   faBuilding,
@@ -54,8 +53,6 @@ export interface NavItem {
 export const ADMIN_NAV_ITEMS: NavItem[] = [
   { icon: faHome, label: 'Dashboard', href: '/admin/dashboard', section: 'admin' },
   { icon: faUsers, label: 'Users', href: '/admin/users', section: 'admin' },
-  { icon: faUserShield, label: 'Roles', href: '/admin/roles', section: 'admin' },
-  { icon: faLock, label: 'Permissions', href: '/admin/permissions', section: 'admin' },
   { icon: faCog, label: 'Settings', href: '/settings', section: 'admin' },
 ];
 
@@ -70,11 +67,11 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
   { icon: faBuilding, label: 'Suppliers', href: '/suppliers', section: 'operations', requiresPermission: 'view_suppliers' },
   { icon: faStore, label: 'Customers', href: '/customers', section: 'operations', requiresPermission: 'view_customers' },
   { icon: faWarehouse, label: 'Inventory', href: '/inventory/items', section: 'operations', requiresPermission: 'view_inventory', children: [{ label: 'Items', href: '/inventory/items' }, { label: 'Movements', href: '/inventory/movements' }] },
-  { icon: faClipboardList, label: 'Payroll', href: '/payroll', section: 'operations' },
-  { icon: faTag, label: 'Charges', href: '/charges', section: 'operations' },
-  { icon: faHandHoldingDollar, label: 'Loans', href: '/loans', section: 'operations' },
-  { icon: faChartLine, label: 'Finance', href: '/finance', section: 'operations' },
-  { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'operations' },
+  { icon: faClipboardList, label: 'Payroll', href: '/payroll', section: 'operations', requiresPermission: 'view_analytics' },
+  { icon: faTag, label: 'Charges', href: '/charges', section: 'operations', requiresPermission: 'view_analytics' },
+  { icon: faHandHoldingDollar, label: 'Loans', href: '/loans', section: 'operations', requiresPermission: 'view_analytics' },
+  { icon: faChartLine, label: 'Finance', href: '/finance', section: 'operations', requiresPermission: 'view_analytics' },
+  { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'operations', requiresPermission: 'view_analytics' },
   { icon: faCog, label: 'Settings', href: '/settings', section: 'operations' },
 ];
 
