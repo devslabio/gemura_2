@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Icon, { faCog, faUser, faLock, faEnvelope, faPhone, faSpinner, faCheckCircle, faUsers, faUserShield, faUserPlus, faEdit, faUserMinus } from '@/app/components/Icon';
 import { SkeletonBar } from '@/app/components/SkeletonLoader';
@@ -33,21 +34,21 @@ const TEAM_ROLE_PROFILES: Record<TeamProfileKey, {
   accountant: {
     key: 'accountant',
     label: 'Accountant',
-    description: 'Manages financial and operational records across the center.',
+    description: 'Access to overall dashboard, payroll, loans, charges, and finance only.',
     accessGroup: 'general_access',
     backendRole: 'accountant',
   },
   milk_receptionist: {
     key: 'milk_receptionist',
     label: 'Milk Receptionist',
-    description: 'Handles milk operations at the branch level.',
+    description: 'Access to sales, collections, suppliers, customers, and inventory with ability to add inventory items.',
     accessGroup: 'limited_access',
     backendRole: 'collector',
   },
   veterinary: {
     key: 'veterinary',
     label: 'Veterinary',
-    description: 'Supports field and operational activities with receptionist-level system access.',
+    description: 'Same access as Milk Receptionist, plus can add inventory items.',
     accessGroup: 'limited_access',
     backendRole: 'agent',
   },
@@ -65,17 +66,17 @@ const profileFromEmployee = (employee: EmployeeItem): TeamProfileKey => {
 const ROLE_DEFINITIONS = [
   {
     name: 'Milk Receptionist',
-    description: 'Handles milk operations at the branch level.',
+    description: 'Access to sales, collections, suppliers, customers, and inventory with ability to add inventory items.',
     permissionGroup: 'Limited Access',
   },
   {
     name: 'Veterinary',
-    description: 'Supports field and operational activities with receptionist-level system access.',
+    description: 'Same access as Milk Receptionist, plus can add inventory items.',
     permissionGroup: 'Limited Access',
   },
   {
     name: 'Accountant',
-    description: 'Manages financial and operational records across the center.',
+    description: 'Access to overall dashboard, payroll, loans, charges, and finance only.',
     permissionGroup: 'General Access',
   },
   {
@@ -96,11 +97,12 @@ const PERMISSION_GROUPS = [
     name: 'Limited Access',
     summary: 'Operational access with role-based limits inside core workflows.',
     grantedTo: ['Milk Receptionist', 'Veterinary'],
-    tabs: ['Dashboard', 'Sales', 'Collections', 'Suppliers', 'Customers', 'Inventory'],
+    tabs: ['Sales', 'Collections', 'Suppliers', 'Customers', 'Inventory (Add Item enabled)'],
   },
 ];
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { user, setUser, currentAccount } = useAuthStore();
   const showToast = useToastStore((s) => s.show);
   const { canManageUsers, isAdmin, hasRole } = usePermission();
@@ -127,6 +129,13 @@ export default function SettingsPage() {
   const [editProfileKey, setEditProfileKey] = useState<TeamProfileKey>('milk_receptionist');
   type TabId = 'profile' | 'password' | 'team' | 'roles_permissions' | 'preferences';
   const [activeTab, setActiveTab] = useState<TabId>('profile');
+
+  useEffect(() => {
+    const role = (currentAccount?.role || '').toLowerCase();
+    if (role === 'collector' || role === 'agent') {
+      router.replace('/collections');
+    }
+  }, [currentAccount?.role, router]);
 
   const canManageEmployees = !!currentAccount?.account_id;
 

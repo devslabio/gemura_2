@@ -76,7 +76,7 @@ export class EmployeesService {
       return ACCESS_GROUP_PERMISSIONS.general_access;
     }
     if (accessGroup === 'limited_access' || accessGroup === 'milk_receptionist_access') {
-      if (role === 'collector' || role === 'viewer') {
+      if (role === 'collector' || role === 'viewer' || role === 'agent') {
         return ROLE_DEFAULT_PERMISSIONS[role as RoleCode] || null;
       }
       return ACCESS_GROUP_PERMISSIONS.limited_access;

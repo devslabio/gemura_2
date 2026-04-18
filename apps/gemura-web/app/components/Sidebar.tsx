@@ -81,6 +81,8 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     // Operations: business account types, filter by role/permissions
     if (isOperationsRole(role) && isBusinessAccount(accountType)) {
       OPERATIONS_NAV_ITEMS.forEach((item) => {
+        if (item.href === '/settings' && (role === 'collector' || role === 'agent' || role === 'accountant')) return;
+        if (item.href === '/accounts' && role === 'accountant') return;
         if (item.requiresPermission && !hasPermission(item.requiresPermission)) return;
         items.push(item);
       });
@@ -90,6 +92,8 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     // Owner/admin role on non-admin account (tenant/branch etc.) → operations menu by permissions
     if (isAdminRole(role) && isBusinessAccount(accountType)) {
       OPERATIONS_NAV_ITEMS.forEach((item) => {
+        if (item.href === '/settings' && (role === 'collector' || role === 'agent' || role === 'accountant')) return;
+        if (item.href === '/accounts' && role === 'accountant') return;
         if (item.requiresPermission && !hasPermission(item.requiresPermission)) return;
         items.push(item);
       });
@@ -111,6 +115,8 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     // Fallback: business account type, unknown role — show operations by permissions
     if (isBusinessAccount(accountType)) {
       OPERATIONS_NAV_ITEMS.forEach((item) => {
+        if (item.href === '/settings' && (role === 'collector' || role === 'agent' || role === 'accountant')) return;
+        if (item.href === '/accounts' && role === 'accountant') return;
         if (item.requiresPermission && !hasPermission(item.requiresPermission) && !isAdmin()) return;
         items.push(item);
       });

@@ -72,8 +72,12 @@ export default function LoginPage() {
         return;
       }
 
+      const defaultAccount = result.accounts.find((acc) => acc.is_default) || result.accounts[0] || null;
+      const defaultRole = (defaultAccount?.role || '').toLowerCase();
+      const targetRoute = defaultRole === 'collector' || defaultRole === 'agent' ? '/collections' : '/dashboard';
+
       await new Promise(resolve => setTimeout(resolve, 100));
-      router.push('/dashboard');
+      router.push(targetRoute);
     } catch (err: any) {
       setError(err?.message || 'Login failed. Please try again.');
     } finally {

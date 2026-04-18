@@ -61,7 +61,7 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
  * account_type in [mcc, owner, agent]. Permission checks apply.
  */
 export const OPERATIONS_NAV_ITEMS: NavItem[] = [
-  { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'operations' },
+  { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'operations', requiresPermission: 'dashboard.view' },
   { icon: faReceipt, label: 'Sales', href: '/sales', section: 'operations', requiresPermission: 'view_sales' },
   { icon: faBox, label: 'Collections', href: '/collections', section: 'operations', requiresPermission: 'view_collections' },
   { icon: faBuilding, label: 'Suppliers', href: '/suppliers', section: 'operations', requiresPermission: 'view_suppliers' },

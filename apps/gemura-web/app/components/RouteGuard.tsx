@@ -12,11 +12,17 @@ import {
 
 /** Path -> required permission */
 const OPERATIONS_PATH_PERMISSION: Record<string, string> = {
+  '/dashboard': 'dashboard.view',
   '/sales': 'view_sales',
   '/collections': 'view_collections',
   '/suppliers': 'view_suppliers',
   '/customers': 'view_customers',
   '/inventory': 'view_inventory',
+  '/payroll': 'view_analytics',
+  '/loans': 'view_analytics',
+  '/charges': 'view_analytics',
+  '/finance': 'view_analytics',
+  '/accounts': 'view_analytics',
   '/analytics': 'view_analytics',
 };
 
@@ -33,7 +39,9 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
   const { currentAccount } = useAuthStore();
   const { hasPermission, isAdmin } = usePermission();
   const accountType = currentAccount?.account_type ?? '';
+  const role = (currentAccount?.role ?? '').toLowerCase();
   const accountId = currentAccount?.account_id ?? '';
+  const deniedRedirect = role === 'collector' || role === 'agent' ? '/collections' : '/dashboard';
 
   const pathKey = useMemo(
     () => Object.keys(OPERATIONS_PATH_PERMISSION).find((p) => pathname === p || pathname.startsWith(p + '/')),
@@ -64,8 +72,19 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
       router.replace('/dashboard');
       return;
     }
-    if (isBusinessAccount(accountType) && !hasPermission(requiredPermission)) {
+
+    if ((pathname === '/settings' || pathname.startsWith('/settings/')) && (role === 'collector' || role === 'agent' || role === 'accountant')) {
+      router.replace(deniedRedirect);
+      return;
+    }
+
+    if (pathname.startsWith('/accounts') && role === 'accountant') {
       router.replace('/dashboard');
+      return;
+    }
+
+    if (isBusinessAccount(accountType) && !hasPermission(requiredPermission)) {
+      router.replace(deniedRedirect);
       return;
     }
     setAllowed(true);
