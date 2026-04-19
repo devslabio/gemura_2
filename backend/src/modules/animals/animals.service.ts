@@ -58,6 +58,7 @@ export class AnimalsService {
     const animals = await this.prisma.animal.findMany({
       where,
       include: {
+        species: { select: { id: true, code: true, name: true } },
         breed: { select: { id: true, name: true, code: true } },
         farm: { select: { id: true, name: true } },
         mother: { select: { id: true, tag_number: true, name: true, breed: { select: { id: true, name: true } } } },
@@ -73,6 +74,7 @@ export class AnimalsService {
     const animal = await this.prisma.animal.findFirst({
       where: { id, account_id: accId },
       include: {
+        species: { select: { id: true, code: true, name: true } },
         breed: { select: { id: true, name: true, code: true, description: true } },
         farm: { select: { id: true, name: true } },
         mother: { select: { id: true, tag_number: true, name: true, breed: { select: { id: true, name: true } } } },
@@ -124,7 +126,10 @@ export class AnimalsService {
   ) {
     const accId = this.getAccountId(user, accountId);
 
-    const breedExists = await this.prisma.breed.findUnique({ where: { id: dto.breed_id } });
+    const breedExists = await this.prisma.breed.findUnique({
+      where: { id: dto.breed_id },
+      select: { id: true, species_id: true },
+    });
     if (!breedExists) {
       throw new BadRequestException({
         code: 400,
@@ -159,6 +164,7 @@ export class AnimalsService {
 
     const data: Prisma.AnimalCreateInput = {
       account: { connect: { id: accId } },
+      species: { connect: { id: breedExists.species_id } },
       breed: { connect: { id: dto.breed_id } },
       tag_number: dto.tag_number,
       name: dto.name ?? undefined,
@@ -179,6 +185,7 @@ export class AnimalsService {
     return this.prisma.animal.create({
       data,
       include: {
+        species: { select: { id: true, code: true, name: true } },
         breed: { select: { id: true, name: true, code: true } },
         farm: { select: { id: true, name: true } },
         mother: { select: { id: true, tag_number: true, name: true } },
@@ -196,9 +203,13 @@ export class AnimalsService {
     const accId = this.getAccountId(user, accountId);
     await this.getAnimal(user, id, accountId);
 
+    let breedForUpdate: { id: string; species_id: string } | null = null;
     if (dto.breed_id != null) {
-      const breedExists = await this.prisma.breed.findUnique({ where: { id: dto.breed_id } });
-      if (!breedExists) {
+      breedForUpdate = await this.prisma.breed.findUnique({
+        where: { id: dto.breed_id },
+        select: { id: true, species_id: true },
+      });
+      if (!breedForUpdate) {
         throw new BadRequestException({
           code: 400,
           status: 'error',
@@ -240,7 +251,11 @@ export class AnimalsService {
     const data: Prisma.AnimalUpdateInput = {
       ...(dto.tag_number != null && { tag_number: dto.tag_number }),
       ...(dto.name !== undefined && { name: dto.name }),
-      ...(dto.breed_id != null && { breed: { connect: { id: dto.breed_id } } }),
+      ...(dto.breed_id != null &&
+        breedForUpdate && {
+          breed: { connect: { id: dto.breed_id } },
+          species: { connect: { id: breedForUpdate.species_id } },
+        }),
       ...(dto.gender != null && { gender: dto.gender as any }),
       ...(dto.date_of_birth != null && { date_of_birth: new Date(dto.date_of_birth) }),
       ...(dto.source != null && { source: dto.source as any }),
@@ -266,6 +281,7 @@ export class AnimalsService {
       where: { id },
       data,
       include: {
+        species: { select: { id: true, code: true, name: true } },
         breed: { select: { id: true, name: true, code: true } },
         farm: { select: { id: true, name: true } },
         mother: { select: { id: true, tag_number: true, name: true } },

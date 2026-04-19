@@ -367,12 +367,13 @@ async function main() {
   console.log('🐄 Creating sample animals...');
   const holstein = await prisma.breed.findFirst({ where: { code: 'HOLSTEIN' } });
   const angus = await prisma.breed.findFirst({ where: { code: 'ANGUS' } });
+  const cattleSpeciesId = holstein?.species_id ?? angus?.species_id;
   const animalData = [
     { tag_number: 'TAG-001', name: 'Bella', breed_id: holstein?.id, gender: 'female' as const, date_of_birth: new Date('2022-03-15'), source: 'born_on_farm' as const, status: 'active' as const },
     { tag_number: 'TAG-002', name: 'Max', breed_id: angus?.id, gender: 'male' as const, date_of_birth: new Date('2021-06-20'), source: 'purchased' as const, status: 'active' as const },
   ];
   let animalsCreated = 0;
-  if (holstein && angus) {
+  if (holstein && angus && cattleSpeciesId) {
     for (const a of animalData) {
       await prisma.animal.upsert({
         where: {
@@ -381,6 +382,7 @@ async function main() {
         update: {},
         create: {
           account_id: mainAccount.id,
+          species_id: cattleSpeciesId,
           breed_id: a.breed_id!,
           tag_number: a.tag_number,
           name: a.name,

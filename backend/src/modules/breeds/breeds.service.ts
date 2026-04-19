@@ -7,8 +7,15 @@ export class BreedsService {
 
   async findAll() {
     return this.prisma.breed.findMany({
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true, code: true, description: true },
+      orderBy: [{ species: { sort_order: 'asc' } }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        description: true,
+        species_id: true,
+        species: { select: { id: true, code: true, name: true } },
+      },
     });
   }
 }

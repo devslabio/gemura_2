@@ -1430,20 +1430,38 @@ model Farm {
 }
 
 // ============================================
-// Orora: Animal module (cattle / farm management)
+// Orora: Animal module (multi-species livestock)
 // ============================================
 
-// Predefined breeds (select on registration/edit)
+model Species {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  name        String
+  description String?  @db.Text
+  sort_order  Int      @default(0) @map("sort_order")
+  created_at  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  breeds  Breed[]
+  animals Animal[]
+
+  @@index([code])
+  @@map("species")
+}
+
+// Predefined breeds (select on registration/edit); scoped by species
 model Breed {
   id          String   @id @default(uuid()) @db.Uuid
+  species_id  String   @map("species_id") @db.Uuid
   name        String
   code        String   @unique
   description String?  @db.Text
   created_at  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
+  species Species @relation(fields: [species_id], references: [id], onDelete: Restrict)
   animals Animal[]
 
   @@index([code])
+  @@index([species_id])
   @@map("breeds")
 }
 
@@ -1451,6 +1469,7 @@ model Animal {
   id             String        @id @default(uuid()) @db.Uuid
   account_id     String        @map("account_id") @db.Uuid
   farm_id        String?       @map("farm_id") @db.Uuid
+  species_id     String        @map("species_id") @db.Uuid
   breed_id      String        @map("breed_id") @db.Uuid
   tag_number     String        @map("tag_number")
   name           String?
@@ -1469,6 +1488,7 @@ model Animal {
   created_by     String?       @map("created_by") @db.Uuid
 
   account        Account         @relation("AnimalAccount", fields: [account_id], references: [id], onDelete: Cascade)
+  species        Species         @relation(fields: [species_id], references: [id], onDelete: Restrict)
   breed          Breed           @relation(fields: [breed_id], references: [id], onDelete: Restrict)
   farm           Farm?           @relation(fields: [farm_id], references: [id], onDelete: SetNull)
   mother         Animal?         @relation("AnimalMother", fields: [mother_id], references: [id], onDelete: SetNull)
@@ -1486,6 +1506,7 @@ model Animal {
 
   @@unique([account_id, tag_number])
   @@index([account_id])
+  @@index([species_id])
   @@index([breed_id])
   @@index([farm_id])
   @@index([status])
