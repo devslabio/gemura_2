@@ -209,6 +209,34 @@ enum FarmStatus {
   archived
 }
 
+/** Per-species production focus when registering/updating a farm */
+enum FarmProductionMode {
+  dairy
+  meat
+  eggs
+  breeding
+}
+
+enum PoultryFlockStatus {
+  active
+  closed
+  archived
+}
+
+enum FlockMovementType {
+  intake
+  sale
+  transfer_out
+  transfer_in
+  adjustment
+}
+
+enum PigBatchStatus {
+  active
+  closed
+  archived
+}
+
 enum BreedingMethod {
   natural
   artificial_insemination
@@ -282,6 +310,9 @@ model Account {
   animals               Animal[]            @relation("AnimalAccount")
   farms                 Farm[]              @relation("FarmAccount")
   milk_productions      MilkProduction[]    @relation("MilkProductionAccount")
+  poultry_flocks        PoultryFlock[]
+  pig_batches           PigBatch[]
+  pig_farrowings        PigFarrowing[]
 
   @@index([code])
   @@index([type])
@@ -1420,13 +1451,31 @@ model Farm {
 
   account  Account   @relation("FarmAccount", fields: [account_id], references: [id], onDelete: Cascade)
   locationRef Location? @relation(fields: [location_id], references: [id], onDelete: SetNull)
-  animals  Animal[]
-  milk_productions MilkProduction[]
+  animals               Animal[]
+  milk_productions      MilkProduction[]
+  farm_species_focus    FarmSpeciesFocus[]
+  poultry_flocks        PoultryFlock[]
+  pig_batches           PigBatch[]
+  pig_farrowings        PigFarrowing[]
 
   @@index([account_id])
   @@index([location_id])
   @@index([status])
   @@map("farms")
+}
+
+/** Optional: species + modes (multi-select farms). Used for nav / feature gates. */
+model FarmSpeciesFocus {
+  farm_id    String               @map("farm_id") @db.Uuid
+  species_id String               @map("species_id") @db.Uuid
+  modes      FarmProductionMode[]
+
+  farm    Farm    @relation(fields: [farm_id], references: [id], onDelete: Cascade)
+  species Species @relation(fields: [species_id], references: [id], onDelete: Cascade)
+
+  @@id([farm_id, species_id])
+  @@index([species_id])
+  @@map("farm_species_focus")
 }
 
 // ============================================
@@ -1441,8 +1490,9 @@ model Species {
   sort_order  Int      @default(0) @map("sort_order")
   created_at  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  breeds  Breed[]
-  animals Animal[]
+  breeds             Breed[]
+  animals            Animal[]
+  farm_species_focus FarmSpeciesFocus[]
 
   @@index([code])
   @@map("species")
@@ -1457,8 +1507,10 @@ model Breed {
   description String?  @db.Text
   created_at  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  species Species @relation(fields: [species_id], references: [id], onDelete: Restrict)
-  animals Animal[]
+  species        Species @relation(fields: [species_id], references: [id], onDelete: Restrict)
+  animals        Animal[]
+  poultry_flocks PoultryFlock[]
+  pig_batches    PigBatch[]
 
   @@index([code])
   @@index([species_id])
@@ -1503,6 +1555,7 @@ model Animal {
   breeding_as_bull AnimalBreeding[]  @relation("AnimalBreedingBull")
   calvings         AnimalCalving[]   @relation("AnimalCalvingMother")
   calving_as_calf  AnimalCalving?    @relation("AnimalCalvingCalf")
+  pig_farrowings_as_sow PigFarrowing[] @relation("SowFarrowing")
 
   @@unique([account_id, tag_number])
   @@index([account_id])
@@ -1605,4 +1658,145 @@ model AnimalCalving {
   @@index([calving_date])
   @@index([calf_id])
   @@map("animal_calving")
+}
+
+// ============================================
+// Orora: Poultry flocks (eggs, mortality, intake)
+// ============================================
+
+model PoultryFlock {
+  id                   String             @id @default(uuid()) @db.Uuid
+  account_id           String             @map("account_id") @db.Uuid
+  farm_id              String?            @map("farm_id") @db.Uuid
+  breed_id             String?            @map("breed_id") @db.Uuid
+  name                 String
+  code                 String?
+  started_at           DateTime           @map("started_at") @db.Date
+  opening_head_count   Int                @map("opening_head_count")
+  current_head_count   Int                @map("current_head_count")
+  status               PoultryFlockStatus @default(active)
+  notes                String?            @db.Text
+  created_at           DateTime           @default(now()) @map("created_at")
+  updated_at           DateTime           @updatedAt @map("updated_at")
+  created_by           String?            @map("created_by") @db.Uuid
+
+  account Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  farm    Farm?   @relation(fields: [farm_id], references: [id], onDelete: SetNull)
+  breed   Breed?  @relation(fields: [breed_id], references: [id], onDelete: SetNull)
+
+  daily_records FlockDailyRecord[]
+  movements     FlockMovement[]
+
+  @@index([account_id])
+  @@index([farm_id])
+  @@map("poultry_flocks")
+}
+
+model FlockDailyRecord {
+  id              String   @id @default(uuid()) @db.Uuid
+  flock_id        String   @map("flock_id") @db.Uuid
+  record_date     DateTime @map("record_date") @db.Date
+  eggs_collected  Int      @default(0) @map("eggs_collected")
+  mortality_count Int      @default(0) @map("mortality_count")
+  notes           String?  @db.Text
+  created_at      DateTime @default(now()) @map("created_at")
+  updated_at      DateTime @updatedAt @map("updated_at")
+
+  flock PoultryFlock @relation(fields: [flock_id], references: [id], onDelete: Cascade)
+
+  @@unique([flock_id, record_date])
+  @@index([record_date])
+  @@map("flock_daily_records")
+}
+
+model FlockMovement {
+  id            String             @id @default(uuid()) @db.Uuid
+  flock_id      String             @map("flock_id") @db.Uuid
+  movement_date DateTime           @map("movement_date") @db.Date
+  type          FlockMovementType
+  quantity      Int
+  notes         String?            @db.Text
+  created_at    DateTime           @default(now()) @map("created_at")
+  created_by    String?            @map("created_by") @db.Uuid
+
+  flock PoultryFlock @relation(fields: [flock_id], references: [id], onDelete: Cascade)
+
+  @@index([flock_id])
+  @@index([movement_date])
+  @@map("flock_movements")
+}
+
+// ============================================
+// Orora: Pig batches (weights, farrowing)
+// ============================================
+
+model PigBatch {
+  id                   String         @id @default(uuid()) @db.Uuid
+  account_id           String         @map("account_id") @db.Uuid
+  farm_id              String?        @map("farm_id") @db.Uuid
+  breed_id             String?        @map("breed_id") @db.Uuid
+  name                 String
+  code                 String?
+  started_at           DateTime       @map("started_at") @db.Date
+  opening_head_count   Int            @map("opening_head_count")
+  current_head_count   Int            @map("current_head_count")
+  status               PigBatchStatus @default(active)
+  notes                String?        @db.Text
+  created_at           DateTime       @default(now()) @map("created_at")
+  updated_at           DateTime       @updatedAt @map("updated_at")
+  created_by           String?        @map("created_by") @db.Uuid
+
+  account Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  farm    Farm?   @relation(fields: [farm_id], references: [id], onDelete: SetNull)
+  breed   Breed?  @relation(fields: [breed_id], references: [id], onDelete: SetNull)
+
+  weights    PigBatchWeight[]
+  farrowings PigFarrowing[]
+
+  @@index([account_id])
+  @@index([farm_id])
+  @@map("pig_batches")
+}
+
+model PigBatchWeight {
+  id              String   @id @default(uuid()) @db.Uuid
+  batch_id        String   @map("batch_id") @db.Uuid
+  weighed_date    DateTime @map("weighed_date") @db.Date
+  avg_weight_kg   Decimal  @map("avg_weight_kg") @db.Decimal(8, 2)
+  min_weight_kg   Decimal? @map("min_weight_kg") @db.Decimal(8, 2)
+  max_weight_kg   Decimal? @map("max_weight_kg") @db.Decimal(8, 2)
+  animals_weighed Int?     @map("animals_weighed")
+  weight_band     String?  @map("weight_band") @db.VarChar(64)
+  notes           String?  @db.Text
+  created_at      DateTime @default(now()) @map("created_at")
+
+  batch PigBatch @relation(fields: [batch_id], references: [id], onDelete: Cascade)
+
+  @@unique([batch_id, weighed_date])
+  @@map("pig_batch_weights")
+}
+
+model PigFarrowing {
+  id             String   @id @default(uuid()) @db.Uuid
+  account_id     String   @map("account_id") @db.Uuid
+  farm_id        String?  @map("farm_id") @db.Uuid
+  pig_batch_id   String?  @map("pig_batch_id") @db.Uuid
+  sow_animal_id  String?  @map("sow_animal_id") @db.Uuid
+  farrowing_date DateTime @map("farrowing_date") @db.Date
+  live_born      Int      @default(0) @map("live_born")
+  stillborn      Int      @default(0) @map("stillborn")
+  mummified      Int      @default(0) @map("mummified")
+  notes          String?  @db.Text
+  created_at     DateTime @default(now()) @map("created_at")
+  created_by     String?  @map("created_by") @db.Uuid
+
+  account Account   @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  farm    Farm?     @relation(fields: [farm_id], references: [id], onDelete: SetNull)
+  batch   PigBatch? @relation(fields: [pig_batch_id], references: [id], onDelete: SetNull)
+  sow     Animal?   @relation("SowFarrowing", fields: [sow_animal_id], references: [id], onDelete: SetNull)
+
+  @@index([account_id])
+  @@index([farm_id])
+  @@index([pig_batch_id])
+  @@map("pig_farrowings")
 }

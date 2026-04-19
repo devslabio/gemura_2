@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsArray, IsNotEmpty, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { FarmSpeciesFocusDto } from './farm-species-focus.dto';
 
 export class CreateFarmDto {
   @ApiProperty({ description: 'Farm name', example: 'Main Dairy Farm' })
@@ -21,5 +23,15 @@ export class CreateFarmDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @ApiPropertyOptional({
+    type: [FarmSpeciesFocusDto],
+    description: 'Optional species + production modes for this farm (feature gates / nav)',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => FarmSpeciesFocusDto)
+  species_focus?: FarmSpeciesFocusDto[];
 }
 

@@ -115,6 +115,7 @@ export {
   faRocket,
   faLeaf,
   faCalculator,
+  faEgg,
 } from '@fortawesome/free-solid-svg-icons';
 
 // Export aliases for convenience  

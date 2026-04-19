@@ -29,6 +29,8 @@ import {
   faSackDollar,
   faMapLocationDot,
   faLeaf,
+  faEgg,
+  faWeightScale,
 } from '@/app/components/Icon';
 
 /** Account type that sees only admin menu/features */
@@ -41,6 +43,9 @@ export const OPERATIONS_ROLES = ['manager', 'accountant', 'collector', 'viewer',
 export const EXTERNAL_ACCOUNT_TYPES = ['supplier', 'customer', 'farmer'] as const;
 
 export type Section = 'admin' | 'operations' | 'external_supplier' | 'external_customer';
+
+/** When set, item is shown only if the capability passes for the selected farm (see farmCapabilities). */
+export type FarmNavGate = 'milk' | 'poultry' | 'pigs';
 
 /** Recursive submenu item (2nd and 3rd level) */
 export interface NavItemChild {
@@ -61,6 +66,8 @@ export interface NavItem {
   comingSoon?: boolean;
   /** 2nd level; items can have children for 3rd level. */
   children?: NavItemChild[];
+  /** Narrow nav when a farm with species focus is selected; omitted = always show. */
+  farmGate?: FarmNavGate;
 }
 
 /** Group of nav items under a section header (e.g. "Livestock", "Finance") */
@@ -89,13 +96,27 @@ export const OPERATIONS_NAV_GROUPS: NavGroup[] = [
     items: [
       { icon: faPaw, label: 'Animals', href: '/animals', section: 'operations' },
       { icon: faMapLocationDot, label: 'Farms', href: '/farms', section: 'operations' },
+      { icon: faEgg, label: 'Poultry flocks', href: '/poultry-flocks', section: 'operations', farmGate: 'poultry' },
+      {
+        icon: faWeightScale,
+        label: 'Pig batches',
+        href: '/pig-batches',
+        section: 'operations',
+        farmGate: 'pigs',
+      },
       { icon: faLeaf, label: 'Feeds', href: '/feeds', section: 'operations' },
     ],
   },
   {
     groupLabel: 'Production',
     items: [
-      { icon: faChartBar, label: 'Milk production', href: '/production', section: 'operations' },
+      {
+        icon: faChartBar,
+        label: 'Milk production',
+        href: '/production',
+        section: 'operations',
+        farmGate: 'milk',
+      },
       { icon: faReceipt, label: 'Sales', href: '/sales', section: 'operations', requiresPermission: 'view_sales' },
       ...(showCollections
         ? [{ icon: faBox, label: 'Collections', href: '/collections', section: 'operations' as const, requiresPermission: 'view_collections' }]

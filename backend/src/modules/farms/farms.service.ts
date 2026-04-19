@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { FarmStatus, Prisma, User } from '@prisma/client';
+import { FarmProductionMode, FarmStatus, Prisma, User } from '@prisma/client';
 
 export interface FarmsListFilters {
   status?: FarmStatus;
@@ -10,6 +10,26 @@ export interface FarmsListFilters {
 @Injectable()
 export class FarmsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private dedupeSpeciesFocus(rows: { species_id: string; modes: FarmProductionMode[] }[]) {
+    const map = new Map<string, FarmProductionMode[]>();
+    for (const r of rows) {
+      map.set(r.species_id, r.modes);
+    }
+    return [...map.entries()].map(([species_id, modes]) => ({ species_id, modes }));
+  }
+
+  private farmWithSpeciesFocusInclude(): Prisma.FarmInclude {
+    return {
+      _count: { select: { animals: true } },
+      locationRef: { select: { id: true, code: true, name: true, location_type: true } },
+      farm_species_focus: {
+        include: {
+          species: { select: { id: true, code: true, name: true } },
+        },
+      },
+    };
+  }
 
   private getAccountId(user: User, accountId?: string): string {
     const id = accountId || user.default_account_id;
@@ -41,10 +61,7 @@ export class FarmsService {
     return this.prisma.farm.findMany({
       where,
       orderBy: [{ name: 'asc' }],
-      include: {
-        _count: { select: { animals: true } },
-        locationRef: { select: { id: true, code: true, name: true, location_type: true } },
-      },
+      include: this.farmWithSpeciesFocusInclude(),
     });
   }
 
@@ -52,10 +69,7 @@ export class FarmsService {
     const accId = this.getAccountId(user, accountId);
     const farm = await this.prisma.farm.findFirst({
       where: { id, account_id: accId },
-      include: {
-        _count: { select: { animals: true } },
-        locationRef: { select: { id: true, code: true, name: true, location_type: true } },
-      },
+      include: this.farmWithSpeciesFocusInclude(),
     });
     if (!farm) {
       throw new NotFoundException({
@@ -69,12 +83,20 @@ export class FarmsService {
 
   async createFarm(
     user: User,
-    dto: { name: string; location_id?: string; description?: string; location?: string },
+    dto: {
+      name: string;
+      location_id?: string;
+      description?: string;
+      location?: string;
+      species_focus?: { species_id: string; modes: FarmProductionMode[] }[];
+    },
     accountId?: string,
   ) {
     const accId = this.getAccountId(user, accountId);
 
     const nextCode = await this.generateNextFarmCode(accId);
+
+    const focusRows = dto.species_focus?.length ? this.dedupeSpeciesFocus(dto.species_focus) : [];
 
     return this.prisma.farm.create({
       data: {
@@ -86,7 +108,16 @@ export class FarmsService {
         ...(dto.location_id && { locationRef: { connect: { id: dto.location_id } } }),
         status: FarmStatus.active,
         created_by: user.id,
+        ...(focusRows.length > 0 && {
+          farm_species_focus: {
+            create: focusRows.map((f) => ({
+              species_id: f.species_id,
+              modes: f.modes,
+            })),
+          },
+        }),
       },
+      include: this.farmWithSpeciesFocusInclude(),
     });
   }
 
@@ -126,7 +157,14 @@ export class FarmsService {
   async updateFarm(
     user: User,
     id: string,
-    dto: { name?: string; location_id?: string; description?: string; location?: string; status?: FarmStatus },
+    dto: {
+      name?: string;
+      location_id?: string;
+      description?: string;
+      location?: string;
+      status?: FarmStatus;
+      species_focus?: { species_id: string; modes: FarmProductionMode[] }[];
+    },
     accountId?: string,
   ) {
     const accId = this.getAccountId(user, accountId);
@@ -141,17 +179,43 @@ export class FarmsService {
       });
     }
 
+    const farmData: Prisma.FarmUpdateInput = {
+      ...(dto.name !== undefined && { name: dto.name }),
+      ...(dto.location_id !== undefined && {
+        locationRef: dto.location_id ? { connect: { id: dto.location_id } } : { disconnect: true },
+      }),
+      ...(dto.description !== undefined && { description: dto.description }),
+      ...(dto.location !== undefined && { location: dto.location }),
+      ...(dto.status !== undefined && { status: dto.status }),
+    };
+
+    const includeBlock = this.farmWithSpeciesFocusInclude();
+
+    if (dto.species_focus !== undefined) {
+      const rows = dto.species_focus.length ? this.dedupeSpeciesFocus(dto.species_focus) : [];
+      return this.prisma.$transaction(async (tx) => {
+        await tx.farmSpeciesFocus.deleteMany({ where: { farm_id: id } });
+        if (rows.length > 0) {
+          await tx.farmSpeciesFocus.createMany({
+            data: rows.map((f) => ({
+              farm_id: id,
+              species_id: f.species_id,
+              modes: f.modes,
+            })),
+          });
+        }
+        return tx.farm.update({
+          where: { id },
+          data: farmData,
+          include: includeBlock,
+        });
+      });
+    }
+
     return this.prisma.farm.update({
       where: { id },
-      data: {
-        ...(dto.name !== undefined && { name: dto.name }),
-        ...(dto.location_id !== undefined && {
-          locationRef: dto.location_id ? { connect: { id: dto.location_id } } : { disconnect: true },
-        }),
-        ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.location !== undefined && { location: dto.location }),
-        ...(dto.status !== undefined && { status: dto.status }),
-      },
+      data: farmData,
+      include: includeBlock,
     });
   }
 
