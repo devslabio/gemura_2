@@ -27,7 +27,7 @@
     "seed:manzi-inventory-sales": "ts-node prisma/seed-manzi-inventory-sales.ts",
     "seed:manzi-employees-payroll": "ts-node prisma/seed-manzi-employees-payroll.ts",
     "seed:manzi-charges-loans": "ts-node prisma/seed-manzi-charges-loans.ts",
-    "seed:orora-mock-farms": "ts-node prisma/seed-orora-mock-farms.ts",
+    "seed:orora-mock-farms": "node --require ts-node/register prisma/seed-orora-mock-farms.ts",
     "migrate": "ts-node src/migration/migrate.ts",
     "migrate:selective": "ts-node src/migration/migrate-selective.ts",
     "migrate:fix-default-accounts": "ts-node src/migration/fix-default-accounts.ts"
