@@ -5,7 +5,8 @@
  * Removes prior demo rows for this account (farm codes prefixed MOCK-O-) then recreates.
  *
  * Usage (from backend/, with DATABASE_URL set):
- *   npx ts-node prisma/seed-orora-mock-farms.ts
+ *   npm run seed:orora-mock-farms
+ * (Uses `tsx` so it runs in Docker/local without Node .ts loader issues.)
  *
  * Optional env:
  *   SEED_USER_PHONE=250788606765
