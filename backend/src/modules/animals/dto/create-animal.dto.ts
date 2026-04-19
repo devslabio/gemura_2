@@ -45,7 +45,16 @@ export class CreateAnimalDto {
   @IsString()
   name?: string;
 
-  @ApiProperty({ description: 'Breed ID (UUID) – from GET /api/breeds', example: '123e4567-e89b-12d3-a456-426614174000' })
+  @ApiPropertyOptional({
+    description:
+      'Optional species ID (UUID) – must match the breed’s species (GET /api/species). Omit to infer species from breed only.',
+    example: '11111111-1111-4111-8111-111111111101',
+  })
+  @IsOptional()
+  @IsUUID()
+  species_id?: string;
+
+  @ApiProperty({ description: 'Breed ID (UUID) – from GET /api/breeds?species_id=…', example: '123e4567-e89b-12d3-a456-426614174000' })
   @IsNotEmpty()
   @IsUUID()
   breed_id: string;

@@ -60,6 +60,7 @@ export class AnimalsController {
   @ApiQuery({ name: 'farm_id', required: false, description: 'Farm ID to scope animals to a single farm' })
   @ApiQuery({ name: 'status', required: false, enum: ['active', 'lactating', 'dry', 'pregnant', 'sick', 'sold', 'dead', 'culled'] })
   @ApiQuery({ name: 'breed_id', required: false, description: 'Filter by breed UUID' })
+  @ApiQuery({ name: 'species_id', required: false, description: 'Filter by species UUID' })
   @ApiQuery({ name: 'gender', required: false, enum: ['male', 'female'] })
   @ApiQuery({ name: 'search', required: false, description: 'Search by tag number, name, or breed' })
   @ApiResponse({ status: 200, description: 'Animals list' })
@@ -71,12 +72,13 @@ export class AnimalsController {
     @Query('farm_id') farmId?: string,
     @Query('status') status?: string,
     @Query('breed_id') breedId?: string,
+    @Query('species_id') speciesId?: string,
     @Query('gender') gender?: string,
     @Query('search') search?: string,
   ) {
     const filters: AnimalsListFilters | undefined =
-      status || breedId || gender || search || farmId
-        ? { status: status as any, breed_id: breedId, gender, search, farm_id: farmId }
+      status || breedId || speciesId || gender || search || farmId
+        ? { status: status as any, breed_id: breedId, species_id: speciesId, gender, search, farm_id: farmId }
         : undefined;
     const data = await this.animalsService.getAnimals(user, filters, accountId);
     return { code: 200, status: 'success', message: 'Animals retrieved successfully', data };

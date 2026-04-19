@@ -14,6 +14,7 @@ import { AnimalStatus, Prisma } from '@prisma/client';
 export interface AnimalsListFilters {
   status?: AnimalStatus;
   breed_id?: string;
+  species_id?: string;
   gender?: string;
   search?: string;
   farm_id?: string;
@@ -45,6 +46,7 @@ export class AnimalsService {
 
     if (filters?.status) where.status = filters.status;
     if (filters?.breed_id) where.breed_id = filters.breed_id;
+    if (filters?.species_id) where.species_id = filters.species_id;
     if (filters?.gender) where.gender = filters.gender as any;
     if (filters?.farm_id) where.farm_id = filters.farm_id;
     if (filters?.search) {
@@ -138,6 +140,14 @@ export class AnimalsService {
       });
     }
 
+    if (dto.species_id != null && dto.species_id !== breedExists.species_id) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'species_id must match the breed’s species. Choose a breed from GET /api/breeds?species_id=…',
+      });
+    }
+
     const farm = await this.prisma.farm.findFirst({
       where: { id: dto.farm_id, account_id: accId },
     });
@@ -203,6 +213,14 @@ export class AnimalsService {
     const accId = this.getAccountId(user, accountId);
     await this.getAnimal(user, id, accountId);
 
+    if (dto.species_id != null && dto.breed_id == null) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'species_id cannot be updated without breed_id. Update breed to change species.',
+      });
+    }
+
     let breedForUpdate: { id: string; species_id: string } | null = null;
     if (dto.breed_id != null) {
       breedForUpdate = await this.prisma.breed.findUnique({
@@ -214,6 +232,13 @@ export class AnimalsService {
           code: 400,
           status: 'error',
           message: 'Invalid breed_id. Use GET /api/breeds to list valid breeds.',
+        });
+      }
+      if (dto.species_id != null && dto.species_id !== breedForUpdate.species_id) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'species_id must match the selected breed’s species.',
         });
       }
     }

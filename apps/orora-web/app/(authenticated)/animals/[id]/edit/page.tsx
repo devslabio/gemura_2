@@ -55,6 +55,7 @@ export default function EditAnimalPage() {
     id: animal.id,
     tag_number: animal.tag_number,
     name: animal.name ?? undefined,
+    species_id: animal.species?.id ?? animal.species_id ?? '',
     breed_id: animal.breed?.id ?? '',
     gender: animal.gender,
     date_of_birth: animal.date_of_birth.slice(0, 10),

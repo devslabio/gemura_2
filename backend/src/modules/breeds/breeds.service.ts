@@ -5,8 +5,9 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class BreedsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll() {
+  async findAll(speciesId?: string) {
     return this.prisma.breed.findMany({
+      where: speciesId ? { species_id: speciesId } : undefined,
       orderBy: [{ species: { sort_order: 'asc' } }, { name: 'asc' }],
       select: {
         id: true,

@@ -14,7 +14,15 @@ export class UpdateAnimalDto {
   @IsString()
   name?: string;
 
-  @ApiPropertyOptional({ description: 'Breed ID (UUID) – from GET /api/breeds' })
+  @ApiPropertyOptional({
+    description:
+      'Species ID (UUID) – only when updating breed_id; must match the new breed’s species. Omit to derive from breed.',
+  })
+  @IsOptional()
+  @IsUUID()
+  species_id?: string;
+
+  @ApiPropertyOptional({ description: 'Breed ID (UUID) – from GET /api/breeds?species_id=…' })
   @IsOptional()
   @IsUUID()
   breed_id?: string;
