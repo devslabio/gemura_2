@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collectionsApi, CreateCollectionData } from '@/lib/api/collections';
+import { collectionsApi, CreateCollectionData, RejectionReason } from '@/lib/api/collections';
 import { suppliersApi, Supplier } from '@/lib/api/suppliers';
 import { useToastStore } from '@/store/toast';
 import Icon, { faCheckCircle, faSpinner } from '@/app/components/Icon';
@@ -21,8 +21,10 @@ interface CreateCollectionFormProps {
 export default function CreateCollectionForm({ onSuccess, onCancel }: CreateCollectionFormProps) {
   const [loading, setLoading] = useState(false);
   const [loadingSuppliers, setLoadingSuppliers] = useState(true);
+  const [loadingReasons, setLoadingReasons] = useState(true);
   const [error, setError] = useState('');
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [rejectionReasons, setRejectionReasons] = useState<RejectionReason[]>([]);
   const [formData, setFormData] = useState<CreateCollectionData & { unit_price: number }>({
     supplier_account_code: '',
     quantity: 0,
@@ -31,6 +33,7 @@ export default function CreateCollectionForm({ onSuccess, onCancel }: CreateColl
     collection_at: new Date().toISOString().slice(0, 16),
     notes: '',
     payment_status: 'unpaid',
+    rejection_reason: '',
   });
 
   useEffect(() => {
@@ -41,9 +44,21 @@ export default function CreateCollectionForm({ onSuccess, onCancel }: CreateColl
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    collectionsApi.getRejectionReasons().then((res) => {
+      if (!cancelled && res.code === 200) setRejectionReasons(res.data || []);
+    }).finally(() => { if (!cancelled) setLoadingReasons(false); });
+    return () => { cancelled = true; };
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'status' && value !== 'rejected' ? { rejection_reason: '' } : {}),
+    }));
     setError('');
   };
 
@@ -59,6 +74,7 @@ export default function CreateCollectionForm({ onSuccess, onCancel }: CreateColl
     if (!formData.supplier_account_code) { setError('Please select a supplier'); return false; }
     if (!formData.quantity || formData.quantity <= 0) { setError('Quantity must be greater than 0'); return false; }
     if (!formData.collection_at) { setError('Collection date and time is required'); return false; }
+    if (formData.status === 'rejected' && !formData.rejection_reason) { setError('Rejection reason is required when status is rejected'); return false; }
     return true;
   };
 
@@ -72,10 +88,11 @@ export default function CreateCollectionForm({ onSuccess, onCancel }: CreateColl
       const finalData: CreateCollectionData = {
         supplier_account_code: formData.supplier_account_code,
         quantity: formData.quantity,
-        status: formData.status,
+        status: formData.status as any,
         collection_at: collectionDate,
         notes: formData.notes,
-        payment_status: formData.payment_status,
+        payment_status: formData.payment_status as any,
+        rejection_reason: formData.status === 'rejected' ? (formData.rejection_reason || undefined) : undefined,
       };
       const response = await collectionsApi.createCollection(finalData);
       if (response.code === 200 || response.code === 201) {
@@ -122,6 +139,19 @@ export default function CreateCollectionForm({ onSuccess, onCancel }: CreateColl
             {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
         </div>
+        {formData.status === 'rejected' && (
+          <div>
+            <label htmlFor="coll-rejection_reason" className="block text-sm font-medium text-gray-700 mb-1">Rejection Reason <span className="text-red-500">*</span></label>
+            {loadingReasons ? (
+              <div className="input w-full flex items-center text-gray-500 text-sm"><Icon icon={faSpinner} size="sm" spin className="mr-2" />Loading reasons...</div>
+            ) : (
+              <select id="coll-rejection_reason" name="rejection_reason" value={formData.rejection_reason} onChange={handleChange} className="input w-full" disabled={loading} required>
+                <option value="">-- Select a reason --</option>
+                {rejectionReasons.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
+              </select>
+            )}
+          </div>
+        )}
         <div className="sm:col-span-2">
           <label htmlFor="coll-collection_at" className="block text-sm font-medium text-gray-700 mb-1">Date & time <span className="text-red-500">*</span></label>
           <input id="coll-collection_at" name="collection_at" type="datetime-local" required value={formData.collection_at} max={new Date().toISOString().slice(0, 16)} onChange={handleChange} className="input w-full" disabled={loading} />

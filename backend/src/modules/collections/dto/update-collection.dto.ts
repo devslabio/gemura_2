@@ -52,6 +52,15 @@ export class UpdateCollectionDto {
   notes?: string;
 
   @ApiProperty({
+    description: 'Rejection reason. Required when status is rejected',
+    example: 'Added water',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  rejection_reason?: string;
+
+  @ApiProperty({
     description: 'Optional animal ID (UUID) - link collection to a specific animal belonging to the supplier',
     required: false,
   })

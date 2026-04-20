@@ -53,6 +53,15 @@ export class CreateCollectionDto {
   notes?: string;
 
   @ApiProperty({
+    description: 'Rejection reason. Required when status is rejected',
+    example: 'Added water',
+    required: false,
+  })
+  @IsOptional()
+  @IsString({ message: 'Rejection reason must be a string' })
+  rejection_reason?: string;
+
+  @ApiProperty({
     description: 'Payment status - whether payment has been made',
     example: 'paid',
     enum: ['paid', 'unpaid'],

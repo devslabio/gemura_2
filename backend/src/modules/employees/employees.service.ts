@@ -14,9 +14,81 @@ import {
   type RoleCode,
 } from '../admin/roles-permissions.config';
 
+// Updated: Include is_owner flag for account owners
+type AccessGroup = 'general_access' | 'limited_access' | 'milk_receptionist_access';
+
+const ACCESS_GROUP_PERMISSIONS: Record<AccessGroup, string[]> = {
+  general_access: [
+    'dashboard.view',
+    'view_sales',
+    'create_sales',
+    'update_sales',
+    'view_collections',
+    'create_collections',
+    'view_suppliers',
+    'create_suppliers',
+    'view_customers',
+    'create_customers',
+    'view_inventory',
+    'manage_inventory',
+    'view_analytics',
+  ],
+  limited_access: [
+    'dashboard.view',
+    'view_sales',
+    'create_sales',
+    'view_collections',
+    'create_collections',
+    'view_suppliers',
+    'view_customers',
+    'view_inventory',
+  ],
+  // Backward compatibility alias for existing clients.
+  milk_receptionist_access: [
+    'dashboard.view',
+    'view_sales',
+    'create_sales',
+    'view_collections',
+    'create_collections',
+    'view_suppliers',
+    'view_customers',
+    'view_inventory',
+  ],
+};
+
 @Injectable()
 export class EmployeesService {
   constructor(private prisma: PrismaService) {}
+
+  private resolvePermissions(
+    role?: string,
+    explicitPermissions?: string[],
+    accessGroup?: AccessGroup,
+  ): string[] | null {
+    if (Array.isArray(explicitPermissions)) {
+      return explicitPermissions;
+    }
+    // Role-based granularity inside each group to keep 4-role model distinct.
+    if (accessGroup === 'general_access') {
+      if (role === 'manager' || role === 'accountant') {
+        return ROLE_DEFAULT_PERMISSIONS[role as RoleCode] || null;
+      }
+      return ACCESS_GROUP_PERMISSIONS.general_access;
+    }
+    if (accessGroup === 'limited_access' || accessGroup === 'milk_receptionist_access') {
+      if (role === 'collector' || role === 'viewer' || role === 'agent') {
+        return ROLE_DEFAULT_PERMISSIONS[role as RoleCode] || null;
+      }
+      return ACCESS_GROUP_PERMISSIONS.limited_access;
+    }
+    if (accessGroup && ACCESS_GROUP_PERMISSIONS[accessGroup]) {
+      return ACCESS_GROUP_PERMISSIONS[accessGroup];
+    }
+    if (role && ROLES.includes(role as RoleCode)) {
+      return ROLE_DEFAULT_PERMISSIONS[role as RoleCode] || null;
+    }
+    return null;
+  }
 
   /** Resolve account ID and ensure current user can manage it (owner, admin, or manager). */
   private async ensureCanManageAccount(user: User, accountId?: string | null): Promise<string> {
@@ -118,6 +190,12 @@ export class EmployeesService {
       where.status = status;
     }
 
+    // Fetch account to get created_by info
+    const account = await this.prisma.account.findUnique({
+      where: { id: resolvedAccountId },
+      select: { created_by: true },
+    });
+
     const employees = await this.prisma.userAccount.findMany({
       where,
       include: {
@@ -142,6 +220,7 @@ export class EmployeesService {
       message: 'Employees fetched successfully.',
       data: employees.map((e) => {
         const row = e as typeof e & { user: { id: string; name: string | null; email: string | null; phone: string | null; account_type?: string } };
+        const isOwner = account?.created_by === row.user.id;
         return {
           id: e.id,
           user: row.user,
@@ -149,6 +228,7 @@ export class EmployeesService {
           permissions: e.permissions || null,
           status: e.status,
           created_at: e.created_at,
+          is_owner: isOwner,
         };
       }),
     };
@@ -174,7 +254,10 @@ export class EmployeesService {
 
     const updateData: any = { updated_by: user.id };
     if (updateDto.role) updateData.role = updateDto.role as any;
-    if (updateDto.permissions) updateData.permissions = JSON.stringify(updateDto.permissions);
+    if (updateDto.permissions !== undefined || updateDto.access_group !== undefined) {
+      const resolved = this.resolvePermissions(updateDto.role || employee.role, updateDto.permissions, updateDto.access_group);
+      updateData.permissions = resolved ? JSON.stringify(resolved) : null;
+    }
     if (updateDto.status) updateData.status = updateDto.status as any;
 
     const updated = await this.prisma.userAccount.update({
@@ -304,12 +387,14 @@ export class EmployeesService {
       });
     }
 
+    const resolvedPermissions = this.resolvePermissions(dto.role, dto.permissions, dto.access_group);
+
     const employee = await this.prisma.userAccount.create({
       data: {
         user_id: targetUser!.id,
         account_id: accountId,
         role: dto.role as any,
-        permissions: dto.permissions?.length ? JSON.stringify(dto.permissions) : null,
+        permissions: resolvedPermissions ? JSON.stringify(resolvedPermissions) : null,
         status: 'active',
         created_by: user.id,
       },

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth';
+import { getRoleLabel } from '@/lib/utils/role';
 import { accountsApi } from '@/lib/api/accounts';
 import { useToastStore } from '@/store/toast';
 import Icon, {
@@ -316,7 +317,7 @@ export default function Header({
             <div className="hidden sm:block text-right">
               <p className="text-sm font-semibold text-gray-900 m-0 leading-tight">{userName}</p>
               <p className="text-xs text-gray-500 m-0 leading-tight capitalize">
-                {currentAccount ? (currentAccount.role || '').toLowerCase() : '—'}
+                {currentAccount ? getRoleLabel(currentAccount.role) : '—'}
               </p>
             </div>
             <button

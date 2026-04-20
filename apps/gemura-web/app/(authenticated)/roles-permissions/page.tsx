@@ -7,17 +7,17 @@ import { usePermission } from '@/hooks/usePermission';
 const ROLE_DEFINITIONS = [
   {
     name: 'Milk Receptionist',
-    description: 'Handles milk operations at the branch level.',
+    description: 'Access to sales, collections, suppliers, customers, and inventory with ability to add inventory items.',
     permissionGroup: 'Milk Receptionist Access',
   },
   {
     name: 'Veterinary',
-    description: 'Supports field and operational activities with receptionist-level system access.',
+    description: 'Same access as Milk Receptionist, plus can add inventory items.',
     permissionGroup: 'Milk Receptionist Access',
   },
   {
     name: 'Accountant',
-    description: 'Manages financial and operational records across the center.',
+    description: 'Access to overall dashboard, payroll, loans, charges, and finance only.',
     permissionGroup: 'General Full Access',
   },
   {
@@ -38,7 +38,7 @@ const PERMISSION_GROUPS = [
     name: 'Milk Receptionist Access',
     summary: 'Limited operational access for daily milk-center workflows.',
     grantedTo: ['Milk Receptionist', 'Veterinary'],
-    tabs: ['Dashboard', 'Sales', 'Collections', 'Suppliers', 'Customers', 'Inventory'],
+    tabs: ['Sales', 'Collections', 'Suppliers', 'Customers', 'Inventory (Add Item enabled)'],
   },
 ];
 
@@ -73,7 +73,7 @@ export default function RolesPermissionsPage() {
         </div>
         <div className="bg-white border border-gray-200 rounded-sm p-4">
           <p className="text-sm text-gray-600">Restricted Tabs (Receptionist Access)</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">6</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">5</p>
         </div>
       </div>
 

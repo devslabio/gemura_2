@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { suppliersApi, Supplier } from '@/lib/api/suppliers';
 import { useAuthStore } from '@/store/auth';
+import { usePermission } from '@/hooks/usePermission';
 import DataTableWithPagination from '@/app/components/DataTableWithPagination';
 import FilterBar, { FilterBarGroup, FilterBarSearch, FilterBarActions, FilterBarExport } from '@/app/components/FilterBar';
 import type { TableColumn } from '@/app/components/DataTable';
@@ -23,6 +24,7 @@ const STATUS_OPTIONS = [
 export default function SuppliersPage() {
   const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
+  const { hasPermission, isAdmin } = usePermission();
   const [loading, setLoading] = useState(true);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [error, setError] = useState('');
@@ -30,6 +32,7 @@ export default function SuppliersPage() {
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const canCreateSupplier = hasPermission('create_suppliers') || isAdmin();
 
   const loadSuppliers = useCallback(async () => {
     try {
@@ -209,7 +212,7 @@ export default function SuppliersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Suppliers</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setBulkImportOpen(true)} className="btn btn-secondary">
+          <button type="button" onClick={() => canCreateSupplier && setBulkImportOpen(true)} className="btn btn-secondary" disabled={!canCreateSupplier}>
             <Icon icon={faFile} size="sm" className="mr-2" />
             Bulk import
           </button>
@@ -220,7 +223,7 @@ export default function SuppliersPage() {
           >
             Download template
           </a>
-          <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
+          <button type="button" onClick={() => canCreateSupplier && setCreateModalOpen(true)} className="btn btn-primary" disabled={!canCreateSupplier}>
             <Icon icon={faPlus} size="sm" className="mr-2" />
             Add Supplier
           </button>

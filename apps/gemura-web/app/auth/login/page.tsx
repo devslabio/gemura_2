@@ -72,8 +72,12 @@ export default function LoginPage() {
         return;
       }
 
+      const defaultAccount = result.accounts.find((acc) => acc.is_default) || result.accounts[0] || null;
+      const defaultRole = (defaultAccount?.role || '').toLowerCase();
+      const targetRoute = defaultRole === 'collector' || defaultRole === 'agent' ? '/collections' : '/dashboard';
+
       await new Promise(resolve => setTimeout(resolve, 100));
-      router.push('/dashboard');
+      router.push(targetRoute);
     } catch (err: any) {
       setError(err?.message || 'Login failed. Please try again.');
     } finally {
@@ -96,6 +100,12 @@ export default function LoginPage() {
               New Here?{' '}
               <Link href="/auth/register" className="text-primary hover:text-primary-600 font-medium">
                 Create Account
+              </Link>
+            </p>
+            <p className="text-sm text-gray-600 mt-2">
+              Setting up a new business profile?{' '}
+              <Link href="/auth/onboarding" className="text-primary hover:text-primary-600 font-medium">
+                Start Onboarding Wizard
               </Link>
             </p>
           </div>

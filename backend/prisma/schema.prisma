@@ -46,6 +46,7 @@ enum UserAccountRole {
   owner
   admin
   manager
+  accountant
   collector
   supplier
   customer
@@ -910,6 +911,35 @@ model UserOnboarding {
   @@index([user_id])
   @@index([step])
   @@map("user_onboardings")
+}
+
+model MccOnboardingSubmission {
+  id                     String   @id @default(uuid()) @db.Uuid
+  submission_code        String   @unique @map("submission_code") @db.VarChar(64)
+  business_name          String   @map("business_name") @db.VarChar(255)
+  common_name            String?  @map("common_name") @db.VarChar(255)
+  manager_first_name     String   @map("manager_first_name") @db.VarChar(120)
+  manager_last_name      String   @map("manager_last_name") @db.VarChar(120)
+  manager_phone          String   @map("manager_phone") @db.VarChar(50)
+  manager_id_number      String   @map("manager_id_number") @db.VarChar(120)
+  location_province_id   String?  @map("location_province_id") @db.VarChar(120)
+  location_district_id   String?  @map("location_district_id") @db.VarChar(120)
+  location_sector_id     String?  @map("location_sector_id") @db.VarChar(120)
+  location_cell_id       String?  @map("location_cell_id") @db.VarChar(120)
+  location_village_id    String?  @map("location_village_id") @db.VarChar(120)
+  final_decision         String   @map("final_decision") @db.VarChar(32)
+  pass_count             Int      @default(0) @map("pass_count")
+  section_payload        Json     @map("section_payload")
+  google_sheet_status    String   @default("not_configured") @map("google_sheet_status") @db.VarChar(40)
+  google_sheet_response  Json?    @map("google_sheet_response")
+  google_sheet_error     String?  @map("google_sheet_error")
+  created_at             DateTime @default(now()) @map("created_at")
+  updated_at             DateTime @updatedAt @map("updated_at")
+
+  @@index([submission_code])
+  @@index([created_at])
+  @@index([final_decision])
+  @@map("mcc_onboarding_submissions")
 }
 
 model UserPoint {

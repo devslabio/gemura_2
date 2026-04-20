@@ -10,6 +10,17 @@ import { useToastStore } from '@/store/toast';
 import Icon, { faBox, faUser, faDollarSign, faCalendar, faFileAlt, faEdit, faArrowLeft, faSpinner, faCheckCircle, faBuilding, faTrash } from '@/app/components/Icon';
 import { DetailPageSkeleton } from '@/app/components/SkeletonLoader';
 
+const extractRejectionReason = (notes?: string): string => {
+  if (!notes) return '';
+  const match = notes.match(/^\[REJECTED_REASON: ([^\]]*)\]/);
+  return match ? match[1] : '';
+};
+
+const stripRejectionReasonFromNotes = (notes?: string): string => {
+  if (!notes) return '';
+  return notes.replace(/^\[REJECTED_REASON: [^\]]*\]\n?/, '').trim();
+};
+
 export default function CollectionDetailsPage() {
   const router = useRouter();
   const params = useParams();
@@ -97,13 +108,16 @@ export default function CollectionDetailsPage() {
     deleted: 'bg-red-100 text-red-700',
   };
 
+  const rejectionReason = extractRejectionReason(collection?.notes);
+  const cleanNotes = stripRejectionReasonFromNotes(collection?.notes);
+
   return (
     <div className="space-y-4">
 
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <Link href="/collections" className="text-sm text-gray-600 hover:text-[var(--primary)] mb-2 inline-flex items-center">
+          <Link href="/collections" className="text-sm text-gray-600 hover:text-(--primary) mb-2 inline-flex items-center">
             <Icon icon={faArrowLeft} size="sm" className="mr-2" />
             Back to Collections
           </Link>
@@ -151,6 +165,15 @@ export default function CollectionDetailsPage() {
                     {collection.status.charAt(0).toUpperCase() + collection.status.slice(1)}
                   </span>
                 </div>
+
+                {collection.status === 'rejected' && rejectionReason && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-500 mb-1">Rejection Reason</label>
+                    <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-red-50 text-red-700 border border-red-200">
+                      {rejectionReason}
+                    </span>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-500 mb-1">Collection Date</label>
@@ -216,18 +239,18 @@ export default function CollectionDetailsPage() {
                 </div>
                 <div className="flex items-center justify-between py-3 border-t-2 border-gray-200">
                   <span className="text-base font-semibold text-gray-900">Total Amount</span>
-                  <span className="text-lg font-bold text-[var(--primary)]">{formatCurrency(Number(collection.total_amount))}</span>
+                  <span className="text-lg font-bold text-(--primary)">{formatCurrency(Number(collection.total_amount))}</span>
                 </div>
               </div>
             </div>
 
             {/* Notes */}
-            {collection.notes && (
+            {cleanNotes && (
               <div className="bg-white border border-gray-200 rounded-sm p-6">
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Notes</h2>
                 <div className="flex items-start">
                   <Icon icon={faFileAlt} size="sm" className="mr-2 text-gray-400 mt-1" />
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{collection.notes}</p>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{cleanNotes}</p>
                 </div>
               </div>
             )}
