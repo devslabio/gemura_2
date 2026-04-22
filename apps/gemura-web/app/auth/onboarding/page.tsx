@@ -224,6 +224,7 @@ const SECTION6_STAFF_TRAINING_OPTIONS = [
 const SECTION6_CONTRACT_OPTIONS = ['Yes - all have contracts', 'Some have contracts', 'No - informal employment'];
 const SECTION6_PAYMENT_METHOD_OPTIONS = ['Cash on delivery', 'Cash at end of week', 'Cash at end of month', 'Bank transfer', 'MTN MoMo', 'Airtel Money'];
 const SECTION6_LEDGER_WILLINGNESS_OPTIONS = ['Yes - fully willing', 'Yes - will need training', 'Unsure', 'No - prefer current system'];
+const SECTION6_DEVICE_ACCESS_OPTIONS = ['Desktop/Laptop', 'Tablet', 'Smartphone', 'None of the above'];
 const SECTION6_SALES_DESTINATION_OPTIONS = [
   'Directly to a processor (e.g. Inyange)',
   'Local dairy cooperative',
@@ -338,6 +339,7 @@ export default function BusinessOnboardingPage() {
   const [recordSystem, setRecordSystem] = useState('');
   const [staffTrainingStatus, setStaffTrainingStatus] = useState('');
   const [employmentContractsStatus, setEmploymentContractsStatus] = useState('');
+  const [digitalDeviceAccess, setDigitalDeviceAccess] = useState<string[]>([]);
   const [farmerPaymentMethods, setFarmerPaymentMethods] = useState<string[]>([]);
   const [avgDaysDeliveryToPayment, setAvgDaysDeliveryToPayment] = useState('');
   const [digitalLedgerWillingness, setDigitalLedgerWillingness] = useState('');
@@ -547,6 +549,7 @@ export default function BusinessOnboardingPage() {
       if (typeof draft.recordSystem === 'string') setRecordSystem(draft.recordSystem);
       if (typeof draft.staffTrainingStatus === 'string') setStaffTrainingStatus(draft.staffTrainingStatus);
       if (typeof draft.employmentContractsStatus === 'string') setEmploymentContractsStatus(draft.employmentContractsStatus);
+      if (Array.isArray(draft.digitalDeviceAccess)) setDigitalDeviceAccess(draft.digitalDeviceAccess.filter((item): item is string => typeof item === 'string'));
       if (Array.isArray(draft.farmerPaymentMethods)) setFarmerPaymentMethods(draft.farmerPaymentMethods.filter((item): item is string => typeof item === 'string'));
       if (typeof draft.avgDaysDeliveryToPayment === 'string') setAvgDaysDeliveryToPayment(draft.avgDaysDeliveryToPayment);
       if (typeof draft.digitalLedgerWillingness === 'string') setDigitalLedgerWillingness(draft.digitalLedgerWillingness);
@@ -775,6 +778,17 @@ export default function BusinessOnboardingPage() {
     setState((prev) => (prev.includes(option) ? prev.filter((value) => value !== option) : [...prev, option]));
   };
 
+  const toggleDeviceAccessOption = (option: string) => {
+    setDigitalDeviceAccess((prev) => {
+      const hasOption = prev.includes(option);
+      if (option === 'None of the above') {
+        return hasOption ? [] : ['None of the above'];
+      }
+      const withoutNone = prev.filter((value) => value !== 'None of the above');
+      return hasOption ? withoutNone.filter((value) => value !== option) : [...withoutNone, option];
+    });
+  };
+
   const totalCoolingCapacity = coolingTanks.reduce((sum, tank) => {
     const parsed = Number(tank.capacityLitres);
     return sum + (Number.isFinite(parsed) ? parsed : 0);
@@ -856,6 +870,7 @@ export default function BusinessOnboardingPage() {
     { section: 5, done: staffAged1835.trim().length > 0 },
     { section: 5, done: staffWomen1835.trim().length > 0 },
     { section: 5, done: staffWithDisability.trim().length > 0 },
+    { section: 6, done: digitalDeviceAccess.length > 0 },
     { section: 6, done: recordSystem.trim().length > 0 },
     { section: 6, done: staffTrainingStatus.trim().length > 0 },
     { section: 6, done: employmentContractsStatus.trim().length > 0 },
@@ -959,6 +974,7 @@ export default function BusinessOnboardingPage() {
       coopMembersWomen,
       coopMembersAged1835,
       coopMembersWomen1835,
+      digitalDeviceAccess,
       recordSystem,
       staffTrainingStatus,
       employmentContractsStatus,
@@ -1030,6 +1046,7 @@ export default function BusinessOnboardingPage() {
     addMissing('Staff aged 18-35', staffAged1835.trim().length > 0);
     addMissing('Staff women 18-35', staffWomen1835.trim().length > 0);
     addMissing('Staff with disability', staffWithDisability.trim().length > 0);
+    addMissing('Digital devices access', digitalDeviceAccess.length > 0);
     addMissing('Record system', recordSystem.trim().length > 0);
     addMissing('Staff training status', staffTrainingStatus.trim().length > 0);
     addMissing('Employment contracts status', employmentContractsStatus.trim().length > 0);
@@ -1182,6 +1199,7 @@ export default function BusinessOnboardingPage() {
       ['Coop Members Women', coopMembersWomen],
       ['Coop Members Aged 18-35', coopMembersAged1835],
       ['Coop Members Women 18-35', coopMembersWomen1835],
+      ['Digital Devices Access', digitalDeviceAccess.join('; ')],
       ['Record System', recordSystem],
       ['Staff Training Status', staffTrainingStatus],
       ['Employment Contracts Status', employmentContractsStatus],
@@ -1279,6 +1297,7 @@ export default function BusinessOnboardingPage() {
       coopMembersWomen1835,
     },
     section6: {
+      digitalDeviceAccess,
       recordSystem,
       staffTrainingStatus,
       employmentContractsStatus,
@@ -2890,6 +2909,23 @@ export default function BusinessOnboardingPage() {
                   <div className="space-y-5 rounded-lg border border-gray-200 bg-gray-50 p-5">
                     {section6Page === 1 && (
                       <>
+                        <div>
+                          <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-700">What digital devices do you currently have access to?</h3>
+                          <p className="mt-1 text-xs text-gray-500">Agent tests and records</p>
+                          <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                            {SECTION6_DEVICE_ACCESS_OPTIONS.map((option) => (
+                              <label key={option} className="flex items-center gap-3 rounded-md border border-gray-300 bg-white px-3 py-2">
+                                <input
+                                  type="checkbox"
+                                  checked={digitalDeviceAccess.includes(option)}
+                                  onChange={() => toggleDeviceAccessOption(option)}
+                                />
+                                <span className="text-sm text-gray-700">{option}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
                         <div>
                           <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-700">B31. Current milk delivery record system</h3>
                           <p className="mt-1 text-xs text-gray-500">Tick one</p>
