@@ -182,5 +182,79 @@ export const adminApi = {
     const params = accountId ? { account_id: accountId } : {};
     return apiClient.put(`/admin/users/${userId}/immis-link`, { immis_member_id }, { params });
   },
+
+  getOnboardingPendingCount: async (
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: { pendingCount: number } }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.get('/admin/onboarding-submissions/pending-count', { params });
+  },
+
+  listOnboardingSubmissions: async (
+    page = 1,
+    limit = 20,
+    accountId?: string,
+    reviewStatus?: string,
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: {
+      submissions: Array<{
+        id: string;
+        submission_code: string;
+        business_name: string;
+        common_name: string | null;
+        manager_first_name: string;
+        manager_last_name: string;
+        manager_phone: string;
+        final_decision: string;
+        pass_count: number;
+        review_status: string;
+        created_at: string;
+        linked_user_id: string | null;
+        linked_account_id: string | null;
+      }>;
+      pendingCount: number;
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    };
+  }> => {
+    const params: Record<string, unknown> = { page, limit };
+    if (accountId) params.account_id = accountId;
+    if (reviewStatus) params.review_status = reviewStatus;
+    return apiClient.get('/admin/onboarding-submissions', { params });
+  },
+
+  getOnboardingSubmission: async (submissionId: string, accountId?: string): Promise<{ code: number; data: Record<string, unknown> }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.get(`/admin/onboarding-submissions/${submissionId}`, { params });
+  },
+
+  approveOnboardingSubmission: async (
+    submissionId: string,
+    body: { password?: string; linkExistingUserId?: string; reviewNotes?: string },
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: Record<string, unknown> }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.post(`/admin/onboarding-submissions/${submissionId}/approve`, body, { params });
+  },
+
+  rejectOnboardingSubmission: async (
+    submissionId: string,
+    notes: string,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: unknown }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.post(`/admin/onboarding-submissions/${submissionId}/reject`, { notes }, { params });
+  },
+
+  needsChangesOnboardingSubmission: async (
+    submissionId: string,
+    notes: string,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: unknown }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.post(`/admin/onboarding-submissions/${submissionId}/needs-changes`, { notes }, { params });
+  },
 };
 

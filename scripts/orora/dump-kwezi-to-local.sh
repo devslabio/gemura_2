@@ -136,5 +136,5 @@ else
 fi
 echo "   2. Start backend:   cd backend && npm run start:dev"
 echo "   3. Start Orora Web: cd apps/orora-web && npm run dev"
-echo "   4. Open: http://localhost:3008  (API: http://localhost:3004)"
+echo "   4. Open Orora Web: http://localhost:3006  (API: http://localhost:3004)"
 echo ""

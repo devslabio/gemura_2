@@ -71,6 +71,13 @@ enum RegistrationType {
   onboarded
 }
 
+enum MccOnboardingReviewStatus {
+  pending
+  approved
+  rejected
+  needs_changes
+}
+
 enum MilkSaleStatus {
   pending
   accepted
@@ -314,6 +321,7 @@ model Account {
   poultry_flocks        PoultryFlock[]
   pig_batches           PigBatch[]
   pig_farrowings        PigFarrowing[]
+  mcc_onboarding_linked MccOnboardingSubmission[] @relation("MccOnboardingLinkedAccount")
 
   @@index([code])
   @@index([type])
@@ -393,6 +401,8 @@ model User {
   user_referrals_referred      UserReferral[]     @relation("UserReferred")
   user_rewards                 UserReward[]
   user_onboardings             UserOnboarding[]
+  mcc_onboarding_reviews       MccOnboardingSubmission[] @relation("MccOnboardingReviewedBy")
+  mcc_onboarding_linked        MccOnboardingSubmission[] @relation("MccOnboardingLinkedUser")
   inventory_sales_created      InventorySale[]    @relation("InventorySaleCreatedBy")
   inventory_movements_created  InventoryMovement[] @relation("InventoryMovementCreatedBy")
   api_keys_created             ApiKey[]
@@ -933,12 +943,25 @@ model MccOnboardingSubmission {
   google_sheet_status    String   @default("not_configured") @map("google_sheet_status") @db.VarChar(40)
   google_sheet_response  Json?    @map("google_sheet_response")
   google_sheet_error     String?  @map("google_sheet_error")
+  review_status          MccOnboardingReviewStatus @default(pending) @map("review_status")
+  review_notes           String?  @map("review_notes") @db.Text
+  reviewed_at            DateTime? @map("reviewed_at")
+  reviewed_by_user_id    String?  @map("reviewed_by_user_id") @db.Uuid
+  linked_user_id         String?  @map("linked_user_id") @db.Uuid
+  linked_account_id      String?  @map("linked_account_id") @db.Uuid
   created_at             DateTime @default(now()) @map("created_at")
   updated_at             DateTime @updatedAt @map("updated_at")
+
+  reviewed_by_user User?    @relation("MccOnboardingReviewedBy", fields: [reviewed_by_user_id], references: [id], onDelete: SetNull)
+  linked_user      User?    @relation("MccOnboardingLinkedUser", fields: [linked_user_id], references: [id], onDelete: SetNull)
+  linked_account   Account? @relation("MccOnboardingLinkedAccount", fields: [linked_account_id], references: [id], onDelete: SetNull)
 
   @@index([submission_code])
   @@index([created_at])
   @@index([final_decision])
+  @@index([review_status])
+  @@index([linked_user_id])
+  @@index([reviewed_by_user_id])
   @@map("mcc_onboarding_submissions")
 }
 

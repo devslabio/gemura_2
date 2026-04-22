@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Icon, { faEye, faEyeSlash, faEnvelope, faLock, faPhone } from '@/app/components/Icon';
@@ -15,19 +15,6 @@ export default function AdminLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('registered') === 'true') {
-        setSuccessMessage('Registration successful! Please log in with your credentials.');
-        setTimeout(() => {
-          router.replace('/auth/login', { scroll: false });
-        }, 100);
-      }
-    }
-  }, [router]);
 
   // Use local assets so the admin login looks correct even when `gemura-web` isn't running.
   const logoSrc = '/logo.png';
@@ -94,20 +81,8 @@ export default function AdminLoginPage() {
             <Link href="/" className="inline-block mb-4">
               <img src={logoSrc} alt="Gemura" width={80} height={80} className="object-contain" />
             </Link>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Log In to Gemura</h1>
-            <p className="text-sm text-gray-600">
-              New Here?{' '}
-              <Link href="/auth/register" className="text-primary hover:text-primary-600 font-medium">
-                Create Account
-              </Link>
-            </p>
+            <h1 className="text-3xl font-bold text-gray-900">Log In to Gemura</h1>
           </div>
-
-          {successMessage && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-sm text-sm text-green-600">
-              {successMessage}
-            </div>
-          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-sm text-sm text-red-600">

@@ -6,6 +6,7 @@
 # Usage examples (from repo root):
 #   ./scripts/shared/db/kwezi-prisma.sh db push
 #   ./scripts/shared/db/kwezi-prisma.sh migrate deploy
+#   ./scripts/shared/db/kwezi-prisma.sh db seed
 #   ./scripts/shared/db/kwezi-prisma.sh studio
 #
 set -euo pipefail

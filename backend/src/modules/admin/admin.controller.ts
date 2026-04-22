@@ -32,6 +32,9 @@ import { User } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { LinkUserImmisDto } from './dto/link-user-immis.dto';
+import { ApproveOnboardingDto } from './dto/approve-onboarding.dto';
+import { RejectOnboardingDto } from './dto/reject-onboarding.dto';
+import { NeedsChangesOnboardingDto } from './dto/needs-changes-onboarding.dto';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -116,6 +119,91 @@ export class AdminController {
     @CurrentAccount() accountId: string,
   ) {
     return this.adminService.getPermissions(user, accountId);
+  }
+
+  @Get('onboarding-submissions/pending-count')
+  @RequirePermission('manage_users')
+  @ApiOperation({ summary: 'Count MCC onboarding submissions awaiting review' })
+  async getOnboardingPendingCount(@CurrentUser() user: User, @CurrentAccount() accountId: string) {
+    return this.adminService.getMccOnboardingPendingCount(user, accountId);
+  }
+
+  @Get('onboarding-submissions')
+  @RequirePermission('manage_users')
+  @ApiOperation({ summary: 'List MCC onboarding submissions (public wizard)' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'review_status', required: false, description: 'pending | approved | rejected | needs_changes' })
+  async listOnboardingSubmissions(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('review_status') reviewStatus?: string,
+  ) {
+    return this.adminService.listMccOnboardingSubmissions(
+      user,
+      accountId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+      reviewStatus,
+    );
+  }
+
+  @Get('onboarding-submissions/:submissionId')
+  @RequirePermission('manage_users')
+  @ApiOperation({ summary: 'Get one MCC onboarding submission including section_payload' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  async getOnboardingSubmission(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('submissionId') submissionId: string,
+  ) {
+    return this.adminService.getMccOnboardingSubmissionById(user, accountId, submissionId);
+  }
+
+  @Post('onboarding-submissions/:submissionId/approve')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Approve onboarding: create tenant account, wallet, owner user (or link existing user)',
+  })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiBody({ type: ApproveOnboardingDto })
+  async approveOnboardingSubmission(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('submissionId') submissionId: string,
+    @Body() dto: ApproveOnboardingDto,
+  ) {
+    return this.adminService.approveMccOnboardingSubmission(user, accountId, submissionId, dto);
+  }
+
+  @Post('onboarding-submissions/:submissionId/reject')
+  @RequirePermission('manage_users')
+  @ApiOperation({ summary: 'Reject onboarding submission' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiBody({ type: RejectOnboardingDto })
+  async rejectOnboardingSubmission(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('submissionId') submissionId: string,
+    @Body() dto: RejectOnboardingDto,
+  ) {
+    return this.adminService.rejectMccOnboardingSubmission(user, accountId, submissionId, dto.notes);
+  }
+
+  @Post('onboarding-submissions/:submissionId/needs-changes')
+  @RequirePermission('manage_users')
+  @ApiOperation({ summary: 'Mark onboarding submission as needs changes' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiBody({ type: NeedsChangesOnboardingDto })
+  async needsChangesOnboardingSubmission(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('submissionId') submissionId: string,
+    @Body() dto: NeedsChangesOnboardingDto,
+  ) {
+    return this.adminService.needsChangesMccOnboardingSubmission(user, accountId, submissionId, dto.notes);
   }
 
   @Get('users')
