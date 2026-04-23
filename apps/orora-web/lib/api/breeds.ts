@@ -5,6 +5,8 @@ export interface Breed {
   name: string;
   code: string | null;
   description?: string | null;
+  species_id?: string;
+  species?: { id: string; code: string; name: string } | null;
 }
 
 export interface ApiResponse<T> {
@@ -15,6 +17,8 @@ export interface ApiResponse<T> {
 }
 
 export const breedsApi = {
-  getList: () =>
-    apiClient.get<ApiResponse<Breed[]>>('/breeds'),
+  getList: (speciesId?: string) =>
+    apiClient.get<ApiResponse<Breed[]>>('/breeds', {
+      params: speciesId ? { species_id: speciesId } : {},
+    }),
 };

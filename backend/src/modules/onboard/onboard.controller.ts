@@ -5,15 +5,33 @@ import { TokenGuard } from '../../common/guards/token.guard';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { User } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
+import { SubmitMccOnboardingDto } from './dto/submit-mcc-onboarding.dto';
 
 @ApiTags('Onboard')
 @Controller('onboard')
-@UseGuards(TokenGuard)
-@ApiBearerAuth()
 export class OnboardController {
   constructor(private readonly onboardService: OnboardService) {}
 
+  @Post('mcc-submissions')
+  @ApiOperation({
+    summary: 'Submit MCC onboarding form',
+    description: 'Stores MCC onboarding form data in database, generates a VIBE submission code, and optionally relays data to Google Sheets.',
+  })
+  @ApiBody({ type: SubmitMccOnboardingDto })
+  @ApiResponse({
+    status: 201,
+    description: 'MCC onboarding submission saved successfully',
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid submission payload',
+  })
+  async submitMccOnboarding(@Body() dto: SubmitMccOnboardingDto) {
+    return this.onboardService.submitMccOnboarding(dto);
+  }
+
   @Post('create-user')
+  @UseGuards(TokenGuard)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Onboard a new user',
     description: 'Create a new user account through the onboarding process. The onboarder (current user) will receive points for onboarding the new user.',

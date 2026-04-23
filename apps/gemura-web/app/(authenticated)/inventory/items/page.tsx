@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { inventoryApi, InventoryItem } from '@/lib/api/inventory';
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
+import { usePermission } from '@/hooks/usePermission';
 import DataTableWithPagination from '@/app/components/DataTableWithPagination';
 import type { TableColumn } from '@/app/components/DataTable';
 import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
@@ -26,6 +27,7 @@ const STATUS_OPTIONS = [
 export default function InventoryItemsPage() {
   const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
+  const { hasPermission, isAdmin } = usePermission();
   const [loading, setLoading] = useState(true);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [error, setError] = useState('');
@@ -34,6 +36,7 @@ export default function InventoryItemsPage() {
   const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || '');
   const [lowStockFilter, setLowStockFilter] = useState<boolean>(false);
   const [stats, setStats] = useState<{ total_items: number; active_items: number; out_of_stock_items: number; low_stock_items: number; listed_in_marketplace?: number } | null>(null);
+  const canManageInventory = hasPermission('manage_inventory') || isAdmin();
 
   const loadInventory = useCallback(async () => {
     try {
@@ -180,7 +183,7 @@ export default function InventoryItemsPage() {
           <p className="text-sm text-gray-500 mt-0.5">Inventory · Items</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setBulkImportOpen(true)} className="btn btn-secondary">
+          <button type="button" onClick={() => canManageInventory && setBulkImportOpen(true)} className="btn btn-secondary" disabled={!canManageInventory}>
             <Icon icon={faFile} size="sm" className="mr-2" />
             Bulk import
           </button>
@@ -191,7 +194,7 @@ export default function InventoryItemsPage() {
           >
             Download template
           </a>
-          <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
+          <button type="button" onClick={() => canManageInventory && setCreateModalOpen(true)} className="btn btn-primary" disabled={!canManageInventory}>
             <Icon icon={faPlus} size="sm" className="mr-2" />
             Add Item
           </button>

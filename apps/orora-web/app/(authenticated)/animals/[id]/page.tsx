@@ -538,7 +538,8 @@ export default function AnimalDetailPage() {
             {animal.name && <span className="font-normal text-gray-600"> · {animal.name}</span>}
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {animal.breed?.name ?? '—'} · {animal.gender} · {new Date(animal.date_of_birth).toLocaleDateString()}
+            {animal.species?.name ?? '—'} · {animal.breed?.name ?? '—'} · {animal.gender} ·{' '}
+            {new Date(animal.date_of_birth).toLocaleDateString()}
           </p>
         </div>
         <Link href={`/animals/${id}/edit`} className="btn btn-primary">
@@ -564,6 +565,10 @@ export default function AnimalDetailPage() {
               <div>
                 <dt className="text-sm font-medium text-gray-500">Tag number</dt>
                 <dd className="text-gray-900">{animal.tag_number}</dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-gray-500">Species</dt>
+                <dd className="text-gray-900">{animal.species?.name ?? '—'}</dd>
               </div>
               <div>
                 <dt className="text-sm font-medium text-gray-500">Breed</dt>

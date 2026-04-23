@@ -5,6 +5,7 @@
 - `/apps` - Frontend applications (mobile & web)
   - `/apps/gemura-mobile` - Gemura Flutter mobile app
   - `/apps/gemura-web` - Gemura Next.js web app
+  - `/apps/gemura-admin-web` - Gemura admin Next.js app (local dev **3015**; Kwezi host **3021→3005** because 3015 is taken by zoea-admin; same Nest backend and DB as gemura-web)
   - `/apps/orora-mobile` - Orora Flutter mobile app (future)
   - `/apps/orora-web` - Orora Next.js web app (future)
 - `/backend` - Shared NestJS backend API

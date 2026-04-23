@@ -1,9 +1,10 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { User } from '@prisma/client';
+import { MccOnboardingReviewStatus, Prisma, User } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ImmisService } from '../immis/immis.service';
+import { LocationsService } from '../locations/locations.service';
 import * as bcrypt from 'bcrypt';
 import {
   ROLES,
@@ -16,9 +17,14 @@ import {
 
 @Injectable()
 export class AdminService {
+  /** UUID v4 (and common variants) — used to tell `locations.id` from fallback text names. */
+  private static readonly LOCATION_UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
   constructor(
     private prisma: PrismaService,
     private immisService: ImmisService,
+    private locationsService: LocationsService,
   ) {}
 
   /**
@@ -219,11 +225,32 @@ export class AdminService {
     }
 
     const { user_accounts, ...userRest } = targetUser;
+
+    const mccOnboarding = await this.prisma.mccOnboardingSubmission.findFirst({
+      where: { linked_user_id: userId },
+      select: {
+        id: true,
+        submission_code: true,
+        business_name: true,
+        common_name: true,
+        manager_first_name: true,
+        manager_last_name: true,
+        manager_phone: true,
+        manager_id_number: true,
+        review_status: true,
+        final_decision: true,
+        pass_count: true,
+        created_at: true,
+        linked_account_id: true,
+      },
+    });
+
     const data = {
       ...userRest,
       role: ua?.role ?? null,
       permissions,
       user_accounts,
+      mcc_onboarding: mccOnboarding,
     };
 
     return {
@@ -808,6 +835,499 @@ export class AdminService {
       status: 'success',
       message: 'Permissions retrieved successfully.',
       data: { permissions },
+    };
+  }
+
+  private normalizePhoneDigits(phone: string): string {
+    return String(phone || '').replace(/\D/g, '');
+  }
+
+  private generateOnboardingTempPassword(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let out = '';
+    for (let i = 0; i < 14; i++) {
+      out += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return out;
+  }
+
+  private isLocationUuid(value: string | null | undefined): boolean {
+    if (!value || typeof value !== 'string') return false;
+    return AdminService.LOCATION_UUID_RE.test(value.trim());
+  }
+
+  /**
+   * Human-readable admin hierarchy for MCC onboarding.
+   * Wizard stores either `locations.id` UUIDs (API picker) or plain names (offline fallback).
+   */
+  private async resolveMccOnboardingLocationLabels(submission: {
+    location_province_id: string | null;
+    location_district_id: string | null;
+    location_sector_id: string | null;
+    location_cell_id: string | null;
+    location_village_id: string | null;
+    section_payload: Prisma.JsonValue;
+  }): Promise<{
+    province: string;
+    district: string;
+    sector: string;
+    cell: string;
+    village: string;
+    path: string;
+  }> {
+    const payload =
+      submission.section_payload &&
+      typeof submission.section_payload === 'object' &&
+      !Array.isArray(submission.section_payload)
+        ? (submission.section_payload as Record<string, unknown>)
+        : {};
+    const s1 =
+      payload.section1Location &&
+      typeof payload.section1Location === 'object' &&
+      !Array.isArray(payload.section1Location)
+        ? (payload.section1Location as Record<string, unknown>)
+        : {};
+
+    const pick = (db: string | null | undefined, alt: unknown): string => {
+      const a = db && String(db).trim().length > 0 ? String(db).trim() : '';
+      if (a) return a;
+      const b = typeof alt === 'string' && alt.trim().length > 0 ? alt.trim() : '';
+      return b;
+    };
+
+    const p = pick(submission.location_province_id, s1.provinceId);
+    const d = pick(submission.location_district_id, s1.districtId);
+    const s = pick(submission.location_sector_id, s1.sectorId);
+    const c = pick(submission.location_cell_id, s1.cellId);
+    const v = pick(submission.location_village_id, s1.villageId);
+
+    const empty = (x: string) => !x || x.trim().length === 0;
+
+    const deepestUuid = [v, c, s, d, p].find((id) => this.isLocationUuid(id));
+    if (deepestUuid) {
+      try {
+        const segments = await this.locationsService.getPath(deepestUuid.trim());
+        if (segments.length > 0) {
+          const byType: Partial<Record<string, string>> = {};
+          for (const seg of segments) {
+            byType[seg.location_type] = seg.name;
+          }
+          const province = byType['PROVINCE'] || '—';
+          const district = byType['DISTRICT'] || '—';
+          const sector = byType['SECTOR'] || '—';
+          const cell = byType['CELL'] || '—';
+          const village = byType['VILLAGE'] || '—';
+          return {
+            province,
+            district,
+            sector,
+            cell,
+            village,
+            path: segments.map((x) => x.name).join(' › '),
+          };
+        }
+      } catch {
+        // fall through to per-id resolution
+      }
+    }
+
+    const ids = [p, d, s, c, v].filter((id) => this.isLocationUuid(id));
+    const unique = [...new Set(ids)];
+    const rows =
+      unique.length > 0
+        ? await this.prisma.location.findMany({
+            where: { id: { in: unique } },
+            select: { id: true, name: true },
+          })
+        : [];
+    const map = new Map(rows.map((r) => [r.id, r.name]));
+
+    const resolve = (id: string): string => {
+      if (empty(id)) return '—';
+      if (!this.isLocationUuid(id)) return id;
+      return map.get(id) || id;
+    };
+
+    const province = resolve(p);
+    const district = resolve(d);
+    const sector = resolve(s);
+    const cell = resolve(c);
+    const village = resolve(v);
+    const parts = [province, district, sector, cell, village].filter((x) => x && x !== '—');
+
+    return {
+      province,
+      district,
+      sector,
+      cell,
+      village,
+      path: parts.length > 0 ? parts.join(' › ') : '—',
+    };
+  }
+
+  async getMccOnboardingPendingCount(user: User, accountId: string) {
+    await this.checkAdminPermission(user, accountId);
+    const pendingCount = await this.prisma.mccOnboardingSubmission.count({
+      where: { review_status: MccOnboardingReviewStatus.pending },
+    });
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Pending onboarding count retrieved.',
+      data: { pendingCount },
+    };
+  }
+
+  async listMccOnboardingSubmissions(
+    user: User,
+    accountId: string,
+    page = 1,
+    limit = 20,
+    reviewStatus?: string,
+  ) {
+    await this.checkAdminPermission(user, accountId);
+    const safeLimit = Math.min(Math.max(limit, 1), 100);
+    const safePage = Math.max(page, 1);
+    const skip = (safePage - 1) * safeLimit;
+
+    const where: Prisma.MccOnboardingSubmissionWhereInput = {};
+    const validStatuses: MccOnboardingReviewStatus[] = [
+      MccOnboardingReviewStatus.pending,
+      MccOnboardingReviewStatus.approved,
+      MccOnboardingReviewStatus.rejected,
+      MccOnboardingReviewStatus.needs_changes,
+    ];
+    if (reviewStatus && validStatuses.includes(reviewStatus as MccOnboardingReviewStatus)) {
+      where.review_status = reviewStatus as MccOnboardingReviewStatus;
+    }
+
+    const [submissions, total, pendingCount] = await Promise.all([
+      this.prisma.mccOnboardingSubmission.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: safeLimit,
+        select: {
+          id: true,
+          submission_code: true,
+          business_name: true,
+          common_name: true,
+          manager_first_name: true,
+          manager_last_name: true,
+          manager_phone: true,
+          final_decision: true,
+          pass_count: true,
+          review_status: true,
+          created_at: true,
+          linked_user_id: true,
+          linked_account_id: true,
+        },
+      }),
+      this.prisma.mccOnboardingSubmission.count({ where }),
+      this.prisma.mccOnboardingSubmission.count({
+        where: { review_status: MccOnboardingReviewStatus.pending },
+      }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Onboarding submissions retrieved successfully.',
+      data: {
+        submissions,
+        pendingCount,
+        pagination: {
+          page: safePage,
+          limit: safeLimit,
+          total,
+          totalPages: Math.ceil(total / safeLimit),
+        },
+      },
+    };
+  }
+
+  async getMccOnboardingSubmissionById(user: User, accountId: string, submissionId: string) {
+    await this.checkAdminPermission(user, accountId);
+
+    const submission = await this.prisma.mccOnboardingSubmission.findUnique({
+      where: { id: submissionId },
+      include: {
+        reviewed_by_user: { select: { id: true, name: true, email: true } },
+        linked_user: { select: { id: true, name: true, email: true, phone: true } },
+        linked_account: { select: { id: true, code: true, name: true, status: true } },
+      },
+    });
+
+    if (!submission) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Onboarding submission not found.',
+      });
+    }
+
+    const location_labels = await this.resolveMccOnboardingLocationLabels(submission);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Onboarding submission retrieved successfully.',
+      data: { ...submission, location_labels },
+    };
+  }
+
+  async approveMccOnboardingSubmission(
+    user: User,
+    accountId: string,
+    submissionId: string,
+    dto: { password?: string; linkExistingUserId?: string; reviewNotes?: string },
+  ) {
+    await this.checkAdminPermission(user, accountId);
+
+    const plainPassword =
+      dto.password && dto.password.length >= 8 ? dto.password : this.generateOnboardingTempPassword();
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const submission = await tx.mccOnboardingSubmission.findUnique({ where: { id: submissionId } });
+      if (!submission) {
+        throw new NotFoundException({
+          code: 404,
+          status: 'error',
+          message: 'Onboarding submission not found.',
+        });
+      }
+
+      if (submission.review_status === MccOnboardingReviewStatus.approved && submission.linked_user_id) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'This submission is already approved and linked to a user.',
+        });
+      }
+
+      if (
+        submission.review_status !== MccOnboardingReviewStatus.pending &&
+        submission.review_status !== MccOnboardingReviewStatus.needs_changes
+      ) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Only pending or needs_changes submissions can be approved.',
+        });
+      }
+
+      const managerPhoneDigits = this.normalizePhoneDigits(submission.manager_phone);
+      if (!managerPhoneDigits || managerPhoneDigits.length < 9) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Submission has an invalid manager phone number.',
+        });
+      }
+
+      let linkedUser: User;
+
+      if (dto.linkExistingUserId) {
+        const existing = await tx.user.findUnique({ where: { id: dto.linkExistingUserId } });
+        if (!existing) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'Existing user not found.',
+          });
+        }
+        const existingDigits = this.normalizePhoneDigits(existing.phone || '');
+        if (existingDigits !== managerPhoneDigits) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'Existing user phone does not match submission manager phone.',
+          });
+        }
+        linkedUser = existing;
+      } else {
+        const dup = await tx.user.findFirst({ where: { phone: managerPhoneDigits } });
+        if (dup) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message:
+              'A user with this phone already exists. Approve again with linkExistingUserId set to that user UUID, or reject this submission.',
+          });
+        }
+        const hashedPassword = await bcrypt.hash(plainPassword, 10);
+        const displayName = `${submission.manager_first_name} ${submission.manager_last_name}`.trim();
+        linkedUser = await tx.user.create({
+          data: {
+            name: displayName || submission.business_name,
+            phone: managerPhoneDigits,
+            email: null,
+            nid: submission.manager_id_number,
+            password_hash: hashedPassword,
+            account_type: 'mcc',
+            status: 'active',
+            registration_type: 'onboarded',
+            created_by: user.id,
+          },
+        });
+      }
+
+      const safeCode = submission.submission_code.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
+      const accountCode = `ACC_ONB_${safeCode}`;
+
+      const accountName = submission.common_name?.trim() || submission.business_name;
+      const newAccount = await tx.account.create({
+        data: {
+          code: accountCode,
+          name: accountName,
+          type: 'tenant',
+          status: 'active',
+          created_by: user.id,
+        },
+      });
+
+      const ownerPermissions = { can_manage: true, can_view: true, can_edit: true };
+      await tx.userAccount.create({
+        data: {
+          user_id: linkedUser.id,
+          account_id: newAccount.id,
+          role: 'owner',
+          permissions: ownerPermissions as unknown as Prisma.InputJsonValue,
+          status: 'active',
+          created_by: user.id,
+        },
+      });
+
+      const walletCode = `W_ONB_${submission.id.replace(/-/g, '').slice(0, 24)}`;
+      await tx.wallet.create({
+        data: {
+          code: walletCode,
+          account_id: newAccount.id,
+          type: 'regular',
+          is_joint: false,
+          is_default: true,
+          balance: new Prisma.Decimal(0),
+          currency: 'RWF',
+          status: 'active',
+          created_by: user.id,
+        },
+      });
+
+      if (!linkedUser.default_account_id) {
+        await tx.user.update({
+          where: { id: linkedUser.id },
+          data: { default_account_id: newAccount.id, updated_by: user.id },
+        });
+      }
+
+      const updatedSubmission = await tx.mccOnboardingSubmission.update({
+        where: { id: submissionId },
+        data: {
+          review_status: MccOnboardingReviewStatus.approved,
+          review_notes: dto.reviewNotes ?? null,
+          reviewed_at: new Date(),
+          reviewed_by_user_id: user.id,
+          linked_user_id: linkedUser.id,
+          linked_account_id: newAccount.id,
+        },
+      });
+
+      return { updatedSubmission, linkedUser, newAccount, createdNewUser: !dto.linkExistingUserId };
+    });
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Submission approved. Account and access created.',
+      data: {
+        submission: result.updatedSubmission,
+        user: {
+          id: result.linkedUser.id,
+          name: result.linkedUser.name,
+          phone: result.linkedUser.phone,
+          email: result.linkedUser.email,
+        },
+        account: {
+          id: result.newAccount.id,
+          code: result.newAccount.code,
+          name: result.newAccount.name,
+        },
+        tempPassword: result.createdNewUser ? plainPassword : undefined,
+      },
+    };
+  }
+
+  async rejectMccOnboardingSubmission(user: User, accountId: string, submissionId: string, notes: string) {
+    await this.checkAdminPermission(user, accountId);
+
+    const submission = await this.prisma.mccOnboardingSubmission.findUnique({ where: { id: submissionId } });
+    if (!submission) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Onboarding submission not found.',
+      });
+    }
+    if (submission.review_status === MccOnboardingReviewStatus.approved) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Cannot reject an already approved submission.',
+      });
+    }
+
+    const updated = await this.prisma.mccOnboardingSubmission.update({
+      where: { id: submissionId },
+      data: {
+        review_status: MccOnboardingReviewStatus.rejected,
+        review_notes: notes,
+        reviewed_at: new Date(),
+        reviewed_by_user_id: user.id,
+      },
+    });
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Submission rejected.',
+      data: updated,
+    };
+  }
+
+  async needsChangesMccOnboardingSubmission(user: User, accountId: string, submissionId: string, notes: string) {
+    await this.checkAdminPermission(user, accountId);
+
+    const submission = await this.prisma.mccOnboardingSubmission.findUnique({ where: { id: submissionId } });
+    if (!submission) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Onboarding submission not found.',
+      });
+    }
+    if (submission.review_status === MccOnboardingReviewStatus.approved) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Cannot request changes on an already approved submission.',
+      });
+    }
+
+    const updated = await this.prisma.mccOnboardingSubmission.update({
+      where: { id: submissionId },
+      data: {
+        review_status: MccOnboardingReviewStatus.needs_changes,
+        review_notes: notes,
+        reviewed_at: new Date(),
+        reviewed_by_user_id: user.id,
+      },
+    });
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Submission marked as needs changes.',
+      data: updated,
     };
   }
 }

@@ -122,6 +122,48 @@ export default function UserDetailsPage() {
               </div>
             </div>
 
+            {user.mcc_onboarding && (
+              <div className="bg-white border border-gray-200 rounded-sm p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">MCC onboarding (linked)</h2>
+                <p className="text-sm text-gray-600 mb-3">
+                  Data from the public onboarding wizard for this user&apos;s approved submission.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-gray-500">Business</span>
+                    <div className="font-medium">{user.mcc_onboarding.business_name}</div>
+                    {user.mcc_onboarding.common_name && (
+                      <div className="text-gray-600 text-xs">{user.mcc_onboarding.common_name}</div>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Submission</span>
+                    <div className="font-mono text-xs">{user.mcc_onboarding.submission_code}</div>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Manager</span>
+                    <div>
+                      {user.mcc_onboarding.manager_first_name} {user.mcc_onboarding.manager_last_name}
+                    </div>
+                    <div className="font-mono text-xs">{user.mcc_onboarding.manager_phone}</div>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Review / wizard</span>
+                    <div>
+                      {user.mcc_onboarding.review_status} · {user.mcc_onboarding.final_decision} (
+                      {user.mcc_onboarding.pass_count})
+                    </div>
+                  </div>
+                </div>
+                <Link
+                  href={`/admin/onboarding/${user.mcc_onboarding.id}`}
+                  className="inline-block mt-4 text-sm text-primary font-medium hover:underline"
+                >
+                  Open full submission
+                </Link>
+              </div>
+            )}
+
             <div className="bg-white border border-gray-200 rounded-sm p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Account Settings</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

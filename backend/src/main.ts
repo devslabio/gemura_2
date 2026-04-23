@@ -69,8 +69,10 @@ async function bootstrap() {
       'http://localhost:3101',
       'http://localhost:3005',  // Gemura Web local
       'http://localhost:3006',  // Orora Web local
+      'http://localhost:3015',  // Gemura Admin Web local
       'http://127.0.0.1:3005',
       'http://127.0.0.1:3006',
+      'http://127.0.0.1:3015',
       'http://209.74.80.195:3006',  // Gemura UI on Kwezi
       'http://209.74.80.195:3011',  // Orora Web on Kwezi
       'https://app.gemura.rw',  // Gemura UI (Cloudflare)

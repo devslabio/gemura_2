@@ -19,6 +19,7 @@ import {
   isExternalSupplier,
   isExternalCustomer,
 } from '@/lib/config/nav.config';
+import { useFarmCapabilities } from '@/hooks/useFarmCapabilities';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -41,6 +42,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
   const pathname = usePathname();
   const { user, currentAccount } = useAuthStore();
   const { canManageUsers, isAdmin, hasPermission } = usePermission();
+  const caps = useFarmCapabilities();
   const [userName, setUserName] = useState('User');
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState('User');
@@ -66,13 +68,16 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     ) {
       return OPERATIONS_NAV_GROUPS.map((group) => ({
         groupLabel: group.groupLabel,
-        items: group.items.filter(
-          (item) => !item.requiresPermission || hasPermission(item.requiresPermission) || isAdmin()
-        ),
+        items: group.items.filter((item) => {
+          if (item.farmGate === 'milk' && !caps.milk) return false;
+          if (item.farmGate === 'poultry' && !caps.poultry) return false;
+          if (item.farmGate === 'pigs' && !caps.pigs) return false;
+          return !item.requiresPermission || hasPermission(item.requiresPermission) || isAdmin();
+        }),
       })).filter((g) => g.items.length > 0);
     }
     return null;
-  }, [role, accountType, hasPermission, isAdmin]);
+  }, [role, accountType, hasPermission, isAdmin, caps.milk, caps.poultry, caps.pigs]);
 
   const menuItems = useMemo<NavItem[]>(() => {
     if (menuGroups !== null) return [];

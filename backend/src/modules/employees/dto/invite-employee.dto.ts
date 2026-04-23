@@ -32,6 +32,16 @@ export class InviteEmployeeDto {
   role: string;
 
   @ApiProperty({
+    description: 'Permission group preset',
+    enum: ['general_access', 'limited_access', 'milk_receptionist_access'],
+    example: 'general_access',
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(['general_access', 'limited_access', 'milk_receptionist_access'], { message: 'Invalid access_group' })
+  access_group?: 'general_access' | 'limited_access' | 'milk_receptionist_access';
+
+  @ApiProperty({
     description: 'Permission codes (optional override)',
     example: ['view_sales', 'create_sales'],
     required: false,

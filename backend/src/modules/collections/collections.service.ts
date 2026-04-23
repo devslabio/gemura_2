@@ -207,7 +207,16 @@ export class CollectionsService {
   }
 
   async createCollection(user: User, createDto: CreateCollectionDto) {
-    const { supplier_account_code, quantity, status, collection_at, notes, payment_status, animal_id, milk_production_id } = createDto;
+    const { supplier_account_code, quantity, status, collection_at, notes, payment_status, animal_id, milk_production_id, rejection_reason } = createDto;
+
+    // Validate rejection_reason when status is rejected
+    if (status === 'rejected' && !rejection_reason) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Rejection reason is required when status is rejected',
+      });
+    }
 
     // Check if user has a valid default account
     if (!user.default_account_id) {
@@ -295,6 +304,14 @@ export class CollectionsService {
       const finalPaymentStatus = payment_status || 'unpaid';
       const paymentHistory = [];
 
+      // Build notes field: include rejection reason if present
+      let finalNotes = notes || '';
+      if (rejection_reason) {
+        finalNotes = finalNotes 
+          ? `[REJECTED_REASON: ${rejection_reason}]\n${finalNotes}`
+          : `[REJECTED_REASON: ${rejection_reason}]`;
+      }
+
       const milkSale = await this.prisma.milkSale.create({
         data: {
           supplier_account_id: supplierAccountId,
@@ -305,7 +322,7 @@ export class CollectionsService {
           unit_price: unitPrice,
           status: collectionStatus as any,
           sale_at: new Date(collection_at),
-          notes: notes || null,
+          notes: finalNotes || null,
           amount_paid: amountPaid,
           payment_status: finalPaymentStatus,
           payment_history: paymentHistory,
@@ -421,7 +438,7 @@ export class CollectionsService {
         code: 500,
         status: 'error',
         message: 'Failed to record milk collection.',
-        error: error.message,
+        error: (error as Error).message,
       });
     }
   }
@@ -1021,6 +1038,16 @@ export class CollectionsService {
             message: `Invalid status. Must be one of: ${validStatuses.join(', ')}`,
           });
         }
+        
+        // Validate rejection_reason when status is rejected
+        if (updateDto.status === 'rejected' && !updateDto.rejection_reason) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'Rejection reason is required when status is rejected',
+          });
+        }
+        
         updateData.status = updateDto.status as any;
       }
 
@@ -1028,8 +1055,19 @@ export class CollectionsService {
         updateData.sale_at = new Date(updateDto.collection_at);
       }
 
-      if (updateDto.notes !== undefined) {
-        updateData.notes = updateDto.notes;
+      // Handle notes: preserve rejection reason if updating rejection reason
+      if (updateDto.notes !== undefined || updateDto.rejection_reason !== undefined) {
+        let finalNotes = updateDto.notes !== undefined ? updateDto.notes : collection.notes;
+        
+        // If rejection_reason is provided, add/update it in notes
+        if (updateDto.rejection_reason) {
+          const notesWithoutReason = finalNotes 
+            ? finalNotes.replace(/^\[REJECTED_REASON: [^\]]*\]\n?/, '')
+            : '';
+          finalNotes = `[REJECTED_REASON: ${updateDto.rejection_reason}]${notesWithoutReason ? '\n' + notesWithoutReason : ''}`;
+        }
+        
+        updateData.notes = finalNotes || null;
       }
 
       if (updateDto.animal_id !== undefined) {
@@ -1096,7 +1134,7 @@ export class CollectionsService {
         code: 500,
         status: 'error',
         message: 'Failed to update collection.',
-        error: error.message || 'Unknown error occurred',
+        error: (error as Error).message || 'Unknown error occurred',
       });
     }
   }

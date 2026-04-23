@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from "axios";
 
-// If NEXT_PUBLIC_API_URL is not provided, default to same-origin API route.
-// On admin.gemura.rw, nginx should proxy `https://admin.gemura.rw/api/*` to the backend.
+// Same Nest backend and DB as Gemura Web; only the Next app host differs.
+// If NEXT_PUBLIC_API_URL is not set, default to same-origin `/api` (e.g. nginx proxies admin host to the API).
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 class ApiClient {
@@ -10,6 +10,9 @@ class ApiClient {
   constructor() {
     this.client = axios.create({
       baseURL: API_BASE_URL,
+      // Hard upper bound so a hung/unreachable API surfaces as an error
+      // instead of leaving the UI stuck on a skeleton loader.
+      timeout: 30000,
       headers: {
         "Content-Type": "application/json",
       },

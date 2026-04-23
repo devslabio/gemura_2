@@ -1,5 +1,5 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiUnauthorizedResponse } from '@nestjs/swagger';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiUnauthorizedResponse, ApiQuery } from '@nestjs/swagger';
 import { BreedsService } from './breeds.service';
 import { TokenGuard } from '../../common/guards/token.guard';
 
@@ -11,11 +11,15 @@ export class BreedsController {
   constructor(private readonly breedsService: BreedsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List breeds', description: 'List all predefined breeds for animal registration/editing.' })
-  @ApiResponse({ status: 200, description: 'List of breeds (id, name, code, description)' })
+  @ApiOperation({
+    summary: 'List breeds',
+    description: 'List predefined breeds for animal registration/editing. Pass species_id to limit to one species.',
+  })
+  @ApiQuery({ name: 'species_id', required: false, description: 'Filter breeds by species UUID' })
+  @ApiResponse({ status: 200, description: 'List of breeds (includes species_id and nested species)' })
   @ApiUnauthorizedResponse({ description: 'Unauthorized' })
-  async findAll() {
-    const data = await this.breedsService.findAll();
+  async findAll(@Query('species_id') speciesId?: string) {
+    const data = await this.breedsService.findAll(speciesId);
     return { code: 200, status: 'success', message: 'Breeds retrieved', data };
   }
 }

@@ -123,6 +123,10 @@ export class AuthService {
 
     const profileCompletion = Math.round((completedFields / profileFields.length) * 100);
 
+    // Team members invited via employees flow may not have a token set yet.
+    // Ensure a token exists so frontend auth state can be established.
+    const authToken = user.token || `token_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
     // Update last login
     await this.prisma.user.update({
       where: { id: user.id },
@@ -130,6 +134,7 @@ export class AuthService {
         last_login: new Date(),
         last_login_ip: ipAddress,
         last_login_device: userAgent,
+        token: authToken,
       },
     });
 
@@ -146,7 +151,7 @@ export class AuthService {
           phone: user.phone,
           account_type: user.account_type,
           status: user.status,
-          token: user.token,
+          token: authToken,
         },
         account: defaultAccountData,
         accounts,

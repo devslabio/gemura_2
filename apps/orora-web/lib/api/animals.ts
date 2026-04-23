@@ -27,6 +27,8 @@ export interface Animal {
   farm_id: string | null;
   tag_number: string;
   name: string | null;
+  species_id?: string;
+  species?: { id: string; code: string; name: string } | null;
   /** Breed relation from API; use breed?.name for display */
   breed?: { id: string; name: string; code: string | null } | null;
   gender: AnimalGender;
@@ -83,6 +85,8 @@ export interface AnimalHealth {
 export interface CreateAnimalData {
   tag_number: string;
   name?: string;
+  /** Must match breed’s species when set; usually set together with species picker */
+  species_id?: string;
   breed_id: string;
   gender: AnimalGender;
   date_of_birth: string;
@@ -100,6 +104,7 @@ export interface CreateAnimalData {
 export interface UpdateAnimalData {
   tag_number?: string;
   name?: string;
+  species_id?: string;
   breed_id?: string;
   gender?: AnimalGender;
   date_of_birth?: string;
@@ -205,12 +210,20 @@ export interface ApiResponse<T> {
 
 const params = (
   accountId?: string,
-  filters?: { status?: string; breed_id?: string; gender?: string; search?: string; farm_id?: string },
+  filters?: {
+    status?: string;
+    breed_id?: string;
+    species_id?: string;
+    gender?: string;
+    search?: string;
+    farm_id?: string;
+  },
 ) => {
   const p: Record<string, string> = {};
   if (accountId) p.account_id = accountId;
   if (filters?.status) p.status = filters.status;
   if (filters?.breed_id) p.breed_id = filters.breed_id;
+  if (filters?.species_id) p.species_id = filters.species_id;
   if (filters?.gender) p.gender = filters.gender;
   if (filters?.search) p.search = filters.search;
   if (filters?.farm_id) p.farm_id = filters.farm_id;
@@ -220,7 +233,14 @@ const params = (
 export const animalsApi = {
   getList: (
     accountId?: string,
-    filters?: { status?: string; breed_id?: string; gender?: string; search?: string; farm_id?: string },
+    filters?: {
+      status?: string;
+      breed_id?: string;
+      species_id?: string;
+      gender?: string;
+      search?: string;
+      farm_id?: string;
+    },
   ) =>
     apiClient.get<ApiResponse<Animal[]>>('/animals', { params: params(accountId, filters) }),
 
