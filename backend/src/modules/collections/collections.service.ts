@@ -206,8 +206,37 @@ export class CollectionsService {
     });
   }
 
+  private formatMetadataLine(key: string, value: string | number) {
+    return `[${key}: ${String(value)}]`;
+  }
+
+  private getMetadataValue(notes: string | null | undefined, key: string): string | null {
+    if (!notes) return null;
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = notes.match(new RegExp(`\\[${escapedKey}:\\s*([^\\]]+)\\]`, 'i'));
+    return match?.[1]?.trim() || null;
+  }
+
+  private getCollectionShift(notes: string | null | undefined): 'morning' | 'evening' {
+    const shift = this.getMetadataValue(notes, 'COLLECTION_SHIFT')?.toLowerCase();
+    return shift === 'evening' ? 'evening' : 'morning';
+  }
+
   async createCollection(user: User, createDto: CreateCollectionDto) {
-    const { supplier_account_code, quantity, status, collection_at, notes, payment_status, animal_id, milk_production_id, rejection_reason } = createDto;
+    const {
+      supplier_account_code,
+      quantity,
+      status,
+      collection_at,
+      notes,
+      payment_status,
+      animal_id,
+      milk_production_id,
+      rejection_reason,
+      collection_shift,
+    } = createDto;
+
+    const collectionShift = collection_shift || 'morning';
 
     // Validate rejection_reason when status is rejected
     if (status === 'rejected' && !rejection_reason) {
@@ -304,13 +333,15 @@ export class CollectionsService {
       const finalPaymentStatus = payment_status || 'unpaid';
       const paymentHistory = [];
 
-      // Build notes field: include rejection reason if present
-      let finalNotes = notes || '';
+      // Build notes field: embed delivery metadata for payroll-level deductions/source tracing.
+      const metadataLines = [
+        this.formatMetadataLine('COLLECTION_SHIFT', collectionShift),
+      ];
       if (rejection_reason) {
-        finalNotes = finalNotes 
-          ? `[REJECTED_REASON: ${rejection_reason}]\n${finalNotes}`
-          : `[REJECTED_REASON: ${rejection_reason}]`;
+        metadataLines.unshift(this.formatMetadataLine('REJECTED_REASON', rejection_reason));
       }
+      const metadataBlock = metadataLines.join('\n');
+      const finalNotes = notes ? `${metadataBlock}\n${notes}` : metadataBlock;
 
       const milkSale = await this.prisma.milkSale.create({
         data: {
@@ -433,6 +464,7 @@ export class CollectionsService {
           total_amount: totalAmount,
           status: status || 'accepted',
           collection_at: collection_at,
+          collection_shift: collectionShift,
           amount_paid: amountPaid,
           payment_status: finalPaymentStatus,
         },
@@ -852,6 +884,7 @@ export class CollectionsService {
       status: collection.status,
       sale_at: collection.sale_at,
       collection_at: collection.sale_at,
+      collection_shift: this.getCollectionShift(collection.notes),
       notes: collection.notes,
       created_at: collection.created_at,
       updated_at: collection.updated_at,
@@ -954,6 +987,7 @@ export class CollectionsService {
         total_amount: Number(collection.quantity) * Number(collection.unit_price),
         status: collection.status,
         collection_at: collection.sale_at,
+        collection_shift: this.getCollectionShift(collection.notes),
         notes: collection.notes,
         created_at: collection.created_at,
         updated_at: collection.updated_at,
@@ -1121,6 +1155,7 @@ export class CollectionsService {
           total_amount: Number(updatedCollection.quantity) * Number(updatedCollection.unit_price),
           status: updatedCollection.status,
           collection_at: updatedCollection.sale_at,
+          collection_shift: this.getCollectionShift(updatedCollection.notes),
           notes: updatedCollection.notes,
         },
       };
