@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsObject, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsObject, IsOptional, IsString, IsUrl, Matches, MaxLength } from 'class-validator';
 
 export class SubmitMccOnboardingDto {
   @ApiProperty({ example: '2026-04-20T11:00:00.000Z' })
@@ -19,6 +19,12 @@ export class SubmitMccOnboardingDto {
   @MaxLength(255)
   commonName?: string;
 
+  @ApiPropertyOptional({ example: 'mcc@example.com' })
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(255)
+  businessEmail?: string;
+
   @ApiProperty({ example: 'Jean' })
   @IsString()
   @IsNotEmpty()
@@ -31,9 +37,10 @@ export class SubmitMccOnboardingDto {
   @MaxLength(120)
   managerLastName: string;
 
-  @ApiProperty({ example: '+250788123456' })
+  @ApiProperty({ example: '0788123456' })
   @IsString()
   @IsNotEmpty()
+  @Matches(/^\d{10}$/, { message: 'managerPhone must be exactly 10 digits' })
   @MaxLength(50)
   managerPhone: string;
 
