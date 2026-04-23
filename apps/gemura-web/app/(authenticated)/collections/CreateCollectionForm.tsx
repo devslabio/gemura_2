@@ -26,6 +26,7 @@ export default function CreateCollectionForm({ onSuccess, onCancel }: CreateColl
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [rejectionReasons, setRejectionReasons] = useState<RejectionReason[]>([]);
   const [formData, setFormData] = useState<CreateCollectionData & { unit_price: number }>({
+    collection_shift: 'morning',
     supplier_account_code: '',
     quantity: 0,
     unit_price: 0,
@@ -86,6 +87,7 @@ export default function CreateCollectionForm({ onSuccess, onCancel }: CreateColl
     try {
       const collectionDate = formData.collection_at.replace('T', ' ').slice(0, 19);
       const finalData: CreateCollectionData = {
+        collection_shift: formData.collection_shift,
         supplier_account_code: formData.supplier_account_code,
         quantity: formData.quantity,
         status: formData.status as any,
@@ -112,6 +114,13 @@ export default function CreateCollectionForm({ onSuccess, onCancel }: CreateColl
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && <div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-600">{error}</div>}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label htmlFor="coll-shift" className="block text-sm font-medium text-gray-700 mb-1">Milk Brought Time</label>
+          <select id="coll-shift" name="collection_shift" value={formData.collection_shift} onChange={handleChange} className="input w-full" disabled={loading}>
+            <option value="morning">Morning</option>
+            <option value="evening">Evening</option>
+          </select>
+        </div>
         <div className="sm:col-span-2">
           <label htmlFor="coll-supplier" className="block text-sm font-medium text-gray-700 mb-1">Supplier <span className="text-red-500">*</span></label>
           {loadingSuppliers ? (
