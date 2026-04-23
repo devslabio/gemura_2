@@ -408,7 +408,11 @@ export class CollectionsService {
               statusEmoji = '📝';
           }
           
-          const message = `${statusEmoji} Muraho ${supplierUserAccount.user.name || 'muhinzi'}, amata yanyu ${formattedQuantity}L mwagemuye kuri ${unitPrice} RWF/L kuwa ${formattedDateTime} ${statusText}. Igiciro: ${totalAmount} RWF. Murakoze.`;
+          const rejectionReasonText =
+            status === 'rejected' && rejection_reason
+              ? ` Impamvu yo kutemerwa: ${rejection_reason}.`
+              : '';
+          const message = `${statusEmoji} Muraho ${supplierUserAccount.user.name || 'muhinzi'}, amata yanyu ${formattedQuantity}L mwagemuye kuri ${unitPrice} RWF/L kuwa ${formattedDateTime} ${statusText}.${rejectionReasonText} Igiciro: ${totalAmount} RWF. Murakoze.`;
           await this.smsService.sendSMS(supplierPhone, message);
         }
       } catch (smsError) {
