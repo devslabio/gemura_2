@@ -255,6 +255,14 @@ type CompletionCheck = {
 };
 
 const ONBOARDING_DRAFT_KEY = 'gemura-web-onboarding-draft-v1';
+const TEN_DIGIT_PHONE_REGEX = /^\d{10}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LOCATION_TYPE_ALIASES: Record<string, string[]> = {
+  DISTRICT: ['DISTRICT', 'DISTRICTS'],
+  SECTOR: ['SECTOR', 'SECTORS'],
+  CELL: ['CELL', 'CELLS'],
+  VILLAGE: ['VILLAGE', 'VILLAGES'],
+};
 
 function buildSectorOptions(district: string): string[] {
   if (!district) return [];
@@ -286,6 +294,7 @@ export default function BusinessOnboardingPage() {
 
   const [businessName, setBusinessName] = useState('');
   const [commonName, setCommonName] = useState('');
+  const [businessEmail, setBusinessEmail] = useState('');
   const [managerFirstName, setManagerFirstName] = useState('');
   const [managerLastName, setManagerLastName] = useState('');
   const [managerPhone, setManagerPhone] = useState('');
@@ -391,7 +400,7 @@ export default function BusinessOnboardingPage() {
       section1VillageId &&
       managerFirstName.trim().length > 0 &&
       managerLastName.trim().length > 0 &&
-      managerPhone.trim().length > 0 &&
+      TEN_DIGIT_PHONE_REGEX.test(managerPhone.trim()) &&
       managerIdNumber.trim().length > 0,
   );
   const hasLocation = Boolean(province && district && sector && cell && village);
@@ -485,6 +494,7 @@ export default function BusinessOnboardingPage() {
 
       if (typeof draft.businessName === 'string') setBusinessName(draft.businessName);
       if (typeof draft.commonName === 'string') setCommonName(draft.commonName);
+      if (typeof draft.businessEmail === 'string') setBusinessEmail(draft.businessEmail);
       if (typeof draft.managerFirstName === 'string') setManagerFirstName(draft.managerFirstName);
       if (typeof draft.managerLastName === 'string') setManagerLastName(draft.managerLastName);
       if (typeof draft.managerPhone === 'string') setManagerPhone(draft.managerPhone);
@@ -585,38 +595,62 @@ export default function BusinessOnboardingPage() {
   }, []);
 
   const loadSection1Children = async (parentId: string, expectedType?: string): Promise<LocationOption[] | null> => {
-    try {
-      let url = `${section1ApiBaseUrl}/public/locations?parent_id=${encodeURIComponent(parentId)}`;
-      if (expectedType) {
+    const normalizeLocationType = (value?: string | null) => value?.trim().toUpperCase().replace(/[\s-]+/g, '_') || '';
+    const allowedTypes = expectedType ? LOCATION_TYPE_ALIASES[expectedType] || [expectedType] : [];
+    const toOptions = (nodes: LocationNode[]) => {
+      const seenIds = new Set<string>();
+      return (nodes || [])
+        .filter((node) => {
+          if (!node?.id || !node?.name) return false;
+          const nodeParent = node.parent_id ? String(node.parent_id) : '';
+          const parentMatches = !nodeParent || nodeParent === parentId;
+          if (!parentMatches) return false;
+          if (!expectedType) return true;
+          const nodeType = normalizeLocationType(node.location_type);
+          return allowedTypes.some((allowedType) => normalizeLocationType(allowedType) === nodeType);
+        })
+        .filter((node) => {
+          const key = String(node.id);
+          if (seenIds.has(key)) return false;
+          seenIds.add(key);
+          return true;
+        })
+        .map((node) => ({ id: String(node.id), label: String(node.name) }));
+    };
+
+    const fetchChildren = async (useProtected: boolean, withTypeFilter: boolean): Promise<LocationOption[] | null> => {
+      let url = `${section1ApiBaseUrl}/${useProtected ? 'locations' : 'public/locations'}?parent_id=${encodeURIComponent(parentId)}`;
+      if (withTypeFilter && expectedType) {
         url += `&location_type=${encodeURIComponent(expectedType)}`;
       }
+      const token = typeof window !== 'undefined' ? localStorage.getItem('gemura-auth-token') : null;
+      const response = await fetch(url, {
+        headers: useProtected && token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) return null;
+      const payload = (await response.json()) as LocationsResponse;
+      const options = toOptions(payload.data || []);
+      return options.length > 0 ? options : null;
+    };
 
-      const response = await fetch(url);
+    try {
+      const attempts: Array<[boolean, boolean]> = [
+        [false, true],  // public + expected type
+        [false, false], // public + no type filter
+        [true, true],   // protected + expected type
+        [true, false],  // protected + no type filter
+      ];
 
-      if (!response.ok) {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('gemura-auth-token') : null;
-        let protectedUrl = `${section1ApiBaseUrl}/locations?parent_id=${encodeURIComponent(parentId)}`;
-        if (expectedType) {
-          protectedUrl += `&location_type=${encodeURIComponent(expectedType)}`;
+      for (const [useProtected, withTypeFilter] of attempts) {
+        const options = await fetchChildren(useProtected, withTypeFilter);
+        if (options && options.length > 0) {
+          setSection1LocationSource('api');
+          setLocationError('');
+          return options;
         }
-        const protectedResponse = await fetch(protectedUrl, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        if (!protectedResponse.ok) {
-          throw new Error('Unable to load child locations');
-        }
-        const protectedPayload = (await protectedResponse.json()) as LocationsResponse;
-        const options = (protectedPayload.data || []).map((item) => ({ id: item.id, label: item.name }));
-        setSection1LocationSource('api');
-        setLocationError('');
-        return options.length > 0 ? options : null;
       }
 
-      const payload = (await response.json()) as LocationsResponse;
-      const options = (payload.data || []).map((item) => ({ id: item.id, label: item.name }));
-      setSection1LocationSource('api');
-      setLocationError('');
-      return options.length > 0 ? options : null;
+      return null;
     } catch {
       return null;
     }
@@ -647,7 +681,7 @@ export default function BusinessOnboardingPage() {
       return;
     }
 
-    const options = await loadSection1Children(provinceId);
+    const options = await loadSection1Children(provinceId, 'DISTRICT');
     if (selectedProvinceRef.current !== provinceId) return;
     if (options) {
       setSection1DistrictOptions(options);
@@ -929,6 +963,7 @@ export default function BusinessOnboardingPage() {
       capacityPage,
       businessName,
       commonName,
+      businessEmail,
       managerFirstName,
       managerLastName,
       managerPhone,
@@ -1003,6 +1038,8 @@ export default function BusinessOnboardingPage() {
     localStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(draftPayload));
   });
 
+  const isNumericValue = (value: string) => /^[0-9]+(\.[0-9]+)?$/.test(value.trim());
+
   const validateSubmission = (): SubmissionValidationResult => {
     const missing: string[] = [];
     const addMissing = (label: string, condition: boolean) => {
@@ -1019,50 +1056,51 @@ export default function BusinessOnboardingPage() {
     addMissing('Village', section1VillageId.trim().length > 0);
     addMissing('Manager first name', managerFirstName.trim().length > 0);
     addMissing('Manager last name', managerLastName.trim().length > 0);
-    addMissing('Manager phone', managerPhone.trim().length > 0);
+    addMissing('Manager phone (10 digits)', TEN_DIGIT_PHONE_REGEX.test(managerPhone.trim()));
+    addMissing('Business email format', businessEmail.trim().length === 0 || EMAIL_REGEX.test(businessEmail.trim()));
     addMissing('Manager national ID', managerIdNumber.trim().length > 0);
     addMissing('Ownership structure', ownershipStructure.trim().length > 0);
     addMissing('MCC operational status', operationalStatus.trim().length > 0);
-    addMissing('Current daily milk volume', dailyMilkVolume.trim().length > 0);
-    addMissing('Maximum milk in one day', maxMilkInOneDay.trim().length > 0);
+    addMissing('Current daily milk volume (number only)', isNumericValue(dailyMilkVolume));
+    addMissing('Maximum milk in one day (number only)', isNumericValue(maxMilkInOneDay));
     addMissing('Tank capacity sufficiency', tankCapacitySufficiency.trim().length > 0);
     addMissing('Power supply selection', powerSupplySelections.length > 0);
-    addMissing('Generator capacity', generatorCapacityKva.trim().length > 0);
+    addMissing('Generator capacity (number only)', isNumericValue(generatorCapacityKva));
     addMissing('Mobile network connectivity', mobileConnectivity.trim().length > 0);
-    addMissing('Total farmers supplying', totalFarmersSupplying.trim().length > 0);
-    addMissing('Milk transporters count', milkTransportersCount.trim().length > 0);
-    addMissing('Average distance from farms', averageDistanceKm.trim().length > 0);
-    addMissing('Furthest farm distance', furthestFarmKm.trim().length > 0);
+    addMissing('Total farmers supplying (number only)', isNumericValue(totalFarmersSupplying));
+    addMissing('Milk transporters count (number only)', isNumericValue(milkTransportersCount));
+    addMissing('Average distance from farms (number only)', isNumericValue(averageDistanceKm));
+    addMissing('Furthest farm distance (number only)', isNumericValue(furthestFarmKm));
     addMissing('Evening milk pattern', eveningMilkPattern.trim().length > 0);
     addMissing('Own milk transport type', ownMilkTransportType.trim().length > 0);
     addMissing('Testing equipment', testingEquipmentSelections.length > 0);
     addMissing('Quality tests', qualityTestsSelections.length > 0);
-    addMissing('Average rejected per day', averageRejectedPerDayLitres.trim().length > 0);
-    addMissing('Rejection rate percent', rejectionRatePercent.trim().length > 0);
+    addMissing('Average rejected per day (number only)', isNumericValue(averageRejectedPerDayLitres));
+    addMissing('Rejection rate percent (number only)', isNumericValue(rejectionRatePercent));
     addMissing('Rejection rankings', Object.keys(rejectionRankings).length >= 3);
     addMissing('Corrective actions planned', correctiveActionsPlanned.trim().length > 0);
-    addMissing('Staff total including manager', staffTotalIncludingManager.trim().length > 0);
-    addMissing('Staff women count', staffWomenCount.trim().length > 0);
-    addMissing('Staff aged 18-35', staffAged1835.trim().length > 0);
-    addMissing('Staff women 18-35', staffWomen1835.trim().length > 0);
-    addMissing('Staff with disability', staffWithDisability.trim().length > 0);
+    addMissing('Staff total including manager (number only)', isNumericValue(staffTotalIncludingManager));
+    addMissing('Staff women count (number only)', isNumericValue(staffWomenCount));
+    addMissing('Staff aged 18-35 (number only)', isNumericValue(staffAged1835));
+    addMissing('Staff women 18-35 (number only)', isNumericValue(staffWomen1835));
+    addMissing('Staff with disability (number only)', isNumericValue(staffWithDisability));
     addMissing('Digital devices access', digitalDeviceAccess.length > 0);
     addMissing('Record system', recordSystem.trim().length > 0);
     addMissing('Staff training status', staffTrainingStatus.trim().length > 0);
     addMissing('Employment contracts status', employmentContractsStatus.trim().length > 0);
     addMissing('Farmer payment methods', farmerPaymentMethods.length > 0);
-    addMissing('Average days from delivery to payment', avgDaysDeliveryToPayment.trim().length > 0);
+    addMissing('Average days from delivery to payment (number only)', isNumericValue(avgDaysDeliveryToPayment));
     addMissing('Digital ledger willingness', digitalLedgerWillingness.trim().length > 0);
     addMissing('Milk sales destinations', milkSalesDestinations.length > 0);
     addMissing('Main buyer name', mainBuyerName.trim().length > 0);
     addMissing('Formal supply agreement details', formalSupplyAgreementDetails.trim().length > 0);
-    addMissing('Average annual revenue from milk sales', averageAnnualRevenueRwf.trim().length > 0);
+    addMissing('Average annual revenue from milk sales (number only)', isNumericValue(averageAnnualRevenueRwf));
 
     if (isCooperativeMcc) {
-      addMissing('Cooperative total members / shareholders', coopMembersTotal.trim().length > 0);
-      addMissing('Cooperative women members / shareholders', coopMembersWomen.trim().length > 0);
-      addMissing('Cooperative members aged 18-35', coopMembersAged1835.trim().length > 0);
-      addMissing('Cooperative women members aged 18-35', coopMembersWomen1835.trim().length > 0);
+      addMissing('Cooperative total members / shareholders (number only)', isNumericValue(coopMembersTotal));
+      addMissing('Cooperative women members / shareholders (number only)', isNumericValue(coopMembersWomen));
+      addMissing('Cooperative members aged 18-35 (number only)', isNumericValue(coopMembersAged1835));
+      addMissing('Cooperative women members aged 18-35 (number only)', isNumericValue(coopMembersWomen1835));
     }
 
     const hasAtLeastOneCoolingTank = coolingTanks.some((tank) => Number(tank.capacityLitres) > 0 && tank.condition.trim().length > 0);
@@ -1151,6 +1189,7 @@ export default function BusinessOnboardingPage() {
       ['Generated At', new Date().toISOString()],
       ['MCC Official Name', businessName],
       ['MCC Common Name', commonName],
+      ['MCC Email', businessEmail],
       ['Manager First Name', managerFirstName],
       ['Manager Last Name', managerLastName],
       ['Manager Phone', managerPhone],
@@ -1236,6 +1275,7 @@ export default function BusinessOnboardingPage() {
     submittedAt: new Date().toISOString(),
     businessName,
     commonName,
+    businessEmail,
     managerFirstName,
     managerLastName,
     managerPhone,
@@ -1554,6 +1594,20 @@ export default function BusinessOnboardingPage() {
                         </div>
 
                         <div>
+                          <label htmlFor="business-email" className="block text-sm font-medium text-gray-700 mb-2">
+                            Email
+                          </label>
+                          <input
+                            id="business-email"
+                            type="email"
+                            className="input w-full py-3 text-base"
+                            placeholder="e.g. mcc@example.com"
+                            value={businessEmail}
+                            onChange={(e) => setBusinessEmail(e.target.value)}
+                          />
+                        </div>
+
+                        <div>
                           <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-700">B2. MCC location</h3>
                           <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div>
@@ -1701,7 +1755,17 @@ export default function BusinessOnboardingPage() {
                             </div>
                             <div>
                               <label htmlFor="manager-phone" className="block text-sm font-medium text-gray-700 mb-2">Phone <span className="text-red-500">*</span></label>
-                              <input id="manager-phone" type="tel" className="input w-full py-3 text-base" value={managerPhone} onChange={(e) => setManagerPhone(e.target.value)} />
+                              <input
+                                id="manager-phone"
+                                type="tel"
+                                className="input w-full py-3 text-base"
+                                value={managerPhone}
+                                inputMode="numeric"
+                                maxLength={10}
+                                placeholder="10-digit phone number"
+                                onChange={(e) => setManagerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                              />
+                              <p className="mt-1 text-xs text-gray-500">Enter exactly 10 digits.</p>
                             </div>
                             <div className="md:col-span-2">
                               <label htmlFor="manager-id" className="block text-sm font-medium text-gray-700 mb-2">National ID number <span className="text-red-500">*</span></label>

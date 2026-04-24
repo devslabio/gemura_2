@@ -90,6 +90,11 @@ export default function CollectionsPage() {
     return code || '—';
   };
 
+  const formatCollectionShift = (shift?: 'morning' | 'evening') => {
+    if (shift === 'evening') return 'Evening';
+    return 'Morning';
+  };
+
   const columns: TableColumn<Collection>[] = [
     {
       key: 'collection_at',
@@ -106,6 +111,14 @@ export default function CollectionsPage() {
           <div className="font-medium text-gray-900">{supplierDisplayName(row)}</div>
           <div className="text-xs text-gray-500">{row.supplier_account?.code ?? '—'}</div>
         </div>
+      ),
+    },
+    {
+      key: 'collection_shift',
+      label: 'Shift',
+      sortable: true,
+      render: (value) => (
+        <span className="text-sm text-gray-700">{formatCollectionShift(value as 'morning' | 'evening' | undefined)}</span>
       ),
     },
     {
@@ -282,6 +295,7 @@ export default function CollectionsPage() {
           exportColumns={[
             { key: 'collection_at', label: 'Date', getValue: (r) => new Date(r.collection_at).toLocaleString() },
             { key: 'supplier_account', label: 'Supplier', getValue: (r) => supplierDisplayName(r) },
+            { key: 'collection_shift', label: 'Shift', getValue: (r) => formatCollectionShift(r.collection_shift) },
             { key: 'quantity', label: 'Quantity (L)', getValue: (r) => String(Number(r.quantity).toFixed(2)) },
             { key: 'unit_price', label: 'Unit Price', getValue: (r) => String(r.unit_price ?? '') },
             { key: 'total_amount', label: 'Total', getValue: (r) => String(r.total_amount ?? '') },

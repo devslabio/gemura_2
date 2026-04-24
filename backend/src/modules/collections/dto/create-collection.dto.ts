@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsNumber, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsString, IsNumber, IsOptional, IsIn } from 'class-validator';
 import { IsNotFutureDate } from '../../../common/validators/not-future-date.validator';
 
 export class CreateCollectionDto {
@@ -42,6 +42,17 @@ export class CreateCollectionDto {
   @IsString({ message: 'Collection date/time must be a string' })
   @IsNotFutureDate({ message: 'Collection date must not be in the future' })
   collection_at: string;
+
+  @ApiProperty({
+    description: 'Collection shift indicating when milk was delivered',
+    example: 'morning',
+    enum: ['morning', 'evening'],
+    required: false,
+    default: 'morning',
+  })
+  @IsOptional()
+  @IsIn(['morning', 'evening'], { message: 'collection_shift must be either morning or evening' })
+  collection_shift?: 'morning' | 'evening';
 
   @ApiProperty({
     description: 'Additional notes about the collection (optional)',

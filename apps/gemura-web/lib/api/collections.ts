@@ -7,6 +7,7 @@ export interface Collection {
   total_amount: number;
   status: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'deleted';
   collection_at: string;
+  collection_shift?: 'morning' | 'evening';
   notes?: string;
   created_at: string;
   updated_at?: string;
@@ -44,6 +45,7 @@ export interface CollectionsFilters {
 
 export interface CreateCollectionData {
   supplier_account_code: string;
+  collection_shift?: 'morning' | 'evening';
   quantity: number;
   status?: 'pending' | 'accepted' | 'rejected' | 'cancelled';
   collection_at: string;
