@@ -597,7 +597,7 @@ export default function BusinessOnboardingPage() {
   const loadSection1Children = async (parentId: string, expectedType?: string): Promise<LocationOption[] | null> => {
     const normalizeLocationType = (value?: string | null) => value?.trim().toUpperCase().replace(/[\s-]+/g, '_') || '';
     const allowedTypes = expectedType ? LOCATION_TYPE_ALIASES[expectedType] || [expectedType] : [];
-    const toOptions = (nodes: LocationNode[]) => {
+    const toOptions = (nodes: LocationNode[], strictType: boolean) => {
       const seenIds = new Set<string>();
       return (nodes || [])
         .filter((node) => {
@@ -605,7 +605,7 @@ export default function BusinessOnboardingPage() {
           const nodeParent = node.parent_id ? String(node.parent_id) : '';
           const parentMatches = !nodeParent || nodeParent === parentId;
           if (!parentMatches) return false;
-          if (!expectedType) return true;
+          if (!expectedType || !strictType) return true;
           const nodeType = normalizeLocationType(node.location_type);
           return allowedTypes.some((allowedType) => normalizeLocationType(allowedType) === nodeType);
         })
@@ -629,7 +629,7 @@ export default function BusinessOnboardingPage() {
       });
       if (!response.ok) return null;
       const payload = (await response.json()) as LocationsResponse;
-      const options = toOptions(payload.data || []);
+      const options = toOptions(payload.data || [], withTypeFilter);
       return options.length > 0 ? options : null;
     };
 
