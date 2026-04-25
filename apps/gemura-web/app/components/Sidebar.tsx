@@ -41,8 +41,9 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
   // Collapsible sections: set of parent hrefs that are expanded (only when they have children)
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
 
-  const role = currentAccount?.role ?? '';
+  const role = (currentAccount?.role ?? '').toLowerCase();
   const accountType = currentAccount?.account_type ?? '';
+  const isVeterinaryRole = ['veterinary', 'veterinarian', 'veternary', 'agent'].includes(role);
 
   useEffect(() => {
     if (user) {
@@ -56,18 +57,20 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
   // Admin portal is shown based on role/permissions (manage_users + dashboard.view), matching backend.
   const menuItems = useMemo(() => {
     const items: NavItem[] = [];
-    const preferOperationsSidebar = FORCE_OPERATIONS_DASHBOARD && isBusinessAccount(accountType);
 
-    const showAdminDashboard = canViewDashboard() || isAdmin();
-    const showAdminUsers = canManageUsers() || isAdmin();
+    const showAdminDashboard = isAdmin();
+    const showAdminUsers = isAdmin();
+    // Owner/admin on a farm/business account use the operations app; do not trap them in admin-portal-only nav.
+    const useOperationsNavForAdminRole =
+      isBusinessAccount(accountType) && isAdminRole(role);
 
-    if (!preferOperationsSidebar && (showAdminDashboard || showAdminUsers)) {
+    if (isAdminRole(role) && (showAdminDashboard || showAdminUsers) && !useOperationsNavForAdminRole) {
       ADMIN_NAV_ITEMS.forEach((item) => {
         if (item.href === '/admin/dashboard') {
           if (!showAdminDashboard) return;
         }
 
-        if (item.href === '/admin/users') {
+        if (item.href === '/admin/users' || item.href === '/admin/roles' || item.href === '/admin/permissions') {
           if (!showAdminUsers) return;
         }
 
@@ -83,6 +86,10 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
       OPERATIONS_NAV_ITEMS.forEach((item) => {
         if (item.href === '/settings' && (role === 'collector' || role === 'agent' || role === 'accountant')) return;
         if (item.href === '/accounts' && role === 'accountant') return;
+        if (item.href === '/dashboard' && isVeterinaryRole) {
+          items.push(item);
+          return;
+        }
         if (item.requiresPermission && !hasPermission(item.requiresPermission)) return;
         items.push(item);
       });

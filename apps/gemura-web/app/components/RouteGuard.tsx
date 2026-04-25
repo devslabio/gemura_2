@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
 import {
   isBusinessAccount,
+  isAdminRole,
   isExternalSupplier,
   isExternalCustomer,
 } from '@/lib/config/nav.config';
@@ -41,7 +42,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
   const accountType = currentAccount?.account_type ?? '';
   const role = (currentAccount?.role ?? '').toLowerCase();
   const accountId = currentAccount?.account_id ?? '';
-  const deniedRedirect = role === 'collector' || role === 'agent' ? '/collections' : '/dashboard';
+  const isVeterinaryRole = ['veterinary', 'veterinarian', 'veternary', 'agent'].includes(role);
 
   const pathKey = useMemo(
     () => Object.keys(OPERATIONS_PATH_PERMISSION).find((p) => pathname === p || pathname.startsWith(p + '/')),
@@ -74,7 +75,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     }
 
     if ((pathname === '/settings' || pathname.startsWith('/settings/')) && (role === 'collector' || role === 'agent' || role === 'accountant')) {
-      router.replace(deniedRedirect);
+      router.replace('/dashboard');
       return;
     }
 
@@ -83,8 +84,14 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
       return;
     }
 
+    // Veterinary users are allowed to access dashboard even without explicit dashboard.view.
+    if (pathname === '/dashboard' && isVeterinaryRole) {
+      setAllowed(true);
+      return;
+    }
+
     if (isBusinessAccount(accountType) && !hasPermission(requiredPermission)) {
-      router.replace(deniedRedirect);
+      router.replace('/dashboard');
       return;
     }
     setAllowed(true);
