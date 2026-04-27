@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth';
+import { usePermission } from '@/hooks/usePermission';
 import { statsApi, OverviewResponse } from '@/lib/api/stats';
 import { accountingApi } from '@/lib/api/accounting';
 import { inventoryApi, type InventoryStats, type ValuationOverTimePoint, type TopItemByValue, type StockMovementPoint } from '@/lib/api/inventory';
@@ -85,7 +86,10 @@ function getPeriodRange(period: PeriodKey, customFrom?: string, customTo?: strin
 export default function Dashboard() {
   const router = useRouter();
   const { currentAccount } = useAuthStore();
+  const { hasPermission } = usePermission();
   const accountType = currentAccount?.account_type ?? '';
+  const role = (currentAccount?.role ?? '').toLowerCase();
+  const isVeterinaryRole = ['veterinary', 'veterinarian', 'veternary', 'agent'].includes(role);
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<OverviewResponse['data'] | null>(null);
   const [error, setError] = useState('');
@@ -126,6 +130,41 @@ export default function Dashboard() {
     () => getPeriodRange(period, customFrom || undefined, customTo || undefined),
     [period, customFrom, customTo],
   );
+
+  const canViewSales = hasPermission('view_sales');
+  const canViewCollections = hasPermission('view_collections');
+  const canViewInventory = hasPermission('view_inventory');
+  const canViewAnalytics = hasPermission('view_analytics');
+  const canCreateSales = hasPermission('create_sales');
+  const canCreateCollections = hasPermission('create_collections');
+  const canCreateSuppliers = hasPermission('create_suppliers');
+  const canCreateCustomers = hasPermission('create_customers');
+  const canManageInventory = hasPermission('manage_inventory');
+  const quickActionsDisabled = isVeterinaryRole;
+
+  const tabs: { id: DashboardTab; label: string }[] = useMemo(() => {
+    if (isVeterinaryRole) {
+      return [
+        { id: 'overview', label: 'Overview' },
+        { id: 'inventory', label: 'Inventory' },
+      ];
+    }
+    const available: { id: DashboardTab; label: string }[] = [{ id: 'overview', label: 'Overview' }];
+    if (canViewSales) available.push({ id: 'sales', label: 'Sales' });
+    if (canViewCollections) available.push({ id: 'collections', label: 'Collections' });
+    if (canViewInventory) available.push({ id: 'inventory', label: 'Inventory' });
+    if (canViewAnalytics) {
+      available.push({ id: 'finance', label: 'Finance' });
+      available.push({ id: 'loans', label: 'Loans' });
+    }
+    return available;
+  }, [canViewSales, canViewCollections, canViewInventory, canViewAnalytics, isVeterinaryRole]);
+
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.id === dashboardTab)) {
+      setDashboardTab(tabs[0].id);
+    }
+  }, [dashboardTab, tabs]);
 
   // Redraw chart when tab becomes visible (charts in hidden container may render at 0 size)
   useEffect(() => {
@@ -330,15 +369,6 @@ export default function Dashboard() {
         ? `${customFrom} – ${customTo}`
         : 'Custom range'
       : `${dateRange.date_from} – ${dateRange.date_to}`;
-
-  const tabs: { id: DashboardTab; label: string }[] = [
-    { id: 'overview', label: 'Overview' },
-    { id: 'sales', label: 'Sales' },
-    { id: 'collections', label: 'Collections' },
-    { id: 'inventory', label: 'Inventory' },
-    { id: 'finance', label: 'Finance' },
-    { id: 'loans', label: 'Loans' },
-  ];
 
   return (
     <div className="-mt-1 space-y-4">
@@ -637,96 +667,152 @@ export default function Dashboard() {
               <Icon icon={faPlus} className="text-[var(--primary)]" size="sm" />
               Quick Actions
             </h3>
+            {quickActionsDisabled && (
+              <p className="mt-2 text-xs text-gray-500">
+                Quick actions are disabled for veterinary users.
+              </p>
+            )}
           </div>
           <div className="p-4">
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <button
-                type="button"
-                onClick={() => setQuickActionModal('sale')}
-                className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-[var(--primary)] bg-[var(--primary)]/5 p-5 text-center transition-colors hover:bg-[var(--primary)] hover:text-white"
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-[var(--primary)] text-white group-hover:bg-white group-hover:text-[var(--primary)] transition-colors">
-                  <Icon icon={faReceipt} size="lg" />
-                </span>
-                <span className="text-sm font-semibold text-gray-900 group-hover:text-white transition-colors">New Sale</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuickActionModal('collection')}
-                className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
-                  <Icon icon={faBox} size="lg" />
-                </span>
-                <span className="text-sm font-semibold text-gray-900">New Collection</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuickActionModal('supplier')}
-                className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
-                  <Icon icon={faBuilding} size="lg" />
-                </span>
-                <span className="text-sm font-semibold text-gray-900">Add Supplier</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuickActionModal('customer')}
-                className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
-                  <Icon icon={faStore} size="lg" />
-                </span>
-                <span className="text-sm font-semibold text-gray-900">Add Customer</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuickActionModal('inventory')}
-                className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
-                  <Icon icon={faWarehouse} size="lg" />
-                </span>
-                <span className="text-sm font-semibold text-gray-900">Add Inventory</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuickActionModal('transaction')}
-                className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
-                  <Icon icon={faChartLine} size="lg" />
-                </span>
-                <span className="text-sm font-semibold text-gray-900">Record Transaction</span>
-              </button>
-              <Link
-                href="/payroll"
-                className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
-                  <Icon icon={faClipboardList} size="lg" />
-                </span>
-                <span className="text-sm font-semibold text-gray-900">Payroll</span>
-              </Link>
-              <Link
-                href="/finance"
-                className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
-                  <Icon icon={faChartLine} size="lg" />
-                </span>
-                <span className="text-sm font-semibold text-gray-900">Finance</span>
-              </Link>
-              <Link
-                href="/accounts"
-                className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
-              >
-                <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
-                  <Icon icon={faDollarSign} size="lg" />
-                </span>
-                <span className="text-sm font-semibold text-gray-900">Accounts</span>
-              </Link>
+            <div className={`grid grid-cols-2 sm:grid-cols-3 gap-3 ${quickActionsDisabled ? 'opacity-60' : ''}`}>
+              {canCreateSales && (
+                <button
+                  type="button"
+                  disabled={quickActionsDisabled}
+                  onClick={() => setQuickActionModal('sale')}
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-[var(--primary)] bg-[var(--primary)]/5 p-5 text-center transition-colors hover:bg-[var(--primary)] hover:text-white disabled:cursor-not-allowed disabled:hover:bg-[var(--primary)]/5 disabled:hover:text-inherit"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-[var(--primary)] text-white group-hover:bg-white group-hover:text-[var(--primary)] transition-colors">
+                    <Icon icon={faReceipt} size="lg" />
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900 group-hover:text-white transition-colors">New Sale</span>
+                </button>
+              )}
+              {canCreateCollections && (
+                <button
+                  type="button"
+                  disabled={quickActionsDisabled}
+                  onClick={() => setQuickActionModal('collection')}
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 disabled:cursor-not-allowed"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
+                    <Icon icon={faBox} size="lg" />
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900">New Collection</span>
+                </button>
+              )}
+              {canCreateSuppliers && (
+                <button
+                  type="button"
+                  disabled={quickActionsDisabled}
+                  onClick={() => setQuickActionModal('supplier')}
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 disabled:cursor-not-allowed"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
+                    <Icon icon={faBuilding} size="lg" />
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900">Add Supplier</span>
+                </button>
+              )}
+              {canCreateCustomers && (
+                <button
+                  type="button"
+                  disabled={quickActionsDisabled}
+                  onClick={() => setQuickActionModal('customer')}
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 disabled:cursor-not-allowed"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
+                    <Icon icon={faStore} size="lg" />
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900">Add Customer</span>
+                </button>
+              )}
+              {canManageInventory && (
+                <button
+                  type="button"
+                  disabled={quickActionsDisabled}
+                  onClick={() => setQuickActionModal('inventory')}
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 disabled:cursor-not-allowed"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
+                    <Icon icon={faWarehouse} size="lg" />
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900">Add Inventory</span>
+                </button>
+              )}
+              {canViewAnalytics && (
+                <button
+                  type="button"
+                  disabled={quickActionsDisabled}
+                  onClick={() => setQuickActionModal('transaction')}
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 disabled:cursor-not-allowed"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
+                    <Icon icon={faChartLine} size="lg" />
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900">Record Transaction</span>
+                </button>
+              )}
+              {canViewAnalytics && (
+                quickActionsDisabled ? (
+                  <div className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center opacity-60 cursor-not-allowed">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600">
+                      <Icon icon={faClipboardList} size="lg" />
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900">Payroll</span>
+                  </div>
+                ) : (
+                  <Link
+                    href="/payroll"
+                    className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
+                  >
+                    <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
+                      <Icon icon={faClipboardList} size="lg" />
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900">Payroll</span>
+                  </Link>
+                )
+              )}
+              {canViewAnalytics && (
+                quickActionsDisabled ? (
+                  <div className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center opacity-60 cursor-not-allowed">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600">
+                      <Icon icon={faChartLine} size="lg" />
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900">Finance</span>
+                  </div>
+                ) : (
+                  <Link
+                    href="/finance"
+                    className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
+                  >
+                    <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
+                      <Icon icon={faChartLine} size="lg" />
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900">Finance</span>
+                  </Link>
+                )
+              )}
+              {canViewAnalytics && role !== 'accountant' && (
+                quickActionsDisabled ? (
+                  <div className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center opacity-60 cursor-not-allowed">
+                    <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600">
+                      <Icon icon={faDollarSign} size="lg" />
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900">Accounts</span>
+                  </div>
+                ) : (
+                  <Link
+                    href="/accounts"
+                    className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
+                  >
+                    <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
+                      <Icon icon={faDollarSign} size="lg" />
+                    </span>
+                    <span className="text-sm font-semibold text-gray-900">Accounts</span>
+                  </Link>
+                )
+              )}
             </div>
           </div>
         </div>
