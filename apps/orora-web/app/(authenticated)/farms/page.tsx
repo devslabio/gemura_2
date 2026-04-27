@@ -3,16 +3,42 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { useFarmStore } from '@/store/farms';
-import { farmsApi, type Farm } from '@/lib/api/farms';
+import { farmsApi, type Farm, type FarmProductionMode } from '@/lib/api/farms';
 import { locationsApi, type Location } from '@/lib/api/locations';
+import { speciesApi, type Species } from '@/lib/api/species';
 import StatCard from '@/app/components/StatCard';
 import Modal from '@/app/components/Modal';
 import Icon, { faPlus, faPaw, faSpinner, faMapPin, faEdit, faTrash } from '@/app/components/Icon';
 import Select from '@/app/components/Select';
 
+type SpeciesFocusRow = { key: string; species_id: string; modes: FarmProductionMode[] };
+
+function speciesRowsFromFarm(initial?: Partial<Farm>): SpeciesFocusRow[] {
+  const list = initial?.farm_species_focus;
+  if (!list?.length) return [];
+  return list.map((r, i) => ({
+    key: `${r.species_id}-${i}`,
+    species_id: r.species_id,
+    modes: [...r.modes],
+  }));
+}
+
+const MODE_OPTIONS: { value: FarmProductionMode; label: string }[] = [
+  { value: 'dairy', label: 'Dairy' },
+  { value: 'meat', label: 'Meat' },
+  { value: 'eggs', label: 'Eggs' },
+  { value: 'breeding', label: 'Breeding' },
+];
+
 interface FarmFormProps {
   initial?: Partial<Farm>;
-  onSubmit: (values: { name: string; location_id?: string; location?: string; description?: string }) => Promise<void>;
+  onSubmit: (values: {
+    name: string;
+    location_id?: string;
+    location?: string;
+    description?: string;
+    species_focus?: { species_id: string; modes: FarmProductionMode[] }[];
+  }) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -20,6 +46,8 @@ function FarmForm({ initial, onSubmit, onCancel }: FarmFormProps) {
   const [name, setName] = useState(initial?.name ?? '');
   const [location, setLocation] = useState(initial?.location ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
+  const [speciesOptions, setSpeciesOptions] = useState<Species[]>([]);
+  const [speciesRows, setSpeciesRows] = useState<SpeciesFocusRow[]>(() => speciesRowsFromFarm(initial));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -39,6 +67,14 @@ function FarmForm({ initial, onSubmit, onCancel }: FarmFormProps) {
   useEffect(() => {
     locationsApi.getProvinces().then((r) => setProvinces(Array.isArray(r?.data) ? r.data : [])).catch(() => setProvinces([]));
   }, []);
+
+  useEffect(() => {
+    speciesApi.getList().then((res) => res.data && setSpeciesOptions(res.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setSpeciesRows(speciesRowsFromFarm(initial));
+  }, [initial]);
 
   useEffect(() => {
     if (!initial?.location_id) return;
@@ -160,12 +196,21 @@ function FarmForm({ initial, onSubmit, onCancel }: FarmFormProps) {
     }
     setSubmitting(true);
     try {
-      await onSubmit({
+      const cleanedFocus = speciesRows
+        .filter((r) => r.species_id)
+        .map((r) => ({ species_id: r.species_id, modes: r.modes }));
+      const payload: Parameters<FarmFormProps['onSubmit']>[0] = {
         name: name.trim(),
         location_id: locationId,
         location: location.trim() || undefined,
         description: description.trim() || undefined,
-      });
+      };
+      if (initial?.id) {
+        payload.species_focus = cleanedFocus;
+      } else if (cleanedFocus.length > 0) {
+        payload.species_focus = cleanedFocus;
+      }
+      await onSubmit(payload);
     } catch (err: unknown) {
       const errObj = err as { response?: { data?: { message?: string } }; message?: string };
       setError(errObj?.response?.data?.message || errObj?.message || 'Failed to save farm');
@@ -263,6 +308,79 @@ function FarmForm({ initial, onSubmit, onCancel }: FarmFormProps) {
           placeholder="Short description of this farm or unit"
         />
       </div>
+      <div className="space-y-2 border border-gray-100 rounded-sm p-3 bg-gray-50/80">
+        <div className="flex items-center justify-between gap-2">
+          <label className="block text-sm font-medium text-gray-700">Species & production focus</label>
+          <button
+            type="button"
+            className="text-xs text-[var(--primary)] font-medium"
+            onClick={() =>
+              setSpeciesRows((prev) => [...prev, { key: crypto.randomUUID(), species_id: '', modes: [] }])
+            }
+          >
+            Add species
+          </button>
+        </div>
+        <p className="text-xs text-gray-500">
+          Used to tailor menus (for example milk recording when this farm runs dairy cattle or goats). Leave empty to show all sections.
+        </p>
+        {speciesRows.length === 0 ? (
+          <p className="text-sm text-gray-500">No rows — add at least one species if you want focused navigation.</p>
+        ) : (
+          <div className="space-y-3">
+            {speciesRows.map((row) => (
+              <div key={row.key} className="rounded-sm border border-gray-200 bg-white p-3 space-y-2">
+                <div className="flex gap-2 items-start">
+                  <div className="flex-1 min-w-0">
+                    <Select
+                      value={row.species_id}
+                      onChange={(species_id) =>
+                        setSpeciesRows((prev) =>
+                          prev.map((r) => (r.key === row.key ? { ...r, species_id } : r)),
+                        )
+                      }
+                      options={speciesOptions.map((s) => ({ value: s.id, label: `${s.name} (${s.code})` }))}
+                      placeholder="Species"
+                      allowEmpty
+                      className="w-full"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="text-xs text-red-600 shrink-0 pt-2"
+                    onClick={() => setSpeciesRows((prev) => prev.filter((r) => r.key !== row.key))}
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  {MODE_OPTIONS.map((m) => (
+                    <label key={m.value} className="inline-flex items-center gap-1.5 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={row.modes.includes(m.value)}
+                        onChange={() =>
+                          setSpeciesRows((prev) =>
+                            prev.map((r) => {
+                              if (r.key !== row.key) return r;
+                              const has = r.modes.includes(m.value);
+                              return {
+                                ...r,
+                                modes: has ? r.modes.filter((x) => x !== m.value) : [...r.modes, m.value],
+                              };
+                            }),
+                          )
+                        }
+                      />
+                      {m.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="flex justify-end gap-2 pt-2">
         <button type="button" onClick={onCancel} className="btn btn-secondary" disabled={submitting}>
           Cancel
@@ -312,14 +430,26 @@ export default function FarmsPage() {
     void load();
   }, [load]);
 
-  const handleCreate = async (values: { name: string; location_id?: string; location?: string; description?: string }) => {
+  const handleCreate = async (values: {
+    name: string;
+    location_id?: string;
+    location?: string;
+    description?: string;
+    species_focus?: { species_id: string; modes: FarmProductionMode[] }[];
+  }) => {
     if (!accountId) return;
     await farmsApi.create(values, accountId);
     setCreateOpen(false);
     await load();
   };
 
-  const handleUpdate = async (values: { name: string; location_id?: string; location?: string; description?: string }) => {
+  const handleUpdate = async (values: {
+    name: string;
+    location_id?: string;
+    location?: string;
+    description?: string;
+    species_focus?: { species_id: string; modes: FarmProductionMode[] }[];
+  }) => {
     if (!accountId || !editFarm) return;
     await farmsApi.update(editFarm.id, values, accountId);
     setEditFarm(null);
@@ -502,7 +632,7 @@ export default function FarmsPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         title="Add Farm"
-        maxWidth="max-w-lg"
+        maxWidth="max-w-2xl"
       >
         <FarmForm
           onSubmit={handleCreate}
@@ -514,7 +644,7 @@ export default function FarmsPage() {
         open={!!editFarm}
         onClose={() => setEditFarm(null)}
         title="Edit Farm"
-        maxWidth="max-w-lg"
+        maxWidth="max-w-2xl"
       >
         {editFarm && (
           <FarmForm

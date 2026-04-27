@@ -7,20 +7,26 @@ function pad2(n: number) {
 }
 
 export default function DigitalClock() {
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
+    setNow(new Date());
     const id = window.setInterval(() => setNow(new Date()), 1000);
     return () => window.clearInterval(id);
   }, []);
 
-  const hours12 = useMemo(() => {
-    const h = now.getHours();
-    const m = h % 12;
-    return m === 0 ? 12 : m;
-  }, [now]);
-
   const formatted = useMemo(() => {
+    if (!now) {
+      return {
+        hours: '--',
+        minutes: '--',
+        seconds: '--',
+        amPm: '--',
+        currentDate: '—',
+      };
+    }
+    const h = now.getHours();
+    const hours12 = h % 12 === 0 ? 12 : h % 12;
     const hours = pad2(hours12);
     const minutes = pad2(now.getMinutes());
     const seconds = pad2(now.getSeconds());
@@ -34,11 +40,11 @@ export default function DigitalClock() {
     }).format(now);
 
     return { hours, minutes, seconds, amPm, currentDate };
-  }, [hours12, now]);
+  }, [now]);
 
   return (
     <div className="digital-clock">
-      <div className="time-display" aria-label="Current time">
+      <div className="time-display" aria-label={now ? 'Current time' : 'Clock loading'}>
         <div className="time-segment hours">
           <span className="time-value">{formatted.hours}</span>
         </div>
@@ -56,4 +62,3 @@ export default function DigitalClock() {
     </div>
   );
 }
-

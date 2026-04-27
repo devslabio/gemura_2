@@ -2,6 +2,16 @@ import { apiClient } from './client';
 
 export type FarmStatus = 'active' | 'inactive' | 'archived';
 
+export type FarmProductionMode = 'dairy' | 'meat' | 'eggs' | 'breeding';
+
+export interface FarmSpeciesFocus {
+  farm_id: string;
+  species_id: string;
+  modes: FarmProductionMode[];
+  /** Present when loaded from the farms API with includes */
+  species?: { id: string; code: string; name: string };
+}
+
 export interface FarmLocationRef {
   id: string;
   code: string;
@@ -25,6 +35,7 @@ export interface Farm {
   _count?: {
     animals: number;
   };
+  farm_species_focus?: FarmSpeciesFocus[];
 }
 
 export interface ApiResponse<T> {
@@ -59,7 +70,13 @@ export const farmsApi = {
     }),
 
   create: (
-    data: { name: string; location_id?: string; location?: string; description?: string },
+    data: {
+      name: string;
+      location_id?: string;
+      location?: string;
+      description?: string;
+      species_focus?: { species_id: string; modes: FarmProductionMode[] }[];
+    },
     accountId?: string,
   ) =>
     apiClient.post<ApiResponse<Farm>>('/farms', data, {
@@ -68,7 +85,14 @@ export const farmsApi = {
 
   update: (
     id: string,
-    data: { name?: string; location_id?: string; location?: string; description?: string; status?: FarmStatus },
+    data: {
+      name?: string;
+      location_id?: string;
+      location?: string;
+      description?: string;
+      status?: FarmStatus;
+      species_focus?: { species_id: string; modes: FarmProductionMode[] }[];
+    },
     accountId?: string,
   ) =>
     apiClient.patch<ApiResponse<Farm>>(`/farms/${id}`, data, {

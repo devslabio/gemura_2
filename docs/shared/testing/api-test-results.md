@@ -54,7 +54,7 @@
 
 ## 📊 Test Data Summary
 
-### Main Admin User
+### System Admin
 - **Phone**: 250788606765
 - **Email**: admin@gemura.rw
 - **Password**: Pass123

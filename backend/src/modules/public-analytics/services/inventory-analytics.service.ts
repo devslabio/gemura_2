@@ -93,11 +93,16 @@ export class InventoryAnalyticsService extends BaseAnalyticsService {
 
     // Get stock value and status counts
     const [stockValue, statusCounts] = await Promise.all([
-      this.prisma.$queryRaw<{ total_value: number }[]>`
-        SELECT COALESCE(SUM(stock_quantity * price), 0) as total_value
-        FROM products
-        WHERE account_id = ANY(${context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000']}::uuid[])
-      `,
+      context.accountIds.length > 0
+        ? this.prisma.$queryRaw<{ total_value: number }[]>`
+            SELECT COALESCE(SUM(stock_quantity * price), 0) as total_value
+            FROM products
+            WHERE account_id = ANY(${context.accountIds}::uuid[])
+          `
+        : this.prisma.$queryRaw<{ total_value: number }[]>`
+            SELECT COALESCE(SUM(stock_quantity * price), 0) as total_value
+            FROM products
+          `,
       this.prisma.product.groupBy({
         by: ['status'],
         where: accountFilter,
@@ -137,8 +142,6 @@ export class InventoryAnalyticsService extends BaseAnalyticsService {
    * Get inventory breakdown by time period
    */
   async getBreakdown(context: AnalyticsContext): Promise<InventoryBreakdown[]> {
-    const accountCondition = context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000'];
-
     // Sales data - use qualified column name is2.created_at to avoid ambiguity
     const salesDateGroupExpr = this.getDateGroupExpression('is2.created_at', context.groupBy);
     const salesQuery = `
@@ -151,6 +154,19 @@ export class InventoryAnalyticsService extends BaseAnalyticsService {
       WHERE p.account_id = ANY($1::uuid[])
         AND is2.created_at >= $2
         AND is2.created_at <= $3
+      GROUP BY ${salesDateGroupExpr}
+      ORDER BY period_date ASC
+    `;
+
+    const salesQueryAllAccounts = `
+      SELECT 
+        ${salesDateGroupExpr} as period_date,
+        COALESCE(SUM(is2.quantity), 0) as sales_quantity,
+        COALESCE(SUM(is2.total_amount), 0) as sales_value
+      FROM inventory_sales is2
+      JOIN products p ON p.id = is2.product_id
+      WHERE is2.created_at >= $1
+        AND is2.created_at <= $2
       GROUP BY ${salesDateGroupExpr}
       ORDER BY period_date ASC
     `;
@@ -171,10 +187,47 @@ export class InventoryAnalyticsService extends BaseAnalyticsService {
       ORDER BY period_date ASC
     `;
 
-    const [salesResults, movementsResults] = await Promise.all([
-      this.prisma.$queryRawUnsafe<any[]>(salesQuery, accountCondition, context.startDate, context.endDate),
-      this.prisma.$queryRawUnsafe<any[]>(movementsQuery, accountCondition, context.startDate, context.endDate),
-    ]);
+    const movementsQueryAllAccounts = `
+      SELECT 
+        ${movementsDateGroupExpr} as period_date,
+        COALESCE(SUM(CASE WHEN movement_type IN ('purchase_in', 'adjustment_in', 'transfer_in') THEN quantity ELSE 0 END), 0) as stock_in,
+        COALESCE(SUM(CASE WHEN movement_type IN ('sale_out', 'adjustment_out', 'transfer_out') THEN quantity ELSE 0 END), 0) as stock_out
+      FROM inventory_movements im
+      JOIN products p ON p.id = im.product_id
+      WHERE im.created_at >= $1
+        AND im.created_at <= $2
+      GROUP BY ${movementsDateGroupExpr}
+      ORDER BY period_date ASC
+    `;
+
+    const [salesResults, movementsResults] =
+      context.accountIds.length > 0
+        ? await Promise.all([
+            this.prisma.$queryRawUnsafe<any[]>(
+              salesQuery,
+              context.accountIds,
+              context.startDate,
+              context.endDate,
+            ),
+            this.prisma.$queryRawUnsafe<any[]>(
+              movementsQuery,
+              context.accountIds,
+              context.startDate,
+              context.endDate,
+            ),
+          ])
+        : await Promise.all([
+            this.prisma.$queryRawUnsafe<any[]>(
+              salesQueryAllAccounts,
+              context.startDate,
+              context.endDate,
+            ),
+            this.prisma.$queryRawUnsafe<any[]>(
+              movementsQueryAllAccounts,
+              context.startDate,
+              context.endDate,
+            ),
+          ]);
 
     // Merge results
     const resultMap = new Map<string, InventoryBreakdown>();

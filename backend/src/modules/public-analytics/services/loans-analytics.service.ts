@@ -146,8 +146,6 @@ export class LoansAnalyticsService extends BaseAnalyticsService {
     const disbursedDateGroupExpr = this.getDateGroupExpression('disbursement_date', context.groupBy);
     const repaymentDateGroupExpr = this.getDateGroupExpression('repayment_date', context.groupBy);
 
-    const accountCondition = context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000'];
-
     // Loans disbursed per period
     const loansQuery = `
       SELECT 
@@ -158,6 +156,18 @@ export class LoansAnalyticsService extends BaseAnalyticsService {
       WHERE lender_account_id = ANY($1::uuid[])
         AND disbursement_date >= $2
         AND disbursement_date <= $3
+      GROUP BY ${disbursedDateGroupExpr}
+      ORDER BY period_date ASC
+    `;
+
+    const loansQueryAllAccounts = `
+      SELECT 
+        ${disbursedDateGroupExpr} as period_date,
+        COUNT(*) as new_loans,
+        COALESCE(SUM(principal), 0) as disbursed_amount
+      FROM loans
+      WHERE disbursement_date >= $1
+        AND disbursement_date <= $2
       GROUP BY ${disbursedDateGroupExpr}
       ORDER BY period_date ASC
     `;
@@ -176,10 +186,46 @@ export class LoansAnalyticsService extends BaseAnalyticsService {
       ORDER BY period_date ASC
     `;
 
-    const [loansResults, repaymentsResults] = await Promise.all([
-      this.prisma.$queryRawUnsafe<any[]>(loansQuery, accountCondition, context.startDate, context.endDate),
-      this.prisma.$queryRawUnsafe<any[]>(repaymentsQuery, accountCondition, context.startDate, context.endDate),
-    ]);
+    const repaymentsQueryAllAccounts = `
+      SELECT 
+        ${repaymentDateGroupExpr} as period_date,
+        COALESCE(SUM(lr.amount), 0) as repaid_amount
+      FROM loan_repayments lr
+      JOIN loans l ON l.id = lr.loan_id
+      WHERE lr.repayment_date >= $1
+        AND lr.repayment_date <= $2
+      GROUP BY ${repaymentDateGroupExpr}
+      ORDER BY period_date ASC
+    `;
+
+    const [loansResults, repaymentsResults] =
+      context.accountIds.length > 0
+        ? await Promise.all([
+            this.prisma.$queryRawUnsafe<any[]>(
+              loansQuery,
+              context.accountIds,
+              context.startDate,
+              context.endDate,
+            ),
+            this.prisma.$queryRawUnsafe<any[]>(
+              repaymentsQuery,
+              context.accountIds,
+              context.startDate,
+              context.endDate,
+            ),
+          ])
+        : await Promise.all([
+            this.prisma.$queryRawUnsafe<any[]>(
+              loansQueryAllAccounts,
+              context.startDate,
+              context.endDate,
+            ),
+            this.prisma.$queryRawUnsafe<any[]>(
+              repaymentsQueryAllAccounts,
+              context.startDate,
+              context.endDate,
+            ),
+          ]);
 
     // Merge results
     const resultMap = new Map<string, LoansBreakdown>();

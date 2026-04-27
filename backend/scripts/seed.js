@@ -32,12 +32,13 @@ async function main() {
   const mainUser = await prisma.user.upsert({
     where: { code: 'USER_MAIN_001' },
     update: {
+      name: 'System Admin',
       password_hash: hashedPassword,
       token: authToken,
     },
     create: {
       code: 'USER_MAIN_001',
-      name: 'Main Admin User',
+      name: 'System Admin',
       email: 'admin@gemura.rw',
       phone: '250788606765',
       password_hash: hashedPassword,

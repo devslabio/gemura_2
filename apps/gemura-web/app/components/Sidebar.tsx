@@ -57,14 +57,19 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
   // Admin portal is shown based on role/permissions (manage_users + dashboard.view), matching backend.
   const menuItems = useMemo(() => {
     const items: NavItem[] = [];
+    const preferOperationsSidebar = FORCE_OPERATIONS_DASHBOARD && isBusinessAccount(accountType);
 
-    const showAdminDashboard = isAdmin();
-    const showAdminUsers = isAdmin();
+    const showAdminDashboard = canViewDashboard() || isAdmin();
+    const showAdminUsers = canManageUsers() || isAdmin();
     // Owner/admin on a farm/business account use the operations app; do not trap them in admin-portal-only nav.
     const useOperationsNavForAdminRole =
       isBusinessAccount(accountType) && isAdminRole(role);
 
-    if (isAdminRole(role) && (showAdminDashboard || showAdminUsers) && !useOperationsNavForAdminRole) {
+    if (
+      (showAdminDashboard || showAdminUsers) &&
+      !useOperationsNavForAdminRole &&
+      !preferOperationsSidebar
+    ) {
       ADMIN_NAV_ITEMS.forEach((item) => {
         if (item.href === '/admin/dashboard') {
           if (!showAdminDashboard) return;

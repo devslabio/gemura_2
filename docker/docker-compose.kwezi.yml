@@ -1,6 +1,8 @@
 # Gemura – Production on Kwezi server (209.74.80.195)
 # Uses existing Kwezi PostgreSQL (kwezi-postgres container)
-# Ports: 3006 (UI), 3007 (API)
+# Ports: 3006 (gemura-ui), 3007 (gemura-api)
+# Optional: gemura-admin-ui publishes 3021:3005 only when profile "admin" is enabled
+#   (3015 is occupied by zoea-admin on Kwezi; local dev still uses 3015).
 # NO .env file required - environment variables set in this file or via deploy script
 
 services:
@@ -18,7 +20,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET:-gemura_jwt_secret_production_2026}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3006,http://209.74.80.195:3006,http://209.74.80.195:3011,https://app.gemura.rw,https://app.orora.rw}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3006,http://localhost:3015,http://209.74.80.195:3006,http://209.74.80.195:3011,http://209.74.80.195:3021,https://app.gemura.rw,https://app.orora.rw,https://admin.gemura.rw}
     ports:
       - "3007:3004"
     networks:
@@ -66,6 +68,8 @@ services:
       start_period: 60s
 
   gemura-admin-ui:
+    profiles:
+      - admin
     build:
       # Resolved from compose file dir (docker/); admin app archive extracts to apps/gemura-admin-web
       context: ../apps/gemura-admin-web
@@ -79,7 +83,7 @@ services:
       PORT: 3005
       HOSTNAME: 0.0.0.0
     ports:
-      - "3015:3005"
+      - "3021:3005"
     depends_on:
       - gemura-api
     networks:

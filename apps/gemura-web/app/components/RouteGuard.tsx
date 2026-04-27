@@ -65,7 +65,11 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
       setAllowed(null);
     }
     if (!accountId) return;
-    if (isAdmin() && !FORCE_OPERATIONS_DASHBOARD) {
+    // Same rule as Sidebar: farm owner/admin are not "portal-only" admins; they use operations routes.
+    // FORCE_OPERATIONS_DASHBOARD env flag (from feature/fix) forces all admins to operations too.
+    const portalOnlyAdmin =
+      isAdmin() && !(isBusinessAccount(accountType) && isAdminRole(role));
+    if (portalOnlyAdmin && !FORCE_OPERATIONS_DASHBOARD) {
       router.replace('/admin/dashboard');
       return;
     }

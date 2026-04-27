@@ -1,6 +1,7 @@
 #!/bin/bash
 #
-# Deploy Gemura backend (API) only to Kwezi. Does not touch gemura-ui.
+# Deploy Gemura backend (API) only to Kwezi. Does not rebuild or restart gemura-ui or
+# gemura-admin-ui (use this when you want production web UIs left unchanged).
 #
 # Usage (from project root):
 #   ./scripts/gemura/deployment/deploy-gemura-backend-only.sh
@@ -62,7 +63,8 @@ echo "   ✅ Sync complete"
 
 echo ""
 echo "🔨 Building and starting gemura-api only..."
-sshpass -p "$SERVER_PASS" ssh $SSH_OPTS $SERVER_USER@$SERVER_IP 'bash -s' << 'ENDSSH'
+# Reuse the SSH master (same as rsync) — avoids a second TCP connection that often times out.
+ssh $SSH_OPTS -o ControlPath=$SSH_CONTROL_PATH $SERVER_USER@$SERVER_IP 'bash -s' << 'ENDSSH'
 set -e
 export LC_ALL=C.UTF-8
 cd /opt/gemura

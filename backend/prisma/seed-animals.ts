@@ -86,6 +86,7 @@ async function main() {
   if (!breedFallback) {
     throw new Error('No breeds found. Run migrations that seed breeds.');
   }
+  const speciesId = breedFallback.species_id;
 
   const dairyBreed = holstein ?? jersey ?? breedFallback;
   const breeds = { holstein, ankole, jersey, crossbreed, dairy: dairyBreed, fallback: breedFallback };
@@ -98,6 +99,7 @@ async function main() {
     create: {
       account_id: account.id,
       farm_id: farmId,
+      species_id: speciesId,
       breed_id: breeds.ankole?.id ?? breedFallback.id,
       tag_number: 'OR-BULL-001',
       name: RWANDAN_BULL_NAMES[0],
@@ -114,6 +116,7 @@ async function main() {
     create: {
       account_id: account.id,
       farm_id: farmId,
+      species_id: speciesId,
       breed_id: breeds.holstein?.id ?? breedFallback.id,
       tag_number: 'OR-BULL-002',
       name: RWANDAN_BULL_NAMES[1],
@@ -140,6 +143,7 @@ async function main() {
       create: {
         account_id: account.id,
         farm_id: farmId,
+        species_id: speciesId,
         breed_id: i % 3 === 0 ? (breeds.ankole?.id ?? breedFallback.id) : breeds.dairy.id,
         tag_number: tag,
         name,
@@ -278,6 +282,7 @@ async function main() {
         create: {
           account_id: account.id,
           farm_id: farmId,
+          species_id: speciesId,
           breed_id: breeds.dairy.id,
           tag_number: calfTag,
           name: calfNames[i],

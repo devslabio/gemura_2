@@ -15,7 +15,7 @@ services:
       NODE_ENV: production
       PORT: ${BACKEND_PORT:-3004}
       DATABASE_URL: ${DATABASE_URL:-postgresql://devslab_admin:devslab_secure_password_2024@devslab-postgres:5432/gemura_db}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3005,http://localhost:3004,http://159.198.65.38:3005,http://159.198.65.38:3004}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3005,http://localhost:3015,http://localhost:3004,http://159.198.65.38:3005,http://159.198.65.38:3004}
     ports:
       - "3004:3004"
     networks:

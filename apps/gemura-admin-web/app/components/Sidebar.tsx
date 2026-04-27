@@ -6,7 +6,20 @@ import Image from 'next/image';
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
-import Icon, { faChevronRight, faBars, faUsers, faUserShield, faLock, faWarehouse, faBuilding, faChartLine, faUser } from './Icon';
+import Icon, {
+  faChevronRight,
+  faBars,
+  faUsers,
+  faUserShield,
+  faLock,
+  faWarehouse,
+  faBuilding,
+  faChartLine,
+  faUser,
+  faClipboardList,
+} from './Icon';
+import { adminApi } from '@/lib/api/admin';
+import { PermissionService } from '@/lib/services/permission.service';
 import type { CSSProperties } from 'react';
 
 interface SidebarProps {
@@ -24,6 +37,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
   const [userName, setUserName] = useState('User');
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState('User');
+  const [onboardingPending, setOnboardingPending] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -32,26 +46,55 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     setUserRole(currentAccount?.role || 'User');
   }, [user, currentAccount]);
 
+  useEffect(() => {
+    // Read permission via static service to avoid unstable hook function refs
+    // re-firing this effect every render (which would spam the API endlessly).
+    if (!(PermissionService.canManageUsers() || PermissionService.isAdmin()) || !currentAccount?.account_id) {
+      setOnboardingPending(0);
+      return;
+    }
+    let cancelled = false;
+    adminApi
+      .getOnboardingPendingCount(currentAccount.account_id)
+      .then((res) => {
+        if (!cancelled && res.code === 200 && res.data) setOnboardingPending(res.data.pendingCount ?? 0);
+      })
+      .catch(() => {
+        if (!cancelled) setOnboardingPending(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAccount?.account_id]);
+
   const menuItems = useMemo(() => {
-    const items: Array<{ href: string; label: string; icon: any; requireManageUsers?: boolean }> = [];
+    const items: Array<{ href: string; label: string; icon: any; badge?: number }> = [];
 
     if (canViewDashboard() || isAdmin()) {
       items.push({ href: '/admin/dashboard', label: 'Dashboard', icon: faChartLine });
     }
 
     if (canManageUsers() || isAdmin()) {
-      items.push({ href: '/admin/users', label: 'Users', icon: faUsers, requireManageUsers: true });
-      items.push({ href: '/admin/roles', label: 'Roles', icon: faUserShield, requireManageUsers: true });
-      items.push({ href: '/admin/permissions', label: 'Permissions', icon: faLock, requireManageUsers: true });
-      items.push({ href: '/admin/immis', label: 'IMMIS', icon: faUsers, requireManageUsers: true });
+      items.push({ href: '/admin/users', label: 'Users', icon: faUsers });
+      items.push({
+        href: '/admin/onboarding',
+        label: 'MCC onboarding',
+        icon: faClipboardList,
+        badge: onboardingPending > 0 ? onboardingPending : undefined,
+      });
+      items.push({ href: '/admin/roles', label: 'Roles', icon: faUserShield });
+      items.push({ href: '/admin/permissions', label: 'Permissions', icon: faLock });
     }
+
+    // IMMIS is visible to any authenticated admin-portal user.
+    items.push({ href: '/admin/immis', label: 'IMMIS', icon: faUsers });
 
     // Farms & accounts are token-guarded; keep visible for quick switching.
     items.push({ href: '/admin/farms', label: 'Farms', icon: faWarehouse });
     items.push({ href: '/admin/accounts', label: 'Accounts', icon: faBuilding });
 
     return items;
-  }, [canManageUsers, isAdmin, canViewDashboard]);
+  }, [canManageUsers, isAdmin, canViewDashboard, onboardingPending]);
 
   const isActive = (href: string) => {
     if (!href) return false;
@@ -172,9 +215,17 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
                 <li key={item.href} className="my-0.5">
                   <Link href={item.href} onClick={handleLinkClick} className={rowClass} title={collapsed ? item.label : undefined}>
                     <Icon icon={item.icon} className={active ? 'text-white' : 'text-gray-300'} size="sm" />
-                    {!collapsed && <span className="text-sm font-medium flex-1 whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>}
-                    {/* spacer to keep alignment */}
-                    {!collapsed && <span className="w-3" aria-hidden="true" />}
+                    {!collapsed && (
+                      <span className="text-sm font-medium flex-1 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-2 min-w-0">
+                        {item.label}
+                        {item.badge != null && item.badge > 0 && (
+                          <span className="shrink-0 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-400 text-[#052a54] text-xs font-bold">
+                            {item.badge > 99 ? '99+' : item.badge}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    {!collapsed && <span className="w-3 shrink-0" aria-hidden="true" />}
                   </Link>
                 </li>
               );

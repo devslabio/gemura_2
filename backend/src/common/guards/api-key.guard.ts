@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ApiKeyRateLimiterService } from '../services/api-key-rate-limiter.service';
 import * as crypto from 'crypto';
 
 export const API_KEY_SCOPES_KEY = 'api_key_scopes';
@@ -16,19 +17,42 @@ export class ApiKeyGuard implements CanActivate {
   constructor(
     private prisma: PrismaService,
     private reflector: Reflector,
+    private rateLimiter: ApiKeyRateLimiterService,
   ) {}
+
+  /**
+   * Prefer X-API-Key; otherwise Authorization: Bearer <api-key> (BI tools often use Bearer).
+   */
+  private extractApiKey(request: { headers?: Record<string, string | string[] | undefined> }): string | undefined {
+    const rawX = request.headers?.['x-api-key'];
+    const x = Array.isArray(rawX) ? rawX[0] : rawX;
+    if (typeof x === 'string' && x.trim()) {
+      return x.trim();
+    }
+
+    const rawAuth = request.headers?.authorization ?? request.headers?.Authorization;
+    const auth = Array.isArray(rawAuth) ? rawAuth[0] : rawAuth;
+    if (typeof auth === 'string' && auth.toLowerCase().startsWith('bearer ')) {
+      const token = auth.slice(7).trim();
+      if (token) {
+        return token;
+      }
+    }
+
+    return undefined;
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
 
-    // Extract API key from X-API-Key header
-    const apiKey = request.headers['x-api-key'];
+    const apiKey = this.extractApiKey(request);
 
     if (!apiKey) {
       throw new UnauthorizedException({
         code: 401,
         status: 'error',
-        message: 'API key is required. Provide it via X-API-Key header.',
+        message:
+          'API key is required. Provide it via X-API-Key header or Authorization: Bearer <api-key>.',
       });
     }
 
@@ -105,6 +129,8 @@ export class ApiKeyGuard implements CanActivate {
         });
       }
     }
+
+    this.rateLimiter.checkOrThrow(apiKeyRecord.id, apiKeyRecord.rate_limit);
 
     // Update last_used_at and request_count
     await this.prisma.apiKey.update({

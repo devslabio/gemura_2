@@ -1,6 +1,9 @@
 #!/bin/bash
 #
-# Deploy Gemura (Backend + Web) to Kwezi server – Kwezi-style: rsync + docker build (with cache).
+# Deploy Gemura API + gemura-web to Kwezi (rsync + docker build with cache).
+# Does NOT build gemura-admin-ui (Compose profile "admin"). For admin:
+#   docker compose -f docker/docker-compose.kwezi.yml --profile admin up -d --build gemura-admin-ui
+# For API-only (leaves gemura-ui container as-is): use deploy-gemura-backend-only.sh
 #
 # Usage (from project root):
 #   ./scripts/gemura/deployment/deploy-gemura.sh
@@ -88,7 +91,8 @@ EOF
 fi
 docker compose -f docker/docker-compose.kwezi.yml down --timeout 30 2>/dev/null || true
 sleep 2
-docker compose -f docker/docker-compose.kwezi.yml --env-file .env up -d --build
+# API + main web only; gemura-admin-ui is opt-in via profile "admin" in compose file
+docker compose -f docker/docker-compose.kwezi.yml --env-file .env up -d --build gemura-api gemura-ui
 ENDSSH
 
 echo ""

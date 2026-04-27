@@ -17,7 +17,7 @@ services:
       # Connect to the shared Postgres container on the same server (devslab-postgres)
       # This is the same container ResolveIt uses, on the same Docker network (devslab-network).
       DATABASE_URL: postgresql://${POSTGRES_USER:-devslab_admin}:${POSTGRES_PASSWORD:-devslab_secure_password_2024}@devslab-postgres:5432/${POSTGRES_DB:-gemura_db}?schema=public
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3005,http://localhost:3004,http://159.198.65.38:3005,http://159.198.65.38:3004}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3005,http://localhost:3015,http://localhost:3004,http://159.198.65.38:3005,http://159.198.65.38:3004}
     ports:
       # Use port 3004 for backend API (3000-3003 are in use on server)
       - "${BACKEND_PORT:-3004}:3004"

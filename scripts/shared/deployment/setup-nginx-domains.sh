@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Install Nginx on Kwezi server and configure app.gemura.rw → Gemura Web (3006), app.orora.rw → Orora Web (3011).
-# Optionally obtain Let's Encrypt SSL (certbot). Requires DNS for both domains pointing to the server.
+# Install Nginx on Kwezi server and configure:
+#   app.gemura.rw   → Gemura Web (3006) + /api/ → 3007
+#   app.orora.rw    → Orora Web (3011) + /api/ → 3007
+#   admin.gemura.rw → Gemura Admin (3021) + /api/ → 3007
+# Optionally obtain Let's Encrypt SSL (certbot). Requires DNS for domains pointing to the server.
 #
 # Prerequisites:
 #   - server-credentials.sh (SERVER_PASS, SERVER_IP, SERVER_USER)
-#   - DNS: app.gemura.rw and app.orora.rw must A-record to SERVER_IP (209.74.80.195)
+#   - DNS: app.gemura.rw, app.orora.rw, and admin.gemura.rw should A-record to SERVER_IP (209.74.80.195)
 #
 # Optional (for SSL):
 #   - CERTBOT_EMAIL="your@email.com" in server-credentials.sh or env (to run certbot)
@@ -35,7 +38,7 @@ if [ ! -f "$NGINX_CONF_SRC" ]; then
 fi
 
 echo "═══════════════════════════════════════════════════════════════"
-echo "  Nginx setup: app.gemura.rw → :3006, app.orora.rw → :3011"
+echo "  Nginx setup: app.gemura.rw → :3006, app.orora.rw → :3011, admin.gemura.rw → :3021 (each /api/ → :3007)"
 echo "  Server: $SERVER_USER@$SERVER_IP"
 echo "═══════════════════════════════════════════════════════════════"
 
@@ -82,10 +85,11 @@ ENDSSH
 
 echo ""
 echo "✅ Nginx is serving:"
-echo "   http://app.gemura.rw  → Gemura Web (port 3006)"
-echo "   http://app.orora.rw   → Orora Web (port 3011)"
+echo "   http://app.gemura.rw   → Gemura Web (port 3006)"
+echo "   http://app.orora.rw    → Orora Web (port 3011)"
+echo "   http://admin.gemura.rw → Gemura Admin (port 3021)"
 echo ""
-echo "⚠️  Ensure DNS: app.gemura.rw and app.orora.rw A records point to $SERVER_IP"
+echo "⚠️  Ensure DNS: app.gemura.rw, app.orora.rw, admin.gemura.rw A records point to $SERVER_IP"
 echo ""
 
 # Optional: run certbot for Let's Encrypt SSL

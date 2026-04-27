@@ -34,6 +34,8 @@ import { ChargesModule } from './modules/charges/charges.module';
 import { AnimalsModule } from './modules/animals/animals.module';
 import { BreedsModule } from './modules/breeds/breeds.module';
 import { FarmsModule } from './modules/farms/farms.module';
+import { PoultryFlocksModule } from './modules/poultry-flocks/poultry-flocks.module';
+import { PigBatchesModule } from './modules/pig-batches/pig-batches.module';
 import { LocationsModule } from './modules/locations/locations.module';
 import { MilkProductionModule } from './modules/milk-production/milk-production.module';
 import { ImmisModule } from './modules/immis/immis.module';
@@ -86,6 +88,8 @@ import { AppController } from './app.controller';
     AnimalsModule,
     BreedsModule,
     FarmsModule,
+    PoultryFlocksModule,
+    PigBatchesModule,
     LocationsModule,
     MilkProductionModule,
     ImmisModule,

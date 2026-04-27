@@ -102,16 +102,26 @@ export class SalesAnalyticsService extends BaseAnalyticsService {
         },
         distinct: ['customer_account_id'],
       }),
-      this.prisma.$queryRaw<{ total_value: number; paid_value: number }[]>`
-        SELECT 
-          COALESCE(SUM(quantity * unit_price), 0) as total_value,
-          COALESCE(SUM(amount_paid), 0) as paid_value
-        FROM milk_sales
-        WHERE supplier_account_id = ANY(${context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000']}::uuid[])
-          AND sale_at >= ${context.startDate}
-          AND sale_at <= ${context.endDate}
-          AND status != 'deleted'
-      `,
+      context.accountIds.length > 0
+        ? this.prisma.$queryRaw<{ total_value: number; paid_value: number }[]>`
+            SELECT 
+              COALESCE(SUM(quantity * unit_price), 0) as total_value,
+              COALESCE(SUM(amount_paid), 0) as paid_value
+            FROM milk_sales
+            WHERE supplier_account_id = ANY(${context.accountIds}::uuid[])
+              AND sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+          `
+        : this.prisma.$queryRaw<{ total_value: number; paid_value: number }[]>`
+            SELECT 
+              COALESCE(SUM(quantity * unit_price), 0) as total_value,
+              COALESCE(SUM(amount_paid), 0) as paid_value
+            FROM milk_sales
+            WHERE sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+          `,
     ]);
 
     const statusMap = new Map(statusCounts.map((s) => [s.status, s._count.id]));
@@ -268,18 +278,31 @@ export class SalesAnalyticsService extends BaseAnalyticsService {
     });
 
     // Get total values per customer
-    const totalValues = await this.prisma.$queryRaw<{ customer_account_id: string; total_value: number }[]>`
-      SELECT 
-        customer_account_id,
-        COALESCE(SUM(quantity * unit_price), 0) as total_value
-      FROM milk_sales
-      WHERE supplier_account_id = ANY(${context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000']}::uuid[])
-        AND customer_account_id = ANY(${customerIds}::uuid[])
-        AND sale_at >= ${context.startDate}
-        AND sale_at <= ${context.endDate}
-        AND status != 'deleted'
-      GROUP BY customer_account_id
-    `;
+    const totalValues =
+      context.accountIds.length > 0
+        ? await this.prisma.$queryRaw<{ customer_account_id: string; total_value: number }[]>`
+            SELECT 
+              customer_account_id,
+              COALESCE(SUM(quantity * unit_price), 0) as total_value
+            FROM milk_sales
+            WHERE supplier_account_id = ANY(${context.accountIds}::uuid[])
+              AND customer_account_id = ANY(${customerIds}::uuid[])
+              AND sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+            GROUP BY customer_account_id
+          `
+        : await this.prisma.$queryRaw<{ customer_account_id: string; total_value: number }[]>`
+            SELECT 
+              customer_account_id,
+              COALESCE(SUM(quantity * unit_price), 0) as total_value
+            FROM milk_sales
+            WHERE customer_account_id = ANY(${customerIds}::uuid[])
+              AND sale_at >= ${context.startDate}
+              AND sale_at <= ${context.endDate}
+              AND status != 'deleted'
+            GROUP BY customer_account_id
+          `;
 
     const customerMap = new Map(customers.map((c) => [c.id, c]));
     const totalValueMap = new Map(totalValues.map((t) => [t.customer_account_id, this.formatDecimal(t.total_value)]));

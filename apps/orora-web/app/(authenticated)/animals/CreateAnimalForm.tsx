@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { animalsApi, CreateAnimalData, Animal, AnimalStatus, AnimalSource, AnimalGender } from '@/lib/api/animals';
 import { breedsApi, Breed } from '@/lib/api/breeds';
+import { speciesApi, Species } from '@/lib/api/species';
 import { useAuthStore } from '@/store/auth';
 import { useFarmStore } from '@/store/farms';
 import { useToastStore } from '@/store/toast';
@@ -36,7 +37,7 @@ const GENDER_OPTIONS: { value: AnimalGender; label: string }[] = [
 interface CreateAnimalFormProps {
   onSuccess: () => void;
   onCancel: () => void;
-  initialData?: Partial<CreateAnimalData> & { id?: string };
+  initialData?: Partial<CreateAnimalData> & { id?: string; species_id?: string };
 }
 
 export default function CreateAnimalForm({ onSuccess, onCancel, initialData }: CreateAnimalFormProps) {
@@ -49,10 +50,12 @@ export default function CreateAnimalForm({ onSuccess, onCancel, initialData }: C
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [parents, setParents] = useState<Animal[]>([]);
+  const [speciesList, setSpeciesList] = useState<Species[]>([]);
   const [breeds, setBreeds] = useState<Breed[]>([]);
   const [formData, setFormData] = useState<CreateAnimalData>({
     tag_number: initialData?.tag_number ?? '',
     name: initialData?.name ?? '',
+    species_id: initialData?.species_id ?? '',
     breed_id: initialData && 'breed_id' in initialData ? (initialData as any).breed_id : '',
     gender: initialData?.gender ?? 'female',
     date_of_birth: initialData?.date_of_birth ?? '',
@@ -73,8 +76,32 @@ export default function CreateAnimalForm({ onSuccess, onCancel, initialData }: C
   }, [accountId]);
 
   useEffect(() => {
-    breedsApi.getList().then((res) => res.data && setBreeds(res.data)).catch(() => {});
-  }, []);
+    speciesApi
+      .getList()
+      .then((res) => {
+        if (!res.data?.length) return;
+        setSpeciesList(res.data);
+        if (!isEdit) {
+          setFormData((prev) => {
+            if (prev.species_id) return prev;
+            const cattle = res.data!.find((s) => s.code === 'cattle') ?? res.data![0];
+            return { ...prev, species_id: cattle.id };
+          });
+        }
+      })
+      .catch(() => {});
+  }, [isEdit]);
+
+  useEffect(() => {
+    if (!formData.species_id) {
+      setBreeds([]);
+      return;
+    }
+    breedsApi
+      .getList(formData.species_id)
+      .then((res) => res.data && setBreeds(res.data))
+      .catch(() => setBreeds([]));
+  }, [formData.species_id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -88,6 +115,10 @@ export default function CreateAnimalForm({ onSuccess, onCancel, initialData }: C
   const validate = (): boolean => {
     if (!formData.tag_number.trim()) {
       setError('Tag number is required');
+      return false;
+    }
+    if (!formData.species_id?.trim()) {
+      setError('Species is required');
       return false;
     }
     if (!formData.breed_id?.trim()) {
@@ -125,6 +156,7 @@ export default function CreateAnimalForm({ onSuccess, onCancel, initialData }: C
       const farmId = formData.farm_id || selectedFarmId;
       const payload: CreateAnimalData = {
         tag_number: formData.tag_number.trim(),
+        species_id: formData.species_id?.trim(),
         breed_id: formData.breed_id.trim(),
         gender: formData.gender,
         date_of_birth: formData.date_of_birth,
@@ -192,18 +224,34 @@ export default function CreateAnimalForm({ onSuccess, onCancel, initialData }: C
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Species *</label>
+          <Select
+            name="species_id"
+            value={formData.species_id ?? ''}
+            onChange={(v) => setFormData((prev) => ({ ...prev, species_id: v, breed_id: '' }))}
+            options={speciesList.map((s) => ({ value: s.id, label: s.name }))}
+            placeholder="— Select species —"
+            allowEmpty
+            required
+            className="w-full"
+          />
+        </div>
+        <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Breed *</label>
           <Select
             name="breed_id"
             value={formData.breed_id ?? ''}
             onChange={(v) => setFormData((prev) => ({ ...prev, breed_id: v }))}
             options={breeds.map((b) => ({ value: b.id, label: `${b.name}${b.code ? ` (${b.code})` : ''}` }))}
-            placeholder="— Select breed —"
+            placeholder={formData.species_id ? '— Select breed —' : '— Select species first —'}
             allowEmpty
             required
             className="w-full"
           />
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Gender *</label>
           <Select
@@ -215,9 +263,6 @@ export default function CreateAnimalForm({ onSuccess, onCancel, initialData }: C
             className="w-full"
           />
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Date of birth *</label>
           <DatePicker
@@ -230,17 +275,18 @@ export default function CreateAnimalForm({ onSuccess, onCancel, initialData }: C
             className="w-full"
           />
         </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Source *</label>
-          <Select
-            name="source"
-            value={formData.source}
-            onChange={(v) => setFormData((prev) => ({ ...prev, source: v as AnimalSource }))}
-            options={SOURCE_OPTIONS}
-            placeholder="Select source"
-            className="w-full"
-          />
-        </div>
+      </div>
+
+      <div className="max-w-md">
+        <label className="block text-sm font-medium text-gray-700 mb-1">Source *</label>
+        <Select
+          name="source"
+          value={formData.source}
+          onChange={(v) => setFormData((prev) => ({ ...prev, source: v as AnimalSource }))}
+          options={SOURCE_OPTIONS}
+          placeholder="Select source"
+          className="w-full"
+        />
       </div>
 
       {formData.source === 'purchased' && (
@@ -279,7 +325,12 @@ export default function CreateAnimalForm({ onSuccess, onCancel, initialData }: C
             value={formData.mother_id ?? ''}
             onChange={(v) => setFormData((prev) => ({ ...prev, mother_id: v }))}
             options={parents
-              .filter((a) => a.gender === 'female' && a.id !== initialData?.id)
+              .filter(
+                (a) =>
+                  a.gender === 'female' &&
+                  a.id !== initialData?.id &&
+                  (!formData.species_id || a.species?.id === formData.species_id),
+              )
               .map((a) => ({ value: a.id, label: `${a.tag_number} ${a.name ? `(${a.name})` : ''}` }))}
             placeholder="— None —"
             allowEmpty
@@ -293,7 +344,12 @@ export default function CreateAnimalForm({ onSuccess, onCancel, initialData }: C
             value={formData.father_id ?? ''}
             onChange={(v) => setFormData((prev) => ({ ...prev, father_id: v }))}
             options={parents
-              .filter((a) => a.gender === 'male' && a.id !== initialData?.id)
+              .filter(
+                (a) =>
+                  a.gender === 'male' &&
+                  a.id !== initialData?.id &&
+                  (!formData.species_id || a.species?.id === formData.species_id),
+              )
               .map((a) => ({ value: a.id, label: `${a.tag_number} ${a.name ? `(${a.name})` : ''}` }))}
             placeholder="— None —"
             allowEmpty

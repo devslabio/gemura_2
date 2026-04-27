@@ -164,8 +164,6 @@ export class PayrollAnalyticsService extends BaseAnalyticsService {
   async getBreakdown(context: AnalyticsContext): Promise<PayrollBreakdown[]> {
     const dateGroupExpr = this.getDateGroupExpression('pr.run_date', context.groupBy);
 
-    const accountCondition = context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000'];
-
     const query = `
       SELECT 
         ${dateGroupExpr} as period_date,
@@ -183,7 +181,35 @@ export class PayrollAnalyticsService extends BaseAnalyticsService {
       ORDER BY period_date ASC
     `;
 
-    const results = await this.prisma.$queryRawUnsafe<any[]>(query, accountCondition, context.startDate, context.endDate);
+    const queryAllAccounts = `
+      SELECT 
+        ${dateGroupExpr} as period_date,
+        COUNT(DISTINCT pr.id) as run_count,
+        COALESCE(SUM(pp.gross_amount), 0) as gross_amount,
+        COALESCE(SUM(pp.total_deductions), 0) as deductions,
+        COALESCE(SUM(pp.net_amount), 0) as net_amount,
+        COUNT(DISTINCT pp.supplier_account_id) as suppliers_count
+      FROM payroll_runs pr
+      LEFT JOIN payroll_payslips pp ON pp.run_id = pr.id
+      WHERE pr.run_date >= $1
+        AND pr.run_date <= $2
+      GROUP BY ${dateGroupExpr}
+      ORDER BY period_date ASC
+    `;
+
+    const results =
+      context.accountIds.length > 0
+        ? await this.prisma.$queryRawUnsafe<any[]>(
+            query,
+            context.accountIds,
+            context.startDate,
+            context.endDate,
+          )
+        : await this.prisma.$queryRawUnsafe<any[]>(
+            queryAllAccounts,
+            context.startDate,
+            context.endDate,
+          );
 
     return results.map((row) => ({
       date: row.period_date instanceof Date 
@@ -309,10 +335,11 @@ export class PayrollAnalyticsService extends BaseAnalyticsService {
    * Get supplier payroll details
    */
   async getSupplierPayrollDetails(context: AnalyticsContext): Promise<SupplierPayrollDetail[]> {
-    const accountCondition = context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000'];
-
     // Use raw SQL to avoid ambiguous column reference issues with Prisma groupBy + relations
-    const payslips = await this.prisma.$queryRawUnsafe<any[]>(`
+    const payslips =
+      context.accountIds.length > 0
+        ? await this.prisma.$queryRawUnsafe<any[]>(
+            `
       SELECT 
         pp.supplier_account_id,
         COALESCE(SUM(pp.gross_amount), 0) as total_gross,
@@ -327,7 +354,34 @@ export class PayrollAnalyticsService extends BaseAnalyticsService {
       GROUP BY pp.supplier_account_id
       ORDER BY total_net DESC
       LIMIT $4 OFFSET $5
-    `, accountCondition, context.startDate, context.endDate, context.limit, (context.page - 1) * context.limit);
+    `,
+            context.accountIds,
+            context.startDate,
+            context.endDate,
+            context.limit,
+            (context.page - 1) * context.limit,
+          )
+        : await this.prisma.$queryRawUnsafe<any[]>(
+            `
+      SELECT 
+        pp.supplier_account_id,
+        COALESCE(SUM(pp.gross_amount), 0) as total_gross,
+        COALESCE(SUM(pp.total_deductions), 0) as total_deductions,
+        COALESCE(SUM(pp.net_amount), 0) as total_net,
+        COUNT(pp.id) as run_count
+      FROM payroll_payslips pp
+      JOIN payroll_runs pr ON pr.id = pp.run_id
+      WHERE pr.run_date >= $1
+        AND pr.run_date <= $2
+      GROUP BY pp.supplier_account_id
+      ORDER BY total_net DESC
+      LIMIT $3 OFFSET $4
+    `,
+            context.startDate,
+            context.endDate,
+            context.limit,
+            (context.page - 1) * context.limit,
+          );
 
     const supplierIds = payslips.map((p) => p.supplier_account_id);
 
@@ -344,20 +398,35 @@ export class PayrollAnalyticsService extends BaseAnalyticsService {
     const supplierMap = new Map(suppliers.map((s) => [s.id, s]));
 
     // Get per-supplier deductions
-    const supplierDeductions = await this.prisma.$queryRaw<any[]>`
-      SELECT 
-        pp.supplier_account_id,
-        pd.deduction_type,
-        COALESCE(SUM(pd.amount), 0) as total_amount
-      FROM payroll_payslips pp
-      JOIN payroll_runs pr ON pr.id = pp.run_id
-      LEFT JOIN payroll_deductions pd ON pd.payslip_id = pp.id
-      WHERE pr.account_id = ANY(${context.accountIds.length > 0 ? context.accountIds : ['00000000-0000-0000-0000-000000000000']}::uuid[])
-        AND pr.run_date >= ${context.startDate}
-        AND pr.run_date <= ${context.endDate}
-        AND pp.supplier_account_id = ANY(${supplierIds}::uuid[])
-      GROUP BY pp.supplier_account_id, pd.deduction_type
-    `;
+    const supplierDeductions =
+      context.accountIds.length > 0
+        ? await this.prisma.$queryRaw<any[]>`
+            SELECT 
+              pp.supplier_account_id,
+              pd.deduction_type,
+              COALESCE(SUM(pd.amount), 0) as total_amount
+            FROM payroll_payslips pp
+            JOIN payroll_runs pr ON pr.id = pp.run_id
+            LEFT JOIN payroll_deductions pd ON pd.payslip_id = pp.id
+            WHERE pr.account_id = ANY(${context.accountIds}::uuid[])
+              AND pr.run_date >= ${context.startDate}
+              AND pr.run_date <= ${context.endDate}
+              AND pp.supplier_account_id = ANY(${supplierIds}::uuid[])
+            GROUP BY pp.supplier_account_id, pd.deduction_type
+          `
+        : await this.prisma.$queryRaw<any[]>`
+            SELECT 
+              pp.supplier_account_id,
+              pd.deduction_type,
+              COALESCE(SUM(pd.amount), 0) as total_amount
+            FROM payroll_payslips pp
+            JOIN payroll_runs pr ON pr.id = pp.run_id
+            LEFT JOIN payroll_deductions pd ON pd.payslip_id = pp.id
+            WHERE pr.run_date >= ${context.startDate}
+              AND pr.run_date <= ${context.endDate}
+              AND pp.supplier_account_id = ANY(${supplierIds}::uuid[])
+            GROUP BY pp.supplier_account_id, pd.deduction_type
+          `;
 
     // Build deduction map per supplier
     const supplierDeductionMap = new Map<string, { loans: number; charges: number; inventory: number }>();
