@@ -357,10 +357,13 @@ export class AdminController {
     @Query('status') status?: string,
     @Query('role') role?: string,
     @Query('account_type') accountType?: string,
+    @Query('sort_by') sortBy?: string,
+    @Query('sort_dir') sortDir?: string,
   ) {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 20;
-    return this.adminService.getUsers(user, accountId, pageNum, limitNum, search, status, role, accountType);
+    const dir = sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined;
+    return this.adminService.getUsers(user, accountId, pageNum, limitNum, search, status, role, accountType, sortBy, dir);
   }
 
   @Get('users/:id')

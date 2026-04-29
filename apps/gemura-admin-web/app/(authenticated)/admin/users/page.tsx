@@ -60,15 +60,17 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState('');
   const [accountTypeFilter, setAccountTypeFilter] = useState('');
   const [pageSize, setPageSize] = useState(10);
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [error, setError] = useState('');
   const hasLoadedRef = useRef(false);
   const isLoadingRef = useRef(false);
-  const filtersRef = useRef({ search, statusFilter, roleFilter, accountTypeFilter, pageSize });
+  const filtersRef = useRef({ search, statusFilter, roleFilter, accountTypeFilter, pageSize, sortBy: 'created_at', sortDir: 'desc' as 'asc' | 'desc' });
   const accountIdRef = useRef(currentAccount?.account_id);
   const initializedFromQueryRef = useRef(false);
   const skipNextSearchDebounceRef = useRef(false);
 
-  /** Search is applied only via debounce (and URL init / clear) so `filtersRef.search` is not ahead of the API. */
+  /** Keep non-search filter fields in sync with the ref so loadUsers reads the latest values. */
   useEffect(() => {
     filtersRef.current = {
       ...filtersRef.current,
@@ -76,8 +78,10 @@ export default function UsersPage() {
       roleFilter,
       accountTypeFilter,
       pageSize,
+      sortBy,
+      sortDir,
     };
-  }, [statusFilter, roleFilter, accountTypeFilter, pageSize]);
+  }, [statusFilter, roleFilter, accountTypeFilter, pageSize, sortBy, sortDir]);
 
   useEffect(() => {
     accountIdRef.current = currentAccount?.account_id;
@@ -85,7 +89,7 @@ export default function UsersPage() {
 
   const loadUsers = useCallback(async (page: number = 1, overrides?: { limit?: number }) => {
     if (isLoadingRef.current) return;
-    const { search: s, statusFilter: st, roleFilter: r, accountTypeFilter: at, pageSize: lim } = filtersRef.current;
+    const { search: s, statusFilter: st, roleFilter: r, accountTypeFilter: at, pageSize: lim, sortBy: sb, sortDir: sd } = filtersRef.current;
     const limit = overrides?.limit ?? lim;
 
     try {
@@ -104,6 +108,7 @@ export default function UsersPage() {
               ...(at ? { account_type: at } : {}),
             }
           : undefined,
+        { sortBy: sb, sortDir: sd },
       );
 
       if (response && response.code === 200 && response.data) {
@@ -157,6 +162,8 @@ export default function UsersPage() {
           roleFilter: nextRole,
           accountTypeFilter: nextAccountType,
           pageSize: nextLimit,
+          sortBy: 'created_at',
+          sortDir: 'desc',
         };
         loadUsers(1, { limit: nextLimit });
         return;
@@ -208,6 +215,14 @@ export default function UsersPage() {
     }
   };
 
+  const handleSort = (key: string, dir: 'asc' | 'desc') => {
+    setSortBy(key);
+    setSortDir(dir);
+    filtersRef.current = { ...filtersRef.current, sortBy: key, sortDir: dir };
+    setPagination((prev) => ({ ...prev, page: 1 }));
+    loadUsers(1);
+  };
+
   const clearFilters = () => {
     skipNextSearchDebounceRef.current = true;
     setSearch('');
@@ -215,8 +230,10 @@ export default function UsersPage() {
     setRoleFilter('');
     setAccountTypeFilter('');
     setPageSize(10);
+    setSortBy('created_at');
+    setSortDir('desc');
     setPagination((prev) => ({ ...prev, page: 1 }));
-    filtersRef.current = { search: '', statusFilter: '', roleFilter: '', accountTypeFilter: '', pageSize: 10 };
+    filtersRef.current = { search: '', statusFilter: '', roleFilter: '', accountTypeFilter: '', pageSize: 10, sortBy: 'created_at', sortDir: 'desc' };
     loadUsers(1);
   };
 
@@ -225,13 +242,13 @@ export default function UsersPage() {
   }
 
   const columns: TableColumn<UserListItem>[] = [
-    { key: 'name', label: 'Name', sortable: true },
-    { key: 'email', label: 'Email', sortable: true },
-    { key: 'phone', label: 'Phone', sortable: true },
+    { key: 'name', label: 'Name', sortable: 'server' },
+    { key: 'email', label: 'Email', sortable: 'server' },
+    { key: 'phone', label: 'Phone', sortable: 'server' },
     {
       key: 'account_type',
       label: 'Account Type',
-      sortable: true,
+      sortable: 'server',
       render: (value) => (
         <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-medium capitalize">
           {value || 'N/A'}
@@ -241,38 +258,42 @@ export default function UsersPage() {
     {
       key: 'role',
       label: 'Role',
-      sortable: true,
       render: (value) => <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-medium capitalize">{value || 'N/A'}</span>,
     },
     {
       key: 'suppliers',
       label: 'Suppliers',
+      sortable: true,
       render: (_, row) => row.stats?.suppliers ?? 0,
     },
     {
       key: 'customers',
       label: 'Customers',
+      sortable: true,
       render: (_, row) => row.stats?.customers ?? 0,
     },
     {
       key: 'sales',
       label: 'Sales',
+      sortable: true,
       render: (_, row) => row.stats?.sales ?? 0,
     },
     {
       key: 'collections',
       label: 'Collections',
+      sortable: true,
       render: (_, row) => row.stats?.collections ?? 0,
     },
     {
       key: 'farms',
       label: 'Farms',
+      sortable: true,
       render: (_, row) => row.stats?.farms ?? 0,
     },
     {
       key: 'status',
       label: 'Status',
-      sortable: true,
+      sortable: 'server',
       render: (value) => (
         <span className={`px-2 py-1 rounded text-xs font-medium ${value === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
           {value}
@@ -282,7 +303,7 @@ export default function UsersPage() {
     {
       key: 'created_at',
       label: 'Created',
-      sortable: true,
+      sortable: 'server',
       render: (value) => new Date(value).toLocaleDateString(),
     },
     {
@@ -412,6 +433,9 @@ export default function UsersPage() {
         columns={columns}
         loading={loading && users.length === 0}
         emptyMessage="No users found"
+        onSort={handleSort}
+        activeSortKey={sortBy}
+        activeSortDir={sortDir}
       />
 
       {pagination.total > 0 && (
