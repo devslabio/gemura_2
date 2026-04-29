@@ -41,7 +41,7 @@ export default function OnboardingSubmissionsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [pendingCount, setPendingCount] = useState(0);
-  const [statusFilter, setStatusFilter] = useState('pending');
+  const [statusFilter, setStatusFilter] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -106,7 +106,9 @@ export default function OnboardingSubmissionsPage() {
             MCC onboarding
           </h1>
           <p className="text-sm text-gray-600 mt-1">
-            Review submissions from the public wizard. Approve to create an account and link the applicant.
+            Review submissions from the public wizard. Approve to create an account and link the applicant. Rows come from the
+            API database (<span className="font-mono text-xs">mcc_onboarding_submissions</span>
+            ); use <span className="font-medium">Status</span> to filter — default is <span className="font-medium">all</span>.
           </p>
         </div>
         {pendingCount > 0 && (
@@ -132,6 +134,12 @@ export default function OnboardingSubmissionsPage() {
             </option>
           ))}
         </select>
+        {!loading && (
+          <span className="text-sm text-gray-500">
+            {pagination.total} total matching filter
+            {statusFilter === '' ? ' (all statuses)' : ''}
+          </span>
+        )}
       </div>
 
       {error && (
