@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { PermissionService } from '@/lib/services/permission.service';
@@ -10,6 +10,8 @@ import Icon, { faUser, faEnvelope, faPhone, faBuilding, faUserShield, faEdit, fa
 import { useToastStore } from '@/store/toast';
 import { DetailPageSkeleton } from '@/app/components/SkeletonLoader';
 
+type ActivityKey = 'suppliers' | 'customers' | 'sales' | 'collections' | 'farms' | 'accounts';
+
 export default function UserDetailsPage() {
   const router = useRouter();
   const params = useParams();
@@ -18,6 +20,8 @@ export default function UserDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [user, setUser] = useState<any>(null);
+
+  const [listAccountId, setListAccountId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!PermissionService.canManageUsers() && !PermissionService.isAdmin()) {
@@ -71,6 +75,46 @@ export default function UserDetailsPage() {
     return [];
   };
 
+  const permissions = getPermissions();
+  const stats = user?.stats || {
+    accounts: 0,
+    suppliers: 0,
+    customers: 0,
+    sales: 0,
+    collections: 0,
+    farms: 0,
+  };
+  const userAccounts = Array.isArray(user?.user_accounts) ? user.user_accounts : [];
+
+  useEffect(() => {
+    if (!user) return;
+    const activeUa = userAccounts.filter((u: any) => u.status === 'active');
+    const ids = activeUa.map((u: any) => u.account_id || u.account?.id).filter(Boolean) as string[];
+    const preferred =
+      currentAccount?.account_id && ids.includes(currentAccount.account_id)
+        ? currentAccount.account_id
+        : ids[0] ?? null;
+    setListAccountId(preferred);
+  }, [user, userAccounts, currentAccount?.account_id]);
+
+  const metricCards: Array<{ key: ActivityKey; label: string; value: number }> = [
+    { key: 'suppliers', label: 'Suppliers', value: stats.suppliers },
+    { key: 'customers', label: 'Customers', value: stats.customers },
+    { key: 'sales', label: 'Sales', value: stats.sales },
+    { key: 'collections', label: 'Collections', value: stats.collections },
+    { key: 'farms', label: 'Farms', value: stats.farms },
+    { key: 'accounts', label: 'Accounts', value: stats.accounts },
+  ];
+
+  const recordsHref = useMemo(
+    () => (metric: ActivityKey) => {
+      if (metric === 'accounts') return `/admin/users/${userId}/records/accounts`;
+      const q = listAccountId ? `?operational_account_id=${encodeURIComponent(listAccountId)}` : '';
+      return `/admin/users/${userId}/records/${metric}${q}`;
+    },
+    [userId, listAccountId],
+  );
+
   if (loading) return <DetailPageSkeleton />;
 
   if (error && !user) {
@@ -82,8 +126,6 @@ export default function UserDetailsPage() {
       </div>
     );
   }
-
-  const permissions = getPermissions();
 
   return (
     <div className="space-y-4">
@@ -173,6 +215,57 @@ export default function UserDetailsPage() {
             </div>
 
             <div className="bg-white border border-gray-200 rounded-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Business Activity</h2>
+              <p className="text-sm text-gray-600 mb-3">
+                Open a full admin list (filters, export, pagination) scoped to an account this user belongs to — same fields as app.gemura.rw.
+              </p>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Lists scoped to account</label>
+                <select
+                  className="input h-10 text-sm max-w-lg text-gray-900"
+                  value={listAccountId ?? ''}
+                  onChange={(e) => setListAccountId(e.target.value || null)}
+                  disabled={!userAccounts.filter((u: any) => u.status === 'active').length}
+                >
+                  {userAccounts.filter((u: any) => u.status === 'active').length === 0 ? (
+                    <option value="">No active account memberships</option>
+                  ) : (
+                    userAccounts
+                      .filter((u: any) => u.status === 'active')
+                      .map((row: any) => {
+                        const id = row.account_id || row.account?.id;
+                        if (!id) return null;
+                        const label = row.account?.name
+                          ? `${row.account.name} (${row.account.code ?? id.slice(0, 8)}…)${row.role ? ` · ${row.role}` : ''}`
+                          : id;
+                        return (
+                          <option key={id} value={id}>
+                            {label}
+                          </option>
+                        );
+                      })
+                  )}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {metricCards.map((item) => (
+                  <Link
+                    key={item.key}
+                    href={recordsHref(item.key)}
+                    className={[
+                      'rounded-sm border p-4 transition-colors text-left block',
+                      'border-gray-200 bg-white hover:border-[var(--primary)] hover:bg-blue-50/40',
+                    ].join(' ')}
+                  >
+                    <div className="text-xs uppercase tracking-wide text-gray-500">{item.label}</div>
+                    <div className="mt-2 text-2xl font-semibold text-gray-900">{item.value}</div>
+                    <div className="mt-2 text-xs font-medium text-[var(--primary)]">View full list →</div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-sm p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Permissions</h2>
               {permissions.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
@@ -201,4 +294,3 @@ export default function UserDetailsPage() {
     </div>
   );
 }
-

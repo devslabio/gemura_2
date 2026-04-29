@@ -65,6 +65,14 @@ export interface UserListItem {
   last_login: string | null;
   role: string | null;
   permissions: Record<string, boolean> | string[] | null;
+  stats?: {
+    accounts: number;
+    suppliers: number;
+    customers: number;
+    sales: number;
+    collections: number;
+    farms: number;
+  };
 }
 
 export interface UsersResponse {
@@ -120,6 +128,17 @@ export interface PermissionItem {
   roles: Array<{ code: string; name: string }>;
 }
 
+export type UserActivityMetric = 'suppliers' | 'customers' | 'sales' | 'collections' | 'farms' | 'accounts';
+
+export type UserBusinessResource =
+  | 'collections'
+  | 'sales'
+  | 'suppliers'
+  | 'customers'
+  | 'farms'
+  | 'accounts'
+  | 'members';
+
 export const adminApi = {
   getDashboardStats: async (
     accountId?: string,
@@ -147,19 +166,57 @@ export const adminApi = {
     limit: number = 10,
     search?: string,
     accountId?: string,
-    filters?: { status?: string; role?: string },
+    filters?: { status?: string; role?: string; account_type?: string },
   ): Promise<UsersResponse> => {
     const params: any = { page, limit };
     if (search) params.search = search;
     if (accountId) params.account_id = accountId;
     if (filters?.status) params.status = filters.status;
     if (filters?.role) params.role = filters.role;
+    if (filters?.account_type) params.account_type = filters.account_type;
     return apiClient.get('/admin/users', { params });
   },
 
   getUserById: async (userId: string, accountId?: string): Promise<any> => {
     const params = accountId ? { account_id: accountId } : {};
     return apiClient.get(`/admin/users/${userId}`, { params });
+  },
+
+  getUserActivity: async (userId: string, metric: UserActivityMetric, accountId?: string): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: any[];
+  }> => {
+    const params: Record<string, unknown> = { metric };
+    if (accountId) params.account_id = accountId;
+    return apiClient.get(`/admin/users/${userId}/activity`, { params });
+  },
+
+  getUserBusinessRecords: async (
+    userId: string,
+    resource: UserBusinessResource,
+    options?: {
+      accountId?: string;
+      operationalAccountId?: string;
+      status?: string;
+      date_from?: string;
+      date_to?: string;
+      supplier_name?: string;
+      customer_account_code?: string;
+      search?: string;
+    },
+  ): Promise<{ code: number; status: string; message: string; data: unknown[] }> => {
+    const params: Record<string, unknown> = { resource };
+    if (options?.accountId) params.account_id = options.accountId;
+    if (options?.operationalAccountId) params.operational_account_id = options.operationalAccountId;
+    if (options?.status) params.status = options.status;
+    if (options?.date_from) params.date_from = options.date_from;
+    if (options?.date_to) params.date_to = options.date_to;
+    if (options?.supplier_name) params.supplier_name = options.supplier_name;
+    if (options?.customer_account_code) params.customer_account_code = options.customer_account_code;
+    if (options?.search) params.search = options.search;
+    return apiClient.get(`/admin/users/${userId}/business-records`, { params });
   },
 
   createUser: async (data: CreateUserData, accountId?: string): Promise<any> => {
@@ -170,6 +227,19 @@ export const adminApi = {
   updateUser: async (userId: string, data: UpdateUserData, accountId?: string): Promise<any> => {
     const body = accountId ? { ...data, account_id: accountId } : data;
     return apiClient.put(`/admin/users/${userId}`, body);
+  },
+
+  exportUsersCsv: async (
+    accountId?: string,
+    filters?: { search?: string; status?: string; role?: string; account_type?: string },
+  ): Promise<Blob> => {
+    const params: Record<string, unknown> = {};
+    if (accountId) params.account_id = accountId;
+    if (filters?.search) params.search = filters.search;
+    if (filters?.status) params.status = filters.status;
+    if (filters?.role) params.role = filters.role;
+    if (filters?.account_type) params.account_type = filters.account_type;
+    return apiClient.getBlob('/admin/users/export-csv', { params });
   },
 
   deleteUser: async (userId: string, accountId?: string): Promise<any> => {
@@ -225,6 +295,17 @@ export const adminApi = {
     return apiClient.get('/admin/onboarding-submissions', { params });
   },
 
+  /**
+   * Full CSV: DB columns, location labels, flattened wizard (wizard_*) and gs_response_* columns.
+   * Same `review_status` filter as the list; omit for all statuses.
+   */
+  exportOnboardingSubmissionsCsv: async (accountId?: string, reviewStatus?: string): Promise<Blob> => {
+    const params: Record<string, unknown> = {};
+    if (accountId) params.account_id = accountId;
+    if (reviewStatus) params.review_status = reviewStatus;
+    return apiClient.getBlob('/admin/onboarding-submissions/export-csv', { params });
+  },
+
   getOnboardingSubmission: async (submissionId: string, accountId?: string): Promise<{ code: number; data: Record<string, unknown> }> => {
     const params = accountId ? { account_id: accountId } : {};
     return apiClient.get(`/admin/onboarding-submissions/${submissionId}`, { params });
@@ -257,4 +338,3 @@ export const adminApi = {
     return apiClient.post(`/admin/onboarding-submissions/${submissionId}/needs-changes`, { notes }, { params });
   },
 };
-

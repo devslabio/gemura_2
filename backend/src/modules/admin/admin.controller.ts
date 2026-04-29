@@ -8,6 +8,7 @@ import {
   Param,
   Query,
   UseGuards,
+  StreamableFile,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,7 +23,7 @@ import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
 } from '@nestjs/swagger';
-import { AdminService } from './admin.service';
+import { AdminService, UserActivityMetric, UserBusinessResource } from './admin.service';
 import { TokenGuard } from '../../common/guards/token.guard';
 import { PermissionGuard } from '../../common/guards/permission.guard';
 import { RequirePermission, RequireRole } from '../../common/decorators/permission.decorator';
@@ -150,6 +151,28 @@ export class AdminController {
     );
   }
 
+  @Get('onboarding-submissions/export-csv')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Export MCC onboarding submissions as CSV (full wizard payload columns)',
+    description:
+      'Returns UTF-8 CSV: database fields, resolved location labels, and flattened section_payload (wizard_*) and google_sheet (gs_response_*). Column titles and cell values are human-readable (status labels, pass/fail, decisions, dates in UTC, pass counts as "n of 8", etc.). Respects the same review_status filter as the list. Max 5000 rows.',
+  })
+  @ApiQuery({ name: 'review_status', required: false, description: 'pending | approved | rejected | needs_changes (omit for all)' })
+  @ApiResponse({ status: 200, description: 'text/csv attachment' })
+  async exportOnboardingSubmissions(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('review_status') reviewStatus?: string,
+  ) {
+    const csv = await this.adminService.exportMccOnboardingSubmissionsCsv(user, accountId, reviewStatus);
+    const day = new Date().toISOString().slice(0, 10);
+    return new StreamableFile(Buffer.from(csv, 'utf-8'), {
+      type: 'text/csv; charset=utf-8',
+      disposition: `attachment; filename="mcc-onboarding-${day}.csv"`,
+    });
+  }
+
   @Get('onboarding-submissions/:submissionId')
   @RequirePermission('manage_users')
   @ApiOperation({ summary: 'Get one MCC onboarding submission including section_payload' })
@@ -206,6 +229,33 @@ export class AdminController {
     return this.adminService.needsChangesMccOnboardingSubmission(user, accountId, submissionId, dto.notes);
   }
 
+  @Get('users/export-csv')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Export users list as CSV',
+    description: 'Downloads a CSV file with all users matching the current filters. Columns: Name, Email, Phone, Account Type, Role, Suppliers, Customers, Sales, Collections, Farms, Status, Created At.',
+  })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'role', required: false })
+  @ApiQuery({ name: 'account_type', required: false })
+  @ApiResponse({ status: 200, description: 'text/csv attachment' })
+  async exportUsers(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('role') role?: string,
+    @Query('account_type') accountType?: string,
+  ) {
+    const csv = await this.adminService.exportUsersCsv(user, accountId, search, status, role, accountType);
+    const day = new Date().toISOString().slice(0, 10);
+    return new StreamableFile(Buffer.from(csv, 'utf-8'), {
+      type: 'text/csv; charset=utf-8',
+      disposition: `attachment; filename="users-${day}.csv"`,
+    });
+  }
+
   @Get('users')
   @RequirePermission('manage_users')
   @ApiOperation({
@@ -246,6 +296,13 @@ export class AdminController {
     type: String,
     description: 'Filter by account role: owner, admin, manager, collector, supplier, customer',
     example: 'admin',
+  })
+  @ApiQuery({
+    name: 'account_type',
+    required: false,
+    type: String,
+    description: 'Filter by user account type: mcc, agent, collector, veterinarian, supplier, customer, farmer, owner',
+    example: 'mcc',
   })
   @ApiResponse({
     status: 200,
@@ -299,10 +356,11 @@ export class AdminController {
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('role') role?: string,
+    @Query('account_type') accountType?: string,
   ) {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 20;
-    return this.adminService.getUsers(user, accountId, pageNum, limitNum, search, status, role);
+    return this.adminService.getUsers(user, accountId, pageNum, limitNum, search, status, role, accountType);
   }
 
   @Get('users/:id')
@@ -375,6 +433,75 @@ export class AdminController {
     @Param('id') userId: string,
   ) {
     return this.adminService.getUserById(user, accountId, userId);
+  }
+
+  @Get('users/:id/activity')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Get user activity list by metric',
+    description: 'Returns user-scoped activity rows for one metric: suppliers, customers, sales, collections, farms, or accounts.',
+  })
+  @ApiParam({
+    name: 'id',
+    type: String,
+    description: 'User ID (UUID)',
+  })
+  @ApiQuery({
+    name: 'metric',
+    required: true,
+    description: 'Activity metric',
+    enum: ['suppliers', 'customers', 'sales', 'collections', 'farms', 'accounts'],
+  })
+  async getUserActivity(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('id') userId: string,
+    @Query('metric') metric: UserActivityMetric,
+  ) {
+    return this.adminService.getUserActivity(user, accountId, userId, metric);
+  }
+
+  @Get('users/:id/business-records')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Full business records for a user (admin)',
+    description:
+      'Returns the same shapes as gemura-web list APIs for collections, sales, suppliers, customers, and farms, scoped to an operational account the target user belongs to. Resource "accounts" returns all active memberships and ignores operational_account_id.',
+  })
+  @ApiParam({ name: 'id', type: String, description: 'Target user UUID' })
+  @ApiQuery({
+    name: 'resource',
+    required: true,
+    enum: ['collections', 'sales', 'suppliers', 'customers', 'farms', 'accounts', 'members'],
+  })
+  @ApiQuery({ name: 'operational_account_id', required: false, description: 'Required except for resource=accounts' })
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'date_from', required: false })
+  @ApiQuery({ name: 'date_to', required: false })
+  @ApiQuery({ name: 'supplier_name', required: false })
+  @ApiQuery({ name: 'customer_account_code', required: false })
+  @ApiQuery({ name: 'search', required: false, description: 'For resource=members: filters by name, email, or phone' })
+  async getUserBusinessRecords(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('id') userId: string,
+    @Query('resource') resource: UserBusinessResource,
+    @Query('operational_account_id') operationalAccountId?: string,
+    @Query('status') status?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('supplier_name') supplierName?: string,
+    @Query('customer_account_code') customerAccountCode?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.getUserBusinessRecords(user, accountId, userId, resource, operationalAccountId, {
+      status,
+      date_from: dateFrom,
+      date_to: dateTo,
+      supplier_name: supplierName,
+      customer_account_code: customerAccountCode,
+      search,
+    });
   }
 
   @Put('users/:userId/immis-link')

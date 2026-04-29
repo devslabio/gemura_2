@@ -11,6 +11,7 @@ import { InventoryAnalyticsService } from './services/inventory-analytics.servic
 import { PayrollAnalyticsService } from './services/payroll-analytics.service';
 import { LoansAnalyticsService } from './services/loans-analytics.service';
 import { PlatformAnalyticsService } from './services/platform-analytics.service';
+import { UnifiedAnalyticsService } from './services/unified-analytics.service';
 
 @Module({
   imports: [PrismaModule, CommonModule],
@@ -25,6 +26,7 @@ import { PlatformAnalyticsService } from './services/platform-analytics.service'
     PayrollAnalyticsService,
     LoansAnalyticsService,
     PlatformAnalyticsService,
+    UnifiedAnalyticsService,
   ],
   exports: [
     BaseAnalyticsService,
@@ -36,6 +38,7 @@ import { PlatformAnalyticsService } from './services/platform-analytics.service'
     PayrollAnalyticsService,
     LoansAnalyticsService,
     PlatformAnalyticsService,
+    UnifiedAnalyticsService,
   ],
 })
 export class PublicAnalyticsModule {}

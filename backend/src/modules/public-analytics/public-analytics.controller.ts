@@ -30,7 +30,9 @@ import { InventoryAnalyticsService } from './services/inventory-analytics.servic
 import { PayrollAnalyticsService } from './services/payroll-analytics.service';
 import { LoansAnalyticsService } from './services/loans-analytics.service';
 import { PlatformAnalyticsService } from './services/platform-analytics.service';
+import { UnifiedAnalyticsService } from './services/unified-analytics.service';
 import { ApiKey, Account } from '@prisma/client';
+import { UnifiedAnalyticsQueryDto } from './dto/unified-analytics-query.dto';
 
 type ApiKeyWithAccount = ApiKey & { account?: Account | null };
 
@@ -59,6 +61,7 @@ export class PublicAnalyticsController {
     private readonly payrollService: PayrollAnalyticsService,
     private readonly loansService: LoansAnalyticsService,
     private readonly platformService: PlatformAnalyticsService,
+    private readonly unifiedService: UnifiedAnalyticsService,
   ) {}
 
   // ==========================================
@@ -402,6 +405,85 @@ export class PublicAnalyticsController {
       message: 'Supplier list retrieved successfully',
       data: { suppliers },
       meta: this.baseService.buildMeta(context, apiKey.account, total),
+    };
+  }
+
+  @Get('everything')
+  @ApiKeyScopes(AnalyticsScopes.ALL)
+  @ApiOperation({
+    summary: 'Get unified account analytics payload',
+    description:
+      'Returns one consolidated payload with account details, linked users, suppliers, customers, collections, and sales. Account-scoped API keys return their own account by default. Platform-wide keys can filter by account_id/account_ids or page through matching accounts. Use `page`/`limit` for top-level account pagination and `nested_page`/`nested_limit` for each nested section inside every account bundle.',
+  })
+  @ApiQuery({ name: 'start_date', required: false, example: '2024-01-01', description: 'Start date filter applied to collections and sales.' })
+  @ApiQuery({ name: 'end_date', required: false, example: '2024-12-31', description: 'End date filter applied to collections and sales.' })
+  @ApiQuery({ name: 'account_id', required: false, description: 'Single account ID to scope the payload to. Platform-wide keys only.' })
+  @ApiQuery({ name: 'account_ids', required: false, description: 'Comma-separated account IDs to scope the payload to. Platform-wide keys only.' })
+  @ApiQuery({ name: 'page', required: false, example: 1, description: 'Top-level account page number.' })
+  @ApiQuery({ name: 'limit', required: false, example: 50, description: 'Top-level account page size.' })
+  @ApiQuery({ name: 'nested_page', required: false, example: 1, description: 'Nested section page number for users, suppliers, customers, collections, and sales inside each account.' })
+  @ApiQuery({ name: 'nested_limit', required: false, example: 100, description: 'Nested section page size for users, suppliers, customers, collections, and sales inside each account.' })
+  @ApiQuery({ name: 'search', required: false, example: 'gahengeri', description: 'Free-text search across account code/name and linked user name/phone/email.' })
+  @ApiQuery({ name: 'account_status', required: false, example: 'active', description: 'Filter accounts by status.' })
+  @ApiQuery({ name: 'user_status', required: false, example: 'active', description: 'Filter linked users by user-account link status.' })
+  @ApiQuery({ name: 'relationship_status', required: false, example: 'active', description: 'Filter supplier/customer relationships by relationship status.' })
+  @ApiQuery({ name: 'sale_status', required: false, example: 'accepted', description: 'Filter collections and sales by milk sale status.' })
+  @ApiQuery({ name: 'payment_status', required: false, example: 'paid', description: 'Filter collections and sales by payment status.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Unified analytics payload retrieved successfully',
+    schema: {
+      example: {
+        code: 200,
+        status: 'success',
+        message: 'Unified analytics payload retrieved successfully',
+        data: {
+          accounts: [
+            {
+              name: 'Jean Baptiste',
+              phone: '250788123456',
+              email: 'jean@example.com',
+              account_type: 'mcc',
+              status: 'active',
+              created_at: '2025-01-04T10:00:00.000Z',
+              suppliers: 12,
+              customers: 3,
+              collections: 420,
+              sales: 0,
+              farms: 1,
+            },
+          ],
+        },
+        meta: {
+          account_id: '550e8400-e29b-41d4-a716-446655440000',
+          account_name: 'Gahengeri MCC',
+          start_date: '2024-01-01',
+          end_date: '2024-12-31',
+          generated_at: '2026-04-27T16:00:00.000Z',
+          api_version: 'v1',
+          page: 1,
+          limit: 50,
+          total: 1,
+        },
+      },
+    },
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing API key' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions or account access denied' })
+  async getEverything(
+    @CurrentApiKey() apiKey: ApiKeyWithAccount,
+    @Query() query: UnifiedAnalyticsQueryDto,
+  ) {
+    const result = await this.unifiedService.getEverything(apiKey, query);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Unified analytics payload retrieved successfully',
+      data: {
+        accounts: result.accounts,
+      },
+      meta: this.baseService.buildMeta(result.context, apiKey.account, result.total),
     };
   }
 
