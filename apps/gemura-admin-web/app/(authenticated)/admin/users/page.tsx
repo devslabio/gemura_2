@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { usePermission } from '@/hooks/usePermission';
 import { adminApi, UserListItem, UsersResponse } from '@/lib/api/admin';
@@ -10,7 +10,7 @@ import { useToastStore } from '@/store/toast';
 import DataTable, { TableColumn } from '@/app/components/DataTable';
 import Pagination from '@/app/components/Pagination';
 import FilterBar, { FilterBarGroup, FilterBarSearch, FilterBarActions } from '@/app/components/FilterBar';
-import Icon, { faPlus, faEye } from '@/app/components/Icon';
+import Icon, { faPlus, faEye, faDownload } from '@/app/components/Icon';
 import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
 
 const ROLE_OPTIONS = [
@@ -32,28 +32,44 @@ const STATUS_OPTIONS = [
   { value: 'inactive', label: 'Inactive' },
 ];
 
+const ACCOUNT_TYPE_OPTIONS = [
+  { value: '', label: 'All Account Types' },
+  { value: 'mcc', label: 'MCC' },
+  { value: 'agent', label: 'Agent' },
+  { value: 'collector', label: 'Collector' },
+  { value: 'veterinarian', label: 'Veterinarian' },
+  { value: 'supplier', label: 'Supplier' },
+  { value: 'customer', label: 'Customer' },
+  { value: 'farmer', label: 'Farmer' },
+  { value: 'owner', label: 'Owner' },
+];
+
 const PAGE_SIZES = [10, 20, 50, 100];
 
 export default function UsersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
   const { canManageUsers, isAdmin } = usePermission();
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [accountTypeFilter, setAccountTypeFilter] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [error, setError] = useState('');
   const hasLoadedRef = useRef(false);
   const isLoadingRef = useRef(false);
-  const filtersRef = useRef({ search, statusFilter, roleFilter, pageSize });
+  const filtersRef = useRef({ search, statusFilter, roleFilter, accountTypeFilter, pageSize });
   const accountIdRef = useRef(currentAccount?.account_id);
+  const initializedFromQueryRef = useRef(false);
 
   useEffect(() => {
-    filtersRef.current = { search, statusFilter, roleFilter, pageSize };
-  }, [search, statusFilter, roleFilter, pageSize]);
+    filtersRef.current = { search, statusFilter, roleFilter, accountTypeFilter, pageSize };
+  }, [search, statusFilter, roleFilter, accountTypeFilter, pageSize]);
 
   useEffect(() => {
     accountIdRef.current = currentAccount?.account_id;
@@ -61,7 +77,7 @@ export default function UsersPage() {
 
   const loadUsers = useCallback(async (page: number = 1, overrides?: { limit?: number }) => {
     if (isLoadingRef.current) return;
-    const { search: s, statusFilter: st, roleFilter: r, pageSize: lim } = filtersRef.current;
+    const { search: s, statusFilter: st, roleFilter: r, accountTypeFilter: at, pageSize: lim } = filtersRef.current;
     const limit = overrides?.limit ?? lim;
 
     try {
@@ -73,7 +89,13 @@ export default function UsersPage() {
         limit,
         s?.trim() || undefined,
         accountIdRef.current,
-        st || r ? { ...(st ? { status: st } : {}), ...(r ? { role: r } : {}) } : undefined,
+        st || r || at
+          ? {
+              ...(st ? { status: st } : {}),
+              ...(r ? { role: r } : {}),
+              ...(at ? { account_type: at } : {}),
+            }
+          : undefined,
       );
 
       if (response && response.code === 200 && response.data) {
@@ -105,22 +127,72 @@ export default function UsersPage() {
       return;
     }
     if (!hasLoadedRef.current && !isLoadingRef.current) {
+      if (!initializedFromQueryRef.current) {
+        const nextSearch = searchParams.get('search') ?? '';
+        const nextStatus = searchParams.get('status') ?? '';
+        const nextRole = searchParams.get('role') ?? '';
+        const nextAccountType = searchParams.get('account_type') ?? '';
+        const limitRaw = Number(searchParams.get('limit'));
+        const nextLimit = PAGE_SIZES.includes(limitRaw) ? limitRaw : pageSize;
+
+        initializedFromQueryRef.current = true;
+        setSearch(nextSearch);
+        setStatusFilter(nextStatus);
+        setRoleFilter(nextRole);
+        setAccountTypeFilter(nextAccountType);
+        setPageSize(nextLimit);
+        setPagination((prev) => ({ ...prev, page: 1, limit: nextLimit }));
+        filtersRef.current = {
+          search: nextSearch,
+          statusFilter: nextStatus,
+          roleFilter: nextRole,
+          accountTypeFilter: nextAccountType,
+          pageSize: nextLimit,
+        };
+        loadUsers(1, { limit: nextLimit });
+        return;
+      }
+
       loadUsers(1);
     }
-  }, [canManageUsers, isAdmin, loadUsers, router]);
+  }, [canManageUsers, isAdmin, loadUsers, router, searchParams, pageSize]);
+
+  const handleExport = async () => {
+    try {
+      setExporting(true);
+      const { search: s, statusFilter: st, roleFilter: r, accountTypeFilter: at } = filtersRef.current;
+      const blob = await adminApi.exportUsersCsv(accountIdRef.current, {
+        search: s?.trim() || undefined,
+        status: st || undefined,
+        role: r || undefined,
+        account_type: at || undefined,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `users-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      useToastStore.getState().error(err?.message || 'Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const clearFilters = () => {
     setSearch('');
     setStatusFilter('');
     setRoleFilter('');
+    setAccountTypeFilter('');
     setPageSize(10);
     setPagination((prev) => ({ ...prev, page: 1 }));
-    filtersRef.current = { search: '', statusFilter: '', roleFilter: '', pageSize: 10 };
+    filtersRef.current = { search: '', statusFilter: '', roleFilter: '', accountTypeFilter: '', pageSize: 10 };
     loadUsers(1);
   };
 
   if (loading && users.length === 0) {
-    return <ListPageSkeleton title="Users" filterFields={3} tableRows={10} tableCols={7} />;
+    return <ListPageSkeleton title="Users" filterFields={4} tableRows={10} tableCols={13} />;
   }
 
   const columns: TableColumn<UserListItem>[] = [
@@ -128,10 +200,45 @@ export default function UsersPage() {
     { key: 'email', label: 'Email', sortable: true },
     { key: 'phone', label: 'Phone', sortable: true },
     {
+      key: 'account_type',
+      label: 'Account Type',
+      sortable: true,
+      render: (value) => (
+        <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-medium capitalize">
+          {value || 'N/A'}
+        </span>
+      ),
+    },
+    {
       key: 'role',
       label: 'Role',
       sortable: true,
       render: (value) => <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-medium capitalize">{value || 'N/A'}</span>,
+    },
+    {
+      key: 'suppliers',
+      label: 'Suppliers',
+      render: (_, row) => row.stats?.suppliers ?? 0,
+    },
+    {
+      key: 'customers',
+      label: 'Customers',
+      render: (_, row) => row.stats?.customers ?? 0,
+    },
+    {
+      key: 'sales',
+      label: 'Sales',
+      render: (_, row) => row.stats?.sales ?? 0,
+    },
+    {
+      key: 'collections',
+      label: 'Collections',
+      render: (_, row) => row.stats?.collections ?? 0,
+    },
+    {
+      key: 'farms',
+      label: 'Farms',
+      render: (_, row) => row.stats?.farms ?? 0,
     },
     {
       key: 'status',
@@ -165,10 +272,20 @@ export default function UsersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-gray-900">Users</h1>
-        <Link href="/admin/users/new" className="btn btn-primary">
-          <Icon icon={faPlus} size="sm" className="mr-2" />
-          Add User
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="btn btn-secondary"
+          >
+            <Icon icon={faDownload} size="sm" className="mr-2" />
+            {exporting ? 'Exporting...' : 'Export CSV'}
+          </button>
+          <Link href="/admin/users/new" className="btn btn-primary">
+            <Icon icon={faPlus} size="sm" className="mr-2" />
+            Add User
+          </Link>
+        </div>
       </div>
 
       <FilterBar>
@@ -185,6 +302,24 @@ export default function UsersPage() {
             className="input h-9 !py-1.5 !px-3 text-sm w-full text-gray-900"
           >
             {ROLE_OPTIONS.map((o) => (
+              <option key={o.value || 'all'} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </FilterBarGroup>
+        <FilterBarGroup label="Account Type">
+          <select
+            value={accountTypeFilter}
+            onChange={(e) => {
+              setAccountTypeFilter(e.target.value);
+              setPagination((prev) => ({ ...prev, page: 1 }));
+              filtersRef.current.accountTypeFilter = e.target.value;
+              loadUsers(1);
+            }}
+            className="input h-9 !py-1.5 !px-3 text-sm w-full text-gray-900"
+          >
+            {ACCOUNT_TYPE_OPTIONS.map((o) => (
               <option key={o.value || 'all'} value={o.value}>
                 {o.label}
               </option>
@@ -252,4 +387,3 @@ export default function UsersPage() {
     </div>
   );
 }
-

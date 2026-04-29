@@ -3,6 +3,7 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
+  StreamableFile,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -63,6 +64,8 @@ function toSerializable(value: unknown): unknown {
 @Injectable()
 export class SerializePrismaInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    return next.handle().pipe(map((data: unknown) => toSerializable(data)));
+    return next.handle().pipe(
+      map((data: unknown) => (data instanceof StreamableFile ? data : toSerializable(data))),
+    );
   }
 }
