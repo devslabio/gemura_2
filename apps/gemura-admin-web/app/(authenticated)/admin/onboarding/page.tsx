@@ -222,8 +222,9 @@ export default function OnboardingSubmissionsPage() {
             MCC onboarding
           </h1>
           <p className="text-sm text-gray-600 mt-1">
-            Superadmin view for MCCs coming from the public onboarding wizard. Default filter is onboarded (approved), and you
-            can switch status to inspect pending/rejected records.
+            Superadmin view for MCCs from the public onboarding wizard (<span className="font-mono text-xs">mcc_onboarding_submissions</span>
+            ). Default status is onboarded (<span className="font-medium">approved</span>) — switch status to inspect pending or rejected
+            records; approve submissions to link applicants to accounts.
           </p>
         </div>
         <div className="flex items-center gap-2">

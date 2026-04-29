@@ -70,7 +70,7 @@ export default function UsersPage() {
   const initializedFromQueryRef = useRef(false);
   const skipNextSearchDebounceRef = useRef(false);
 
-  /** Keep non-search filter fields in sync with the ref so loadUsers reads the latest values. */
+  /** Keep filters + sort in sync with the ref; search is driven by debounce/URL/clear only. */
   useEffect(() => {
     filtersRef.current = {
       ...filtersRef.current,
