@@ -66,10 +66,18 @@ export default function UsersPage() {
   const filtersRef = useRef({ search, statusFilter, roleFilter, accountTypeFilter, pageSize });
   const accountIdRef = useRef(currentAccount?.account_id);
   const initializedFromQueryRef = useRef(false);
+  const skipNextSearchDebounceRef = useRef(false);
 
+  /** Search is applied only via debounce (and URL init / clear) so `filtersRef.search` is not ahead of the API. */
   useEffect(() => {
-    filtersRef.current = { search, statusFilter, roleFilter, accountTypeFilter, pageSize };
-  }, [search, statusFilter, roleFilter, accountTypeFilter, pageSize]);
+    filtersRef.current = {
+      ...filtersRef.current,
+      statusFilter,
+      roleFilter,
+      accountTypeFilter,
+      pageSize,
+    };
+  }, [statusFilter, roleFilter, accountTypeFilter, pageSize]);
 
   useEffect(() => {
     accountIdRef.current = currentAccount?.account_id;
@@ -136,6 +144,7 @@ export default function UsersPage() {
         const nextLimit = PAGE_SIZES.includes(limitRaw) ? limitRaw : pageSize;
 
         initializedFromQueryRef.current = true;
+        skipNextSearchDebounceRef.current = true;
         setSearch(nextSearch);
         setStatusFilter(nextStatus);
         setRoleFilter(nextRole);
@@ -156,6 +165,25 @@ export default function UsersPage() {
       loadUsers(1);
     }
   }, [canManageUsers, isAdmin, loadUsers, router, searchParams, pageSize]);
+
+  useEffect(() => {
+    if (!canManageUsers() && !isAdmin()) return;
+    if (!initializedFromQueryRef.current) return;
+    if (skipNextSearchDebounceRef.current) {
+      skipNextSearchDebounceRef.current = false;
+      return;
+    }
+    if (!hasLoadedRef.current) return;
+
+    const q = search.trim();
+    const delay = setTimeout(() => {
+      filtersRef.current = { ...filtersRef.current, search: q };
+      setPagination((prev) => ({ ...prev, page: 1 }));
+      loadUsers(1);
+    }, 380);
+
+    return () => clearTimeout(delay);
+  }, [search, canManageUsers, isAdmin, loadUsers]);
 
   const handleExport = async () => {
     try {
@@ -181,6 +209,7 @@ export default function UsersPage() {
   };
 
   const clearFilters = () => {
+    skipNextSearchDebounceRef.current = true;
     setSearch('');
     setStatusFilter('');
     setRoleFilter('');
@@ -191,7 +220,7 @@ export default function UsersPage() {
     loadUsers(1);
   };
 
-  if (loading && users.length === 0) {
+  if (loading && users.length === 0 && !hasLoadedRef.current) {
     return <ListPageSkeleton title="Users" filterFields={4} tableRows={10} tableCols={13} />;
   }
 
@@ -372,7 +401,18 @@ export default function UsersPage() {
         </div>
       )}
 
-      <DataTable data={users} columns={columns} loading={loading} emptyMessage="No users found" />
+      {loading && users.length > 0 && (
+        <p className="text-xs text-gray-500" aria-live="polite">
+          Updating results…
+        </p>
+      )}
+
+      <DataTable
+        data={users}
+        columns={columns}
+        loading={loading && users.length === 0}
+        emptyMessage="No users found"
+      />
 
       {pagination.total > 0 && (
         <Pagination

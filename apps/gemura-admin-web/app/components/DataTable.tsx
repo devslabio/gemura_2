@@ -74,24 +74,30 @@ export default function DataTable<T = any>({
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className={`px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider ${
-                    column.sortable ? 'cursor-pointer hover:bg-gray-100' : ''
-                  } ${column.className || ''}`}
-                  onClick={() => column.sortable && handleSort(column.key)}
-                  title={column.sortable ? 'Click to sort' : undefined}
+                  scope="col"
+                  className={`px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider ${column.className || ''}`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span>{column.label}</span>
-                    {column.sortable && (
-                      <span className="text-gray-400">
+                  {column.sortable ? (
+                    <button
+                      type="button"
+                      className="flex w-full min-w-0 cursor-pointer items-center gap-2 rounded -mx-1 px-1 py-0.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 hover:bg-gray-100/80"
+                      onClick={() => handleSort(column.key)}
+                      aria-label={`Sort by ${column.label}`}
+                    >
+                      <span>{column.label}</span>
+                      <span className="text-gray-400" aria-hidden>
                         {sortKey === column.key ? (
                           sortDirection === 'asc' ? <Icon icon={faChevronUp} size="xs" /> : <Icon icon={faChevronDown} size="xs" />
                         ) : (
                           <Icon icon={faArrowsUpDown} size="xs" />
                         )}
                       </span>
-                    )}
-                  </div>
+                    </button>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <span>{column.label}</span>
+                    </span>
+                  )}
                 </th>
               ))}
             </tr>
