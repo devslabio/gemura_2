@@ -267,8 +267,19 @@ export class AdminService {
     }
   }
 
+  private static readonly USERS_SORT_FIELDS: Record<string, string> = {
+    name: 'name',
+    email: 'email',
+    phone: 'phone',
+    status: 'status',
+    account_type: 'account_type',
+    created_at: 'created_at',
+    last_login: 'last_login',
+  };
+
   /**
-   * Get all users with pagination and filters
+   * Get all users with pagination, filters, and server-side sorting.
+   * sortBy must be one of USERS_SORT_FIELDS; defaults to created_at desc.
    */
   async getUsers(
     user: User,
@@ -279,10 +290,17 @@ export class AdminService {
     status?: string,
     role?: string,
     accountType?: string,
+    sortBy?: string,
+    sortDir?: 'asc' | 'desc',
   ) {
     await this.checkAdminPermission(user, accountId);
 
     const skip = (page - 1) * limit;
+
+    const safeField = sortBy && AdminService.USERS_SORT_FIELDS[sortBy]
+      ? AdminService.USERS_SORT_FIELDS[sortBy]
+      : 'created_at';
+    const safeDir: 'asc' | 'desc' = sortDir === 'asc' ? 'asc' : 'desc';
 
     const where: any = {};
 
@@ -316,7 +334,7 @@ export class AdminService {
         where,
         skip,
         take: limit,
-        orderBy: { created_at: 'desc' },
+        orderBy: { [safeField]: safeDir },
         select: {
           id: true,
           name: true,

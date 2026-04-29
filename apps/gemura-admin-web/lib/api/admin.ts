@@ -167,6 +167,7 @@ export const adminApi = {
     search?: string,
     accountId?: string,
     filters?: { status?: string; role?: string; account_type?: string },
+    sort?: { sortBy?: string; sortDir?: 'asc' | 'desc' },
   ): Promise<UsersResponse> => {
     const params: any = { page, limit };
     if (search) params.search = search;
@@ -174,6 +175,8 @@ export const adminApi = {
     if (filters?.status) params.status = filters.status;
     if (filters?.role) params.role = filters.role;
     if (filters?.account_type) params.account_type = filters.account_type;
+    if (sort?.sortBy) params.sort_by = sort.sortBy;
+    if (sort?.sortDir) params.sort_dir = sort.sortDir;
     return apiClient.get('/admin/users', { params });
   },
 
