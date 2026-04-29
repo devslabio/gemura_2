@@ -125,7 +125,9 @@ export default function FilterBar({
   alignItems?: 'center' | 'end';
 }) {
   return (
-    <div className={`flex flex-wrap gap-3 md:gap-4 p-3 md:p-4 bg-white border border-gray-200 rounded mb-4 ${alignItems === 'center' ? 'items-center' : 'items-end'}`}>
+    <div
+      className={`relative z-20 flex flex-wrap gap-3 md:gap-4 p-3 md:p-4 bg-white border border-gray-200 rounded mb-4 ${alignItems === 'center' ? 'items-center' : 'items-end'}`}
+    >
       {children}
     </div>
   );
