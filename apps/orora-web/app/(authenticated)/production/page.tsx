@@ -10,6 +10,7 @@ import {
   MilkCostPerLitreReport,
 } from '@/lib/api/milk-production';
 import { animalsApi, Animal } from '@/lib/api/animals';
+import { farmsApi, Farm } from '@/lib/api/farms';
 import { useToastStore } from '@/store/toast';
 import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
 import FilterBar, { FilterBarGroup, FilterBarActions } from '@/app/components/FilterBar';
@@ -40,6 +41,7 @@ export default function MilkProductionPage() {
   const [filters, setFilters] = useState<MilkProductionFilters>({});
   const [recordModalOpen, setRecordModalOpen] = useState(false);
   const [animals, setAnimals] = useState<Animal[]>([]);
+  const [farms, setFarms] = useState<Farm[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [recordForm, setRecordForm] = useState({
     animal_id: '',
@@ -54,7 +56,7 @@ export default function MilkProductionPage() {
     try {
       setLoading(true);
       setError('');
-      const hasFilters = filters.animal_id || filters.session || filters.from || filters.to;
+      const hasFilters = filters.animal_id || filters.farm_id || filters.session || filters.from || filters.to;
       const listFilters = hasFilters ? filters : undefined;
       const [listRes, reportRes, costRes] = await Promise.all([
         milkProductionApi.list(accountId, listFilters),
@@ -89,12 +91,17 @@ export default function MilkProductionPage() {
   useEffect(() => {
     if (!accountId) {
       setAnimals([]);
+      setFarms([]);
       return;
     }
     animalsApi.getList(accountId).then((res) => {
       if (res.code === 200 && res.data) setAnimals(res.data);
       else setAnimals([]);
     }).catch(() => setAnimals([]));
+    farmsApi.list(accountId).then((res) => {
+      if (res.code === 200 && res.data) setFarms(res.data);
+      else setFarms([]);
+    }).catch(() => setFarms([]));
   }, [accountId]);
 
   const animalOptions = useMemo(
@@ -356,6 +363,15 @@ export default function MilkProductionPage() {
             onChange={(v) => handleFilterChange('session', v)}
             options={SESSION_OPTIONS}
             placeholder="All sessions"
+            className="w-full"
+          />
+        </FilterBarGroup>
+        <FilterBarGroup label="Farm">
+          <Select
+            value={filters.farm_id || ''}
+            onChange={(v) => handleFilterChange('farm_id', v)}
+            options={[{ value: '', label: 'All farms' }, ...farms.map((f) => ({ value: f.id, label: f.name }))]}
+            placeholder="All farms"
             className="w-full"
           />
         </FilterBarGroup>

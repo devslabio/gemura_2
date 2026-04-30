@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumber, IsDateString, Min, Max, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsDateString, Min, Max, IsArray, IsUUID } from 'class-validator';
 import { Type } from 'class-transformer';
 import { IsNotFutureDate } from '../../../../common/validators/not-future-date.validator';
 
@@ -35,4 +35,9 @@ export class UpdateTransactionDto {
   @IsArray()
   @IsString({ each: true })
   cost_tags?: string[];
+
+  @ApiProperty({ description: 'Optional farm UUID for cost attribution', required: false })
+  @IsOptional()
+  @IsUUID()
+  farm_id?: string;
 }

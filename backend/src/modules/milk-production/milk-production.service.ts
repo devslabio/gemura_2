@@ -282,6 +282,52 @@ export class MilkProductionService {
     });
     const scopedExpenseAccountIds = scopedExpenseAccounts.map((a) => a.id);
 
+    const productionWhere: Prisma.MilkProductionWhereInput = {
+      account_id: accId,
+      ...(farmId ? { farm_id: farmId } : {}),
+      ...(fromDate || toDate
+        ? {
+            production_date: {
+              ...(fromDate ? { gte: fromDate } : {}),
+              ...(toDate ? { lte: toDate } : {}),
+            },
+          }
+        : {}),
+    };
+    const producingByAnimal = await this.prisma.milkProduction.groupBy({
+      by: ['animal_id'],
+      where: {
+        ...productionWhere,
+        animal_id: { not: null },
+      },
+      _sum: { quantity_litres: true },
+    });
+    const producingAnimalIds = producingByAnimal
+      .filter((r) => r.animal_id && Number(r._sum.quantity_litres || 0) > 0)
+      .map((r) => r.animal_id as string);
+
+    const producingByAnimalAll = await this.prisma.milkProduction.groupBy({
+      by: ['animal_id'],
+      where: {
+        account_id: accId,
+        ...(fromDate || toDate
+          ? {
+              production_date: {
+                ...(fromDate ? { gte: fromDate } : {}),
+                ...(toDate ? { lte: toDate } : {}),
+              },
+            }
+          : {}),
+        animal_id: { not: null },
+      },
+      _sum: { quantity_litres: true },
+    });
+    const producingCowsAllFarms = producingByAnimalAll.filter((r) => r.animal_id && Number(r._sum.quantity_litres || 0) > 0).length;
+    const producingCows = producingAnimalIds.length;
+    const sharedCostFarmFactor = farmId
+      ? (producingCowsAllFarms > 0 ? producingCows / producingCowsAllFarms : 0)
+      : 1;
+
     const transactions =
       scopedExpenseAccountIds.length === 0
         ? []
@@ -312,6 +358,8 @@ export class MilkProductionService {
       const tags = Array.isArray((t as any).cost_tags)
         ? (t as any).cost_tags.map((v: string) => String(v).toLowerCase())
         : [];
+      const txFarmId = (t as any).farm_id as string | null | undefined;
+      if (farmId && txFarmId && txFarmId !== farmId) continue;
       if (
         includeInventoryFeedCosts &&
         avoidDoubleCounting &&
@@ -321,9 +369,10 @@ export class MilkProductionService {
       }
       const dairySharePct = Number((t as any).dairy_share_pct ?? 100);
       const shareFactor = Math.min(100, Math.max(0, dairySharePct)) / 100;
+      const farmFactor = !farmId ? 1 : (txFarmId === farmId ? 1 : sharedCostFarmFactor);
       for (const e of t.entries) {
         const baseAmount = Number(e.debit_amount || 0);
-        const amount = baseAmount * shareFactor;
+        const amount = baseAmount * shareFactor * farmFactor;
         if (amount <= 0) continue;
         totalExpenseFromAccounting += amount;
         const category = e.account.name || 'Other';
@@ -369,7 +418,7 @@ export class MilkProductionService {
         const qty = Number(m.quantity || 0);
         const unit = Number(m.unit_price || 0);
         return sum + qty * unit;
-      }, 0);
+      }, 0) * sharedCostFarmFactor;
       if (totalInventoryFeedCost > 0) {
         expenseByCategory['Feed (Inventory Inflow)'] =
           (expenseByCategory['Feed (Inventory Inflow)'] || 0) + totalInventoryFeedCost;
@@ -378,36 +427,12 @@ export class MilkProductionService {
 
     const totalExpense = totalExpenseFromAccounting + totalInventoryFeedCost;
 
-    const productionWhere: Prisma.MilkProductionWhereInput = {
-      account_id: accId,
-      ...(farmId ? { farm_id: farmId } : {}),
-      ...(fromDate || toDate
-        ? {
-            production_date: {
-              ...(fromDate ? { gte: fromDate } : {}),
-              ...(toDate ? { lte: toDate } : {}),
-            },
-          }
-        : {}),
-    };
     const totalProductionAgg = await this.prisma.milkProduction.aggregate({
       where: productionWhere,
       _sum: { quantity_litres: true },
       _count: true,
     });
     const totalProductionLitres = Number(totalProductionAgg._sum.quantity_litres || 0);
-
-    const producingByAnimal = await this.prisma.milkProduction.groupBy({
-      by: ['animal_id'],
-      where: {
-        ...productionWhere,
-        animal_id: { not: null },
-      },
-      _sum: { quantity_litres: true },
-    });
-    const producingAnimalIds = producingByAnimal
-      .filter((r) => r.animal_id && Number(r._sum.quantity_litres || 0) > 0)
-      .map((r) => r.animal_id as string);
 
     const totalCows = await this.prisma.animal.count({
       where: {
@@ -425,7 +450,6 @@ export class MilkProductionService {
       },
     });
 
-    const producingCows = producingAnimalIds.length;
     const nonProducingCows = Math.max(0, totalCows - producingCows);
     const herdCountForAllocation = totalCows > 0 ? totalCows : Math.max(producingCows, 1);
 
@@ -457,7 +481,7 @@ export class MilkProductionService {
         'Expenses are taken from account-scoped Expense chart accounts (EXP-*).',
         'Each transaction is weighted by dairy_share_pct (defaults to 100%).',
         farmId
-          ? 'Farm filter applies directly to production/cow counts; expense attribution stays account-level unless explicitly tagged/allocated by farm.'
+          ? 'Farm filter uses direct farm-tagged transaction attribution and allocates shared/untagged costs by producing-cow share.'
           : 'No farm filter applied; values are account-level.',
         includeInventoryFeedCosts
           ? 'Feed inventory inflows are included from purchase_in/adjustment_in movements with feed-like categories.'

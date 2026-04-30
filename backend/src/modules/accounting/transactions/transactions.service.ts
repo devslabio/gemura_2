@@ -120,6 +120,19 @@ export class TransactionsService {
 
   async createTransaction(user: User, createDto: CreateTransactionDto) {
     const defaultAccount = await this.getDefaultAccount(user);
+    if (createDto.farm_id) {
+      const farm = await this.prisma.farm.findFirst({
+        where: { id: createDto.farm_id, account_id: defaultAccount.id },
+        select: { id: true },
+      });
+      if (!farm) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Farm not found or does not belong to this account.',
+        });
+      }
+    }
 
     // Find or create Cash/Asset account for this account
     const cashAccountCode = `CASH-${defaultAccount.code || defaultAccount.id.substring(0, 8).toUpperCase()}`;
@@ -211,6 +224,7 @@ export class TransactionsService {
         transaction_date: transactionDate,
         description: createDto.description,
         total_amount: amount,
+        farm_id: createDto.farm_id || null,
         dairy_share_pct: dairySharePct,
         cost_tags: costTags,
         created_by: user.id,
@@ -272,13 +286,14 @@ export class TransactionsService {
         account: defaultAccount.name,
         category_account: categoryAccount.name,
         cash_account: cashAccount.name,
+        farm_id: (transaction as any).farm_id ?? null,
         dairy_share_pct: Number((transaction as any).dairy_share_pct ?? 100),
         cost_tags: Array.isArray((transaction as any).cost_tags) ? (transaction as any).cost_tags : [],
       },
     };
   }
 
-  async getTransactions(user: User, filters?: { type?: TransactionType; date_from?: string; date_to?: string; limit?: number }) {
+  async getTransactions(user: User, filters?: { type?: TransactionType; date_from?: string; date_to?: string; limit?: number; farm_id?: string }) {
     if (!user.default_account_id) {
       throw new BadRequestException({
         code: 400,
@@ -321,6 +336,7 @@ export class TransactionsService {
               },
             }
           : {}),
+        ...(filters?.farm_id ? { farm_id: filters.farm_id } : {}),
       },
       include: {
         entries: {
@@ -389,6 +405,7 @@ export class TransactionsService {
           description: t.description,
           transaction_date: t.transaction_date,
           category_account: categoryAccount,
+          farm_id: (t as any).farm_id ?? null,
           dairy_share_pct: Number((t as any).dairy_share_pct ?? 100),
           cost_tags: Array.isArray((t as any).cost_tags) ? (t as any).cost_tags : [],
         };
@@ -504,6 +521,7 @@ export class TransactionsService {
         transaction_date: transaction.transaction_date,
         category_account: categoryAccount,
         cash_account: transaction.entries.find((e) => e.account.account_type === 'Asset')?.account.name,
+        farm_id: (transaction as any).farm_id ?? null,
         dairy_share_pct: Number((transaction as any).dairy_share_pct ?? 100),
         cost_tags: Array.isArray((transaction as any).cost_tags) ? (transaction as any).cost_tags : [],
         entries: transaction.entries.map((e) => ({
