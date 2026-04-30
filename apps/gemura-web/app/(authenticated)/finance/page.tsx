@@ -8,6 +8,7 @@ import {
   AccountingTransaction,
   ReceivablesSummary,
   PayablesSummary,
+  ExpenseCategoryAccount,
 } from '@/lib/api/accounting';
 import { useToastStore } from '@/store/toast';
 import Icon, {
@@ -58,6 +59,10 @@ export default function FinancePage() {
   const [recordAmount, setRecordAmount] = useState('');
   const [recordDescription, setRecordDescription] = useState('');
   const [recordDate, setRecordDate] = useState(() => toYYYYMMDD(new Date()));
+  const [recordCategoryAccountId, setRecordCategoryAccountId] = useState('');
+  const [recordDairySharePct, setRecordDairySharePct] = useState('100');
+  const [recordCostTags, setRecordCostTags] = useState('dairy');
+  const [expenseCategoryAccounts, setExpenseCategoryAccounts] = useState<ExpenseCategoryAccount[]>([]);
   const [recordSubmitting, setRecordSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -90,12 +95,28 @@ export default function FinancePage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    accountingApi
+      .getExpenseAccounts(true)
+      .then((accounts) => setExpenseCategoryAccounts(accounts))
+      .catch(() => setExpenseCategoryAccounts([]));
+  }, []);
+
   const handleRecordSubmit = async () => {
     const amount = Number(recordAmount);
     if (!recordDescription.trim() || Number.isNaN(amount) || amount <= 0) {
       useToastStore.getState().error('Enter a valid amount and description');
       return;
     }
+    const dairySharePct = Number(recordDairySharePct);
+    if (Number.isNaN(dairySharePct) || dairySharePct < 0 || dairySharePct > 100) {
+      useToastStore.getState().error('Dairy share must be between 0 and 100');
+      return;
+    }
+    const tags = recordCostTags
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
     setRecordSubmitting(true);
     try {
       await accountingApi.createTransaction({
@@ -103,11 +124,17 @@ export default function FinancePage() {
         amount,
         description: recordDescription.trim(),
         transaction_date: recordDate,
+        account_id: recordType === 'expense' && recordCategoryAccountId ? recordCategoryAccountId : undefined,
+        dairy_share_pct: dairySharePct,
+        cost_tags: tags,
       });
       useToastStore.getState().success(`${recordType === 'revenue' ? 'Revenue' : 'Expense'} recorded`);
       setShowRecordModal(false);
       setRecordAmount('');
       setRecordDescription('');
+      setRecordCategoryAccountId('');
+      setRecordDairySharePct('100');
+      setRecordCostTags('dairy');
       setRecordDate(toYYYYMMDD(new Date()));
       load();
     } catch (e: unknown) {
@@ -400,6 +427,46 @@ export default function FinancePage() {
               onChange={(e) => setRecordDescription(e.target.value)}
               className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
               placeholder="e.g. Milk sales"
+            />
+          </div>
+          {recordType === 'expense' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Expense Category</label>
+              <select
+                value={recordCategoryAccountId}
+                onChange={(e) => setRecordCategoryAccountId(e.target.value)}
+                className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
+              >
+                <option value="">Select category (recommended)</option>
+                {expenseCategoryAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Dairy Cost Share (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              value={recordDairySharePct}
+              onChange={(e) => setRecordDairySharePct(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
+              placeholder="100"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Cost Tags (comma separated)</label>
+            <input
+              type="text"
+              value={recordCostTags}
+              onChange={(e) => setRecordCostTags(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
+              placeholder="dairy,feed,labour"
             />
           </div>
           <div>

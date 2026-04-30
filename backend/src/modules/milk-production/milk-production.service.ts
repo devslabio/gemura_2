@@ -259,6 +259,8 @@ export class MilkProductionService {
     from?: string,
     to?: string,
     farmId?: string,
+    includeInventoryFeedCosts = true,
+    avoidDoubleCounting = true,
   ) {
     const accId = this.getAccountId(user, accountId);
     const fromDate = from ? new Date(from) : undefined;
@@ -305,19 +307,75 @@ export class MilkProductionService {
           });
 
     const expenseByCategory: Record<string, number> = {};
-    let totalExpense = 0;
+    let totalExpenseFromAccounting = 0;
     for (const t of transactions) {
+      const tags = Array.isArray((t as any).cost_tags)
+        ? (t as any).cost_tags.map((v: string) => String(v).toLowerCase())
+        : [];
+      if (
+        includeInventoryFeedCosts &&
+        avoidDoubleCounting &&
+        (tags.includes('inventory_feed') || tags.includes('inventory_linked'))
+      ) {
+        continue;
+      }
       const dairySharePct = Number((t as any).dairy_share_pct ?? 100);
       const shareFactor = Math.min(100, Math.max(0, dairySharePct)) / 100;
       for (const e of t.entries) {
         const baseAmount = Number(e.debit_amount || 0);
         const amount = baseAmount * shareFactor;
         if (amount <= 0) continue;
-        totalExpense += amount;
+        totalExpenseFromAccounting += amount;
         const category = e.account.name || 'Other';
         expenseByCategory[category] = (expenseByCategory[category] || 0) + amount;
       }
     }
+
+    let totalInventoryFeedCost = 0;
+    if (includeInventoryFeedCosts) {
+      const feedMovements = await this.prisma.inventoryMovement.findMany({
+        where: {
+          movement_type: { in: ['purchase_in', 'adjustment_in'] },
+          created_at: {
+            ...(fromDate ? { gte: fromDate } : {}),
+            ...(toDate ? { lte: toDate } : {}),
+          },
+          unit_price: { not: null },
+          product: {
+            account_id: accId,
+            categories: {
+              some: {
+                category: {
+                  OR: [
+                    { name: { equals: 'feed', mode: 'insensitive' } },
+                    { name: { equals: 'feeds', mode: 'insensitive' } },
+                    { name: { equals: 'animal feed', mode: 'insensitive' } },
+                    { name: { equals: 'fodder', mode: 'insensitive' } },
+                    { name: { equals: 'silage', mode: 'insensitive' } },
+                    { name: { equals: 'concentrate', mode: 'insensitive' } },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        select: {
+          quantity: true,
+          unit_price: true,
+        },
+      });
+      totalInventoryFeedCost = feedMovements.reduce((sum, m) => {
+        const qty = Number(m.quantity || 0);
+        const unit = Number(m.unit_price || 0);
+        return sum + qty * unit;
+      }, 0);
+      if (totalInventoryFeedCost > 0) {
+        expenseByCategory['Feed (Inventory Inflow)'] =
+          (expenseByCategory['Feed (Inventory Inflow)'] || 0) + totalInventoryFeedCost;
+      }
+    }
+
+    const totalExpense = totalExpenseFromAccounting + totalInventoryFeedCost;
 
     const productionWhere: Prisma.MilkProductionWhereInput = {
       account_id: accId,
@@ -384,6 +442,8 @@ export class MilkProductionService {
       to: to ?? null,
       farm_id: farmId ?? null,
       total_expense: totalExpense,
+      total_expense_accounting: totalExpenseFromAccounting,
+      total_expense_inventory_feed: totalInventoryFeedCost,
       total_production_litres: totalProductionLitres,
       total_cows: totalCows,
       producing_cows: producingCows,
@@ -395,6 +455,12 @@ export class MilkProductionService {
       notes: [
         'Expenses are taken from account-scoped Expense chart accounts (EXP-*).',
         'Each transaction is weighted by dairy_share_pct (defaults to 100%).',
+        includeInventoryFeedCosts
+          ? 'Feed inventory inflows are included from purchase_in/adjustment_in movements with feed-like categories.'
+          : 'Feed inventory inflows are excluded.',
+        includeInventoryFeedCosts && avoidDoubleCounting
+          ? 'Transactions tagged inventory_feed/inventory_linked are excluded to avoid double counting.'
+          : 'No tag-based double-count prevention applied.',
         'Costs are allocated between producing and non-producing cows by headcount share.',
       ],
     };

@@ -49,6 +49,8 @@ export interface MilkCostPerLitreReport {
   to: string | null;
   farm_id: string | null;
   total_expense: number;
+  total_expense_accounting: number;
+  total_expense_inventory_feed: number;
   total_production_litres: number;
   total_cows: number;
   producing_cows: number;
@@ -90,9 +92,23 @@ export const milkProductionApi = {
       params: { ...accountParam(accountId), from, to },
     }),
 
-  costPerLitre: (accountId?: string, from?: string, to?: string, farmId?: string) =>
+  costPerLitre: (
+    accountId?: string,
+    from?: string,
+    to?: string,
+    farmId?: string,
+    includeInventoryFeedCosts = true,
+    avoidDoubleCounting = true,
+  ) =>
     apiClient.get<ApiResponse<MilkCostPerLitreReport>>('/milk-production/cost-per-litre', {
-      params: { ...accountParam(accountId), from, to, farm_id: farmId },
+      params: {
+        ...accountParam(accountId),
+        from,
+        to,
+        farm_id: farmId,
+        include_inventory_feed_costs: includeInventoryFeedCosts ? 'true' : 'false',
+        avoid_double_counting: avoidDoubleCounting ? 'true' : 'false',
+      },
     }),
 
   update: (id: string, data: Partial<CreateMilkProductionData>, accountId?: string) =>
