@@ -1404,6 +1404,7 @@ model InventoryMovement {
   product_id       String                         @map("product_id") @db.Uuid
   movement_type    InventoryMovementType          @map("movement_type")
   quantity         Int                            // Always positive; direction from movement_type
+  movement_date    DateTime                       @default(now()) @map("movement_date")
   reference_type   InventoryMovementReferenceType @map("reference_type")
   reference_id     String?                        @map("reference_id") @db.Uuid // e.g. inventory_sale.id
   description      String?                        @db.Text // e.g. "Sale to John (A_ABC)", "New shipment"
@@ -1417,6 +1418,7 @@ model InventoryMovement {
 
   @@index([product_id])
   @@index([movement_type])
+  @@index([movement_date])
   @@index([reference_type])
   @@index([created_at])
   @@map("inventory_movements")
