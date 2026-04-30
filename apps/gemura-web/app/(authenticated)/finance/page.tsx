@@ -10,6 +10,7 @@ import {
   PayablesSummary,
   ExpenseCategoryAccount,
 } from '@/lib/api/accounting';
+import { milkProductionApi, type MilkCostPerLitreReport } from '@/lib/api/milk-production';
 import { useToastStore } from '@/store/toast';
 import Icon, {
   faCalendar,
@@ -64,6 +65,9 @@ export default function FinancePage() {
   const [recordCostTags, setRecordCostTags] = useState('dairy');
   const [expenseCategoryAccounts, setExpenseCategoryAccounts] = useState<ExpenseCategoryAccount[]>([]);
   const [recordSubmitting, setRecordSubmitting] = useState(false);
+  const [milkCostReport, setMilkCostReport] = useState<MilkCostPerLitreReport | null>(null);
+  const [includeInventoryFeedCosts, setIncludeInventoryFeedCosts] = useState(true);
+  const [avoidDoubleCounting, setAvoidDoubleCounting] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,6 +83,19 @@ export default function FinancePage() {
       setTransactions(txRes);
       setReceivables(recRes);
       setPayables(payRes);
+      try {
+        const costRes = await milkProductionApi.costPerLitre(
+          fromDate,
+          toDate,
+          undefined,
+          includeInventoryFeedCosts,
+          avoidDoubleCounting,
+        );
+        if (costRes.code === 200 && costRes.data) setMilkCostReport(costRes.data);
+        else setMilkCostReport(null);
+      } catch {
+        setMilkCostReport(null);
+      }
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ?? (e as Error)?.message ?? 'Failed to load finance data';
       setError(msg);
@@ -86,10 +103,11 @@ export default function FinancePage() {
       setTransactions([]);
       setReceivables(null);
       setPayables(null);
+      setMilkCostReport(null);
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate]);
+  }, [fromDate, toDate, includeInventoryFeedCosts, avoidDoubleCounting]);
 
   useEffect(() => {
     load();
@@ -286,6 +304,43 @@ export default function FinancePage() {
           {/* Financial breakdown (only when we have income data) */}
           {income && (
             <div className="space-y-4">
+              <div className="rounded-sm border border-gray-200 bg-white p-4 space-y-2">
+                <div className="flex flex-wrap items-center gap-4">
+                  <h3 className="text-sm font-semibold text-gray-700">Milk costing scenario</h3>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={includeInventoryFeedCosts}
+                      onChange={(e) => setIncludeInventoryFeedCosts(e.target.checked)}
+                    />
+                    Include inventory feed costs
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={avoidDoubleCounting}
+                      onChange={(e) => setAvoidDoubleCounting(e.target.checked)}
+                      disabled={!includeInventoryFeedCosts}
+                    />
+                    Avoid double counting
+                  </label>
+                </div>
+                <p className="text-sm text-gray-700">
+                  Cost per litre (producing cows):{' '}
+                  <span className="font-semibold">
+                    {milkCostReport
+                      ? formatAmount(milkCostReport.cost_per_litre_producing_cows)
+                      : '—'}
+                  </span>
+                </p>
+                {milkCostReport?.notes?.length ? (
+                  <ul className="text-xs text-gray-500 list-disc pl-4">
+                    {milkCostReport.notes.map((note) => (
+                      <li key={note}>{note}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
               <div className="rounded-sm border border-gray-200 bg-white p-4">
                 <h3 className="text-sm font-semibold text-gray-700">Financial Breakdown</h3>
                 <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
