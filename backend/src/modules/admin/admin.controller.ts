@@ -135,12 +135,20 @@ export class AdminController {
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'review_status', required: false, description: 'pending | approved | rejected | needs_changes' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by business, manager name/phone, submission code, or account code/name' })
+  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound' })
+  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound' })
+  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset()' })
   async listOnboardingSubmissions(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('review_status') reviewStatus?: string,
+    @Query('search') search?: string,
+    @Query('onboarded_from') onboardedFrom?: string,
+    @Query('onboarded_to') onboardedTo?: string,
+    @Query('tz_offset_minutes') tzOffsetMinutes?: string,
   ) {
     return this.adminService.listMccOnboardingSubmissions(
       user,
@@ -148,6 +156,10 @@ export class AdminController {
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
       reviewStatus,
+      search,
+      onboardedFrom,
+      onboardedTo,
+      tzOffsetMinutes ? parseInt(tzOffsetMinutes, 10) : undefined,
     );
   }
 
@@ -159,17 +171,65 @@ export class AdminController {
       'Returns UTF-8 CSV: database fields, resolved location labels, and flattened section_payload (wizard_*) and google_sheet (gs_response_*). Column titles and cell values are human-readable (status labels, pass/fail, decisions, dates in UTC, pass counts as "n of 8", etc.). Respects the same review_status filter as the list. Max 5000 rows.',
   })
   @ApiQuery({ name: 'review_status', required: false, description: 'pending | approved | rejected | needs_changes (omit for all)' })
+  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound' })
+  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound' })
+  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset()' })
   @ApiResponse({ status: 200, description: 'text/csv attachment' })
   async exportOnboardingSubmissions(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
     @Query('review_status') reviewStatus?: string,
+    @Query('onboarded_from') onboardedFrom?: string,
+    @Query('onboarded_to') onboardedTo?: string,
+    @Query('tz_offset_minutes') tzOffsetMinutes?: string,
   ) {
-    const csv = await this.adminService.exportMccOnboardingSubmissionsCsv(user, accountId, reviewStatus);
+    const csv = await this.adminService.exportMccOnboardingSubmissionsCsv(
+      user,
+      accountId,
+      reviewStatus,
+      onboardedFrom,
+      onboardedTo,
+      tzOffsetMinutes ? parseInt(tzOffsetMinutes, 10) : undefined,
+    );
     const day = new Date().toISOString().slice(0, 10);
     return new StreamableFile(Buffer.from(csv, 'utf-8'), {
       type: 'text/csv; charset=utf-8',
       disposition: `attachment; filename="mcc-onboarding-${day}.csv"`,
+    });
+  }
+
+  @Get('onboarding-submissions/export-xlsx')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Export MCC onboarding submissions as Excel (.xlsx)',
+    description:
+      'Returns an Excel workbook with one row per submission and one value per column, including resolved location labels and curated section fields for analysis.',
+  })
+  @ApiQuery({ name: 'review_status', required: false, description: 'pending | approved | rejected | needs_changes (omit for all)' })
+  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound' })
+  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound' })
+  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset()' })
+  @ApiResponse({ status: 200, description: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet attachment' })
+  async exportOnboardingSubmissionsXlsx(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('review_status') reviewStatus?: string,
+    @Query('onboarded_from') onboardedFrom?: string,
+    @Query('onboarded_to') onboardedTo?: string,
+    @Query('tz_offset_minutes') tzOffsetMinutes?: string,
+  ) {
+    const xlsxBuffer = await this.adminService.exportMccOnboardingSubmissionsXlsx(
+      user,
+      accountId,
+      reviewStatus,
+      onboardedFrom,
+      onboardedTo,
+      tzOffsetMinutes ? parseInt(tzOffsetMinutes, 10) : undefined,
+    );
+    const day = new Date().toISOString().slice(0, 10);
+    return new StreamableFile(xlsxBuffer, {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      disposition: `attachment; filename="mcc-onboarding-${day}.xlsx"`,
     });
   }
 
