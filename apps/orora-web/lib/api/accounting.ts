@@ -40,6 +40,12 @@ export interface CreateTransactionData {
   account_id?: string;
 }
 
+export interface ExpenseCategoryAccount {
+  id: string;
+  code: string;
+  name: string;
+}
+
 /** Customer/Supplier info in receivables/payables */
 export interface CustomerInfo {
   id: string;
@@ -171,6 +177,13 @@ export const accountingApi = {
   createTransaction: async (data: CreateTransactionData): Promise<AccountingTransaction> => {
     const res = await apiClient.post('/accounting/transactions', data);
     return unwrap<AccountingTransaction>(res);
+  },
+
+  getExpenseAccounts: async (ensureDefaults = true): Promise<ExpenseCategoryAccount[]> => {
+    const res = await apiClient.get('/accounting/transactions/expense-accounts/list', {
+      params: { ensure_defaults: ensureDefaults ? 'true' : 'false' },
+    });
+    return unwrap<ExpenseCategoryAccount[]>(res);
   },
 
   getTransactionById: async (id: string): Promise<AccountingTransaction> => {
