@@ -336,8 +336,11 @@ export class MilkProductionService {
       const feedMovements = await this.prisma.inventoryMovement.findMany({
         where: {
           movement_type: { in: ['purchase_in', 'adjustment_in'] },
-          // TODO: switch to explicit movement_date once available on inventory_movements.
-          // For now we use created_at as the best available timestamp.
+          // Use movement effective date for period costing.
+          movement_date: {
+            ...(fromDate ? { gte: fromDate } : {}),
+            ...(toDate ? { lte: toDate } : {}),
+          },
           product: {
             account_id: accId,
             categories: {
@@ -354,10 +357,6 @@ export class MilkProductionService {
                 },
               },
             },
-          },
-          created_at: {
-            ...(fromDate ? { gte: fromDate } : {}),
-            ...(toDate ? { lte: toDate } : {}),
           },
           unit_price: { not: null },
         },
