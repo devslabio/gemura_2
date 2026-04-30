@@ -79,6 +79,7 @@ export class MilkProductionController {
   @ApiQuery({ name: 'farm_id', required: false, description: 'Optional farm UUID for farm-level report' })
   @ApiQuery({ name: 'include_inventory_feed_costs', required: false, description: 'Include feed costs derived from inventory inflow movements', example: 'true' })
   @ApiQuery({ name: 'avoid_double_counting', required: false, description: 'Exclude expense transactions tagged inventory_feed/inventory_linked when inventory feed costs are included', example: 'true' })
+  @ApiQuery({ name: 'allocation_basis', required: false, description: 'Shared cost allocation basis when farm_id is set: producing_cows | total_cows | production_litres', example: 'producing_cows' })
   @ApiResponse({ status: 200, description: 'Cost-per-litre report' })
   async costPerLitre(
     @CurrentUser() user: User,
@@ -88,6 +89,7 @@ export class MilkProductionController {
     @Query('farm_id') farmId?: string,
     @Query('include_inventory_feed_costs') includeInventoryFeedCosts?: string,
     @Query('avoid_double_counting') avoidDoubleCounting?: string,
+    @Query('allocation_basis') allocationBasis?: string,
   ) {
     const data = await this.milkProductionService.reportCostPerLitre(
       user,
@@ -97,6 +99,7 @@ export class MilkProductionController {
       farmId,
       includeInventoryFeedCosts !== 'false',
       avoidDoubleCounting !== 'false',
+      allocationBasis as 'producing_cows' | 'total_cows' | 'production_litres' | undefined,
     );
     return { code: 200, status: 'success', message: 'Cost-per-litre report retrieved', data };
   }

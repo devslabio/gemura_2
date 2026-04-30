@@ -15,6 +15,8 @@ export interface MilkCostPerLitreReport {
   non_producing_cost_estimate: number;
   cost_per_litre_producing_cows: number;
   expense_by_category: Array<{ category_name: string; amount: number }>;
+  allocation_basis?: 'producing_cows' | 'total_cows' | 'production_litres';
+  shared_cost_allocation_factor?: number;
   notes: string[];
 }
 
@@ -32,6 +34,7 @@ export const milkProductionApi = {
     farmId?: string,
     includeInventoryFeedCosts = true,
     avoidDoubleCounting = true,
+    allocationBasis: 'producing_cows' | 'total_cows' | 'production_litres' = 'producing_cows',
   ) =>
     apiClient.get<ApiResponse<MilkCostPerLitreReport>>('/milk-production/cost-per-litre', {
       params: {
@@ -40,6 +43,7 @@ export const milkProductionApi = {
         farm_id: farmId,
         include_inventory_feed_costs: includeInventoryFeedCosts ? 'true' : 'false',
         avoid_double_counting: avoidDoubleCounting ? 'true' : 'false',
+        allocation_basis: allocationBasis,
       },
     }),
 };

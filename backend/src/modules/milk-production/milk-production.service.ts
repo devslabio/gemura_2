@@ -261,6 +261,7 @@ export class MilkProductionService {
     farmId?: string,
     includeInventoryFeedCosts = true,
     avoidDoubleCounting = true,
+    allocationBasis: 'producing_cows' | 'total_cows' | 'production_litres' = 'producing_cows',
   ) {
     const accId = this.getAccountId(user, accountId);
     const fromDate = from ? new Date(from) : undefined;
@@ -324,9 +325,64 @@ export class MilkProductionService {
     });
     const producingCowsAllFarms = producingByAnimalAll.filter((r) => r.animal_id && Number(r._sum.quantity_litres || 0) > 0).length;
     const producingCows = producingAnimalIds.length;
-    const sharedCostFarmFactor = farmId
-      ? (producingCowsAllFarms > 0 ? producingCows / producingCowsAllFarms : 0)
-      : 1;
+    const totalCows = await this.prisma.animal.count({
+      where: {
+        account_id: accId,
+        status: 'active',
+        gender: 'female',
+        ...(farmId ? { farm_id: farmId } : {}),
+        species: {
+          OR: [
+            { code: { in: ['cattle', 'cow', 'dairy_cattle'] } },
+            { name: { contains: 'cattle', mode: 'insensitive' } },
+            { name: { contains: 'cow', mode: 'insensitive' } },
+          ],
+        },
+      },
+    });
+    const totalProductionAggAllFarms = await this.prisma.milkProduction.aggregate({
+      where: {
+        account_id: accId,
+        ...(fromDate || toDate
+          ? {
+              production_date: {
+                ...(fromDate ? { gte: fromDate } : {}),
+                ...(toDate ? { lte: toDate } : {}),
+              },
+            }
+          : {}),
+      },
+      _sum: { quantity_litres: true },
+    });
+    const totalProductionLitresAllFarms = Number(totalProductionAggAllFarms._sum.quantity_litres || 0);
+    const totalCowsAllFarms = await this.prisma.animal.count({
+      where: {
+        account_id: accId,
+        status: 'active',
+        gender: 'female',
+        species: {
+          OR: [
+            { code: { in: ['cattle', 'cow', 'dairy_cattle'] } },
+            { name: { contains: 'cattle', mode: 'insensitive' } },
+            { name: { contains: 'cow', mode: 'insensitive' } },
+          ],
+        },
+      },
+    });
+
+    const sharedCostFarmFactor = (() => {
+      if (!farmId) return 1;
+      if (allocationBasis === 'total_cows') {
+        return totalCowsAllFarms > 0 ? totalCows / totalCowsAllFarms : 0;
+      }
+      if (allocationBasis === 'production_litres') {
+        const lit = Number(
+          producingByAnimal.reduce((s, r) => s + Number(r._sum.quantity_litres || 0), 0),
+        );
+        return totalProductionLitresAllFarms > 0 ? lit / totalProductionLitresAllFarms : 0;
+      }
+      return producingCowsAllFarms > 0 ? producingCows / producingCowsAllFarms : 0;
+    })();
 
     const transactions =
       scopedExpenseAccountIds.length === 0
@@ -434,22 +490,6 @@ export class MilkProductionService {
     });
     const totalProductionLitres = Number(totalProductionAgg._sum.quantity_litres || 0);
 
-    const totalCows = await this.prisma.animal.count({
-      where: {
-        account_id: accId,
-        status: 'active',
-        gender: 'female',
-        ...(farmId ? { farm_id: farmId } : {}),
-        species: {
-          OR: [
-            { code: { in: ['cattle', 'cow', 'dairy_cattle'] } },
-            { name: { contains: 'cattle', mode: 'insensitive' } },
-            { name: { contains: 'cow', mode: 'insensitive' } },
-          ],
-        },
-      },
-    });
-
     const nonProducingCows = Math.max(0, totalCows - producingCows);
     const herdCountForAllocation = totalCows > 0 ? totalCows : Math.max(producingCows, 1);
 
@@ -477,11 +517,13 @@ export class MilkProductionService {
       non_producing_cost_estimate: nonProducingCostEstimate,
       cost_per_litre_producing_cows: costPerLitreProducing,
       expense_by_category: expenseSeries,
+      allocation_basis: allocationBasis,
+      shared_cost_allocation_factor: sharedCostFarmFactor,
       notes: [
         'Expenses are taken from account-scoped Expense chart accounts (EXP-*).',
         'Each transaction is weighted by dairy_share_pct (defaults to 100%).',
         farmId
-          ? 'Farm filter uses direct farm-tagged transaction attribution and allocates shared/untagged costs by producing-cow share.'
+          ? `Farm filter uses direct farm-tagged transaction attribution and allocates shared/untagged costs by ${allocationBasis.replace('_', ' ')}.`
           : 'No farm filter applied; values are account-level.',
         includeInventoryFeedCosts
           ? 'Feed inventory inflows are included from purchase_in/adjustment_in movements with feed-like categories.'
