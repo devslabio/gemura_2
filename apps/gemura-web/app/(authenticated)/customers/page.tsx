@@ -25,6 +25,8 @@ export default function CustomersPage() {
   const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
   const { hasPermission, isAdmin } = usePermission();
+  const role = (currentAccount?.role ?? '').toLowerCase();
+  const isReadOnlyTeamRole = role === 'agent' || role === 'collector' || role === 'veterinary' || role === 'veterinarian' || role === 'veternary' || role === 'milkreceptionist' || role === 'milk_receptionist';
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [error, setError] = useState('');
@@ -32,7 +34,7 @@ export default function CustomersPage() {
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const canCreateCustomer = hasPermission('create_customers') || isAdmin();
+  const canCreateCustomer = !isReadOnlyTeamRole && (hasPermission('create_customers') || isAdmin());
 
   const loadCustomers = useCallback(async () => {
     try {

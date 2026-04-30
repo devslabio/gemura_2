@@ -2,11 +2,22 @@
 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useEffect } from 'react';
+import { useAuthStore } from '@/store/auth';
 import Icon, { faTimes } from '@/app/components/Icon';
 import CreateSupplierForm from '../CreateSupplierForm';
 
 export default function CreateSupplierPage() {
   const router = useRouter();
+  const { currentAccount } = useAuthStore();
+  const role = (currentAccount?.role ?? '').toLowerCase();
+  const isReadOnlyTeamRole = role === 'agent' || role === 'collector' || role === 'veterinary' || role === 'veterinarian' || role === 'veternary' || role === 'milkreceptionist' || role === 'milk_receptionist';
+
+  useEffect(() => {
+    if (isReadOnlyTeamRole) {
+      router.replace('/suppliers');
+    }
+  }, [isReadOnlyTeamRole, router]);
 
   return (
     <div className="space-y-4">

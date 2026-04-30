@@ -43,6 +43,17 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
   const role = (currentAccount?.role ?? '').toLowerCase();
   const accountId = currentAccount?.account_id ?? '';
   const isVeterinaryRole = ['veterinary', 'veterinarian', 'veternary', 'agent'].includes(role);
+  const isLimitedOpsRole =
+    role === 'agent' ||
+    role === 'collector' ||
+    role === 'veterinary' ||
+    role === 'veterinarian' ||
+    role === 'veternary' ||
+    role === 'milkreceptionist' ||
+    role === 'milk_receptionist';
+  const isLimitedOpsPath = ['/dashboard', '/sales', '/collections', '/inventory', '/suppliers', '/customers'].some(
+    (p) => pathname === p || pathname.startsWith(p + '/')
+  );
 
   const pathKey = useMemo(
     () => Object.keys(OPERATIONS_PATH_PERMISSION).find((p) => pathname === p || pathname.startsWith(p + '/')),
@@ -83,8 +94,27 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
       return;
     }
 
-    if (pathname.startsWith('/accounts') && role === 'accountant') {
+    if (pathname.startsWith('/accounts') && (role === 'accountant' || isLimitedOpsRole)) {
       router.replace('/dashboard');
+      return;
+    }
+
+    if (role === 'manager') {
+      setAllowed(true);
+      return;
+    }
+
+    if (role === 'accountant') {
+      setAllowed(true);
+      return;
+    }
+
+    if (isLimitedOpsRole) {
+      if (!isLimitedOpsPath) {
+        router.replace('/dashboard');
+        return;
+      }
+      setAllowed(true);
       return;
     }
 

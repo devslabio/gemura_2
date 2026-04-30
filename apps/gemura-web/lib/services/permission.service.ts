@@ -5,6 +5,10 @@ export interface Permission {
 }
 
 export class PermissionService {
+  private static normalizeRole(role?: string | null): string {
+    return (role || '').trim().toLowerCase().replace(/\s+/g, '_');
+  }
+
   /**
    * Check if user has a specific permission
    */
@@ -15,8 +19,16 @@ export class PermissionService {
       return false;
     }
 
+    const role = this.normalizeRole(currentAccount.role);
+
     // Owner and admin have all permissions
-    if (currentAccount.role === 'owner' || currentAccount.role === 'admin') {
+    if (role === 'owner' || role === 'admin') {
+      return true;
+    }
+
+    // Managers should have full operations access even if explicit
+    // permission payload is missing/incomplete on the account object.
+    if (role === 'manager') {
       return true;
     }
 
@@ -54,7 +66,7 @@ export class PermissionService {
    */
   static hasRole(role: string): boolean {
     const { currentAccount } = useAuthStore.getState();
-    return currentAccount?.role === role;
+    return this.normalizeRole(currentAccount?.role) === this.normalizeRole(role);
   }
 
   /**
@@ -62,7 +74,8 @@ export class PermissionService {
    */
   static isAdmin(): boolean {
     const { currentAccount } = useAuthStore.getState();
-    return currentAccount?.role === 'admin' || currentAccount?.role === 'owner';
+    const role = this.normalizeRole(currentAccount?.role);
+    return role === 'admin' || role === 'owner';
   }
 
   /**
