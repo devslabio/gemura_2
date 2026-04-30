@@ -35,6 +35,8 @@ export default function MilkProductionPage() {
   const [records, setRecords] = useState<MilkProductionRecord[]>([]);
   const [report, setReport] = useState<{ total_production_litres: number; total_sold_litres: number } | null>(null);
   const [costReport, setCostReport] = useState<MilkCostPerLitreReport | null>(null);
+  const [includeInventoryFeedCosts, setIncludeInventoryFeedCosts] = useState(true);
+  const [avoidDoubleCounting, setAvoidDoubleCounting] = useState(true);
   const [filters, setFilters] = useState<MilkProductionFilters>({});
   const [recordModalOpen, setRecordModalOpen] = useState(false);
   const [animals, setAnimals] = useState<Animal[]>([]);
@@ -57,7 +59,14 @@ export default function MilkProductionPage() {
       const [listRes, reportRes, costRes] = await Promise.all([
         milkProductionApi.list(accountId, listFilters),
         milkProductionApi.report(accountId, filters.from, filters.to),
-        milkProductionApi.costPerLitre(accountId, filters.from, filters.to, filters.farm_id),
+        milkProductionApi.costPerLitre(
+          accountId,
+          filters.from,
+          filters.to,
+          filters.farm_id,
+          includeInventoryFeedCosts,
+          avoidDoubleCounting,
+        ),
       ]);
       if (listRes.code === 200 && listRes.data) setRecords(listRes.data);
       if (reportRes.code === 200 && reportRes.data) setReport(reportRes.data);
@@ -71,7 +80,7 @@ export default function MilkProductionPage() {
     } finally {
       setLoading(false);
     }
-  }, [accountId, filters]);
+  }, [accountId, filters, includeInventoryFeedCosts, avoidDoubleCounting]);
 
   useEffect(() => {
     load();
@@ -219,7 +228,33 @@ export default function MilkProductionPage() {
       )}
 
       {report != null && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="space-y-3">
+          <div className="bg-white border border-gray-200 rounded-sm p-3">
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={includeInventoryFeedCosts}
+                  onChange={(e) => setIncludeInventoryFeedCosts(e.target.checked)}
+                />
+                Include inventory feed costs
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={avoidDoubleCounting}
+                  onChange={(e) => setAvoidDoubleCounting(e.target.checked)}
+                  disabled={!includeInventoryFeedCosts}
+                />
+                Avoid double counting (inventory-linked tags)
+              </label>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Use these switches for scenario analysis before locking pricing policy.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white border border-gray-200 rounded-sm p-4 flex items-center gap-4">
             <div className="w-12 h-12 rounded-sm bg-[var(--primary)]/10 flex items-center justify-center">
               <Icon icon={faBox} className="text-[var(--primary)]" size="lg" />
@@ -280,6 +315,28 @@ export default function MilkProductionPage() {
               </p>
             </div>
           </div>
+          </div>
+
+          {costReport && (
+            <div className="bg-white border border-gray-200 rounded-sm p-4 space-y-2">
+              <h3 className="text-sm font-semibold text-gray-900">Costing assumptions</h3>
+              <p className="text-sm text-gray-700">
+                Accounting expense: {new Intl.NumberFormat('en-RW', { style: 'currency', currency: 'RWF', minimumFractionDigits: 0 }).format(costReport.total_expense_accounting)}
+                {' · '}
+                Inventory feed expense: {new Intl.NumberFormat('en-RW', { style: 'currency', currency: 'RWF', minimumFractionDigits: 0 }).format(costReport.total_expense_inventory_feed)}
+              </p>
+              {costReport.farm_id && (
+                <p className="text-xs text-amber-700">
+                  Farm filter is applied to production/cow counts, but some costs can remain account-level unless farm-tagged.
+                </p>
+              )}
+              <ul className="text-xs text-gray-500 list-disc pl-4">
+                {costReport.notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

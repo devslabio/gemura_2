@@ -456,6 +456,9 @@ export class MilkProductionService {
       notes: [
         'Expenses are taken from account-scoped Expense chart accounts (EXP-*).',
         'Each transaction is weighted by dairy_share_pct (defaults to 100%).',
+        farmId
+          ? 'Farm filter applies directly to production/cow counts; expense attribution stays account-level unless explicitly tagged/allocated by farm.'
+          : 'No farm filter applied; values are account-level.',
         includeInventoryFeedCosts
           ? 'Feed inventory inflows are included from purchase_in/adjustment_in movements with feed-like categories.'
           : 'Feed inventory inflows are excluded.',
