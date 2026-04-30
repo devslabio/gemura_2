@@ -12,6 +12,10 @@ function isExternalMilkAccount(accountType: string | undefined): boolean {
 }
 
 export class PermissionService {
+  private static normalizeRole(role?: string | null): string {
+    return (role || '').trim().toLowerCase().replace(/\s+/g, '_');
+  }
+
   /**
    * Check if user has a specific permission
    */
@@ -22,12 +26,13 @@ export class PermissionService {
       return false;
     }
 
-    // Owner and admin have all permissions on MCC/operations accounts only — not on farmer/supplier/customer logins.
-    if (
-      !isExternalMilkAccount(currentAccount.account_type) &&
-      (currentAccount.role === 'owner' || currentAccount.role === 'admin')
-    ) {
-      return true;
+    const role = this.normalizeRole(currentAccount.role);
+
+    // Owner, admin, and manager get full checks on MCC/operations accounts only — not on farmer/supplier/customer.
+    if (!isExternalMilkAccount(currentAccount.account_type)) {
+      if (role === 'owner' || role === 'admin' || role === 'manager') {
+        return true;
+      }
     }
 
     const permissions = currentAccount.permissions;
@@ -64,7 +69,7 @@ export class PermissionService {
    */
   static hasRole(role: string): boolean {
     const { currentAccount } = useAuthStore.getState();
-    return currentAccount?.role === role;
+    return this.normalizeRole(currentAccount?.role) === this.normalizeRole(role);
   }
 
   /**
@@ -73,10 +78,9 @@ export class PermissionService {
   static isAdmin(): boolean {
     const { currentAccount } = useAuthStore.getState();
     if (!currentAccount) return false;
-    if (isExternalMilkAccount(currentAccount.account_type)) {
-      return false;
-    }
-    return currentAccount.role === 'admin' || currentAccount.role === 'owner';
+    if (isExternalMilkAccount(currentAccount.account_type)) return false;
+    const role = this.normalizeRole(currentAccount.role);
+    return role === 'admin' || role === 'owner';
   }
 
   /**

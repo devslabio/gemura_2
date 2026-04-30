@@ -42,9 +42,17 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
   // Collapsible sections: set of parent hrefs that are expanded (only when they have children)
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
 
-  const role = (currentAccount?.role ?? '').toLowerCase();
+  const role = (currentAccount?.role ?? '').trim().toLowerCase().replace(/\s+/g, '_');
   const accountType = currentAccount?.account_type ?? '';
-  const isVeterinaryRole = ['veterinary', 'veterinarian', 'veternary', 'agent'].includes(role);
+  const isLimitedOpsRole =
+    role === 'agent' ||
+    role === 'collector' ||
+    role === 'veterinary' ||
+    role === 'veterinarian' ||
+    role === 'veternary' ||
+    role === 'milkreceptionist' ||
+    role === 'milk_receptionist';
+  const limitedOpsAllowedPrefixes = ['/dashboard', '/sales', '/collections', '/inventory', '/suppliers', '/customers'];
 
   useEffect(() => {
     if (user) {
@@ -78,12 +86,12 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
       isBusinessAccount(accountType) && isAdminRole(role);
     const preferOperationsSidebar = FORCE_OPERATIONS_DASHBOARD && isBusinessAccount(accountType);
 
-    if (
+    const shouldUseAdminPortal =
       isAdminRole(role) &&
       (showAdminDashboard || showAdminUsers) &&
       !useOperationsNavForAdminRole &&
-      !preferOperationsSidebar
-    ) {
+      !preferOperationsSidebar;
+    if (shouldUseAdminPortal) {
       ADMIN_NAV_ITEMS.forEach((item) => {
         if (item.href === '/admin/dashboard') {
           if (!showAdminDashboard) return;
@@ -102,13 +110,31 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     // User accounts: menu by role and permissions (active/default account)
     // Operations: business account types, filter by role/permissions
     if (isOperationsRole(role) && isBusinessAccount(accountType)) {
-      OPERATIONS_NAV_ITEMS.forEach((item) => {
-        if (item.href === '/settings' && (role === 'collector' || role === 'agent' || role === 'accountant')) return;
-        if (item.href === '/accounts' && role === 'accountant') return;
-        if (item.href === '/dashboard' && isVeterinaryRole) {
+      if (role === 'manager') {
+        OPERATIONS_NAV_ITEMS.forEach((item) => items.push(item));
+        return items;
+      }
+
+      if (role === 'accountant') {
+        OPERATIONS_NAV_ITEMS.forEach((item) => {
+          if (item.href === '/accounts' || item.href === '/settings') return;
           items.push(item);
-          return;
-        }
+        });
+        return items;
+      }
+
+      if (isLimitedOpsRole) {
+        OPERATIONS_NAV_ITEMS.forEach((item) => {
+          const isAllowed = limitedOpsAllowedPrefixes.some(
+            (prefix) => item.href === prefix || item.href.startsWith(prefix + '/')
+          );
+          if (!isAllowed) return;
+          items.push(item);
+        });
+        return items;
+      }
+
+      OPERATIONS_NAV_ITEMS.forEach((item) => {
         if (item.requiresPermission && !hasPermission(item.requiresPermission)) return;
         items.push(item);
       });
@@ -118,8 +144,6 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     // Owner/admin role on non-admin account (tenant/branch etc.) → operations menu by permissions
     if (isAdminRole(role) && isBusinessAccount(accountType)) {
       OPERATIONS_NAV_ITEMS.forEach((item) => {
-        if (item.href === '/settings' && (role === 'collector' || role === 'agent' || role === 'accountant')) return;
-        if (item.href === '/accounts' && role === 'accountant') return;
         if (item.requiresPermission && !hasPermission(item.requiresPermission)) return;
         items.push(item);
       });

@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { usePermission } from '@/hooks/usePermission';
-import { ENTITY_TYPE_OPTIONS } from '@/lib/constants/entity-types';
+import { useAuthStore } from '@/store/auth';
+import { SUPPLIER_TYPE_OPTIONS } from '@/lib/constants/entity-types';
 import { suppliersApi, UpdateSupplierData, SupplierDetails } from '@/lib/api/suppliers';
 import { useToastStore } from '@/store/toast';
 import Icon, { faDollarSign, faCheckCircle, faTimes, faSpinner } from '@/app/components/Icon';
@@ -20,11 +21,15 @@ export default function EditSupplierPage() {
   const params = useParams();
   const supplierId = params.id as string;
   const { hasPermission, isAdmin } = usePermission();
+  const { currentAccount } = useAuthStore();
+  const role = (currentAccount?.role ?? '').toLowerCase();
+  const isReadOnlyTeamRole = role === 'agent' || role === 'collector' || role === 'veterinary' || role === 'veterinarian' || role === 'veternary' || role === 'milkreceptionist' || role === 'milk_receptionist';
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [supplier, setSupplier] = useState<SupplierDetails | null>(null);
-  const [formData, setFormData] = useState<UpdateSupplierData & { type: string }>({
+  type SupplierTypeValue = '' | NonNullable<UpdateSupplierData['type']>;
+  const [formData, setFormData] = useState<Omit<UpdateSupplierData, 'type'> & { type: SupplierTypeValue }>({
     supplier_account_code: '',
     price_per_liter: 0,
     relationship_status: 'active',
@@ -34,7 +39,7 @@ export default function EditSupplierPage() {
   });
 
   useEffect(() => {
-    if (!hasPermission('create_suppliers') && !isAdmin()) {
+    if (isReadOnlyTeamRole || (!hasPermission('create_suppliers') && !isAdmin())) {
       router.push('/suppliers');
       return;
     }
@@ -50,6 +55,13 @@ export default function EditSupplierPage() {
       const response = await suppliersApi.getSupplierById(supplierId);
       if (response.code === 200 && response.data) {
         const supplierData = response.data.supplier;
+        const normalizedType: SupplierTypeValue =
+          supplierData.type === 'collector' ||
+          supplierData.type === 'collector-farmer' ||
+          supplierData.type === 'mcp' ||
+          supplierData.type === 'farmer only'
+            ? supplierData.type
+            : '';
         setSupplier(supplierData);
         setFormData({
           supplier_account_code: supplierData.account_code,
@@ -57,7 +69,7 @@ export default function EditSupplierPage() {
           relationship_status: supplierData.relationship.relationship_status as 'active' | 'inactive',
           bank_name: supplierData.bank_name || '',
           bank_account_number: supplierData.bank_account_number || '',
-          type: supplierData.type ?? '',
+          type: normalizedType,
         });
       } else {
         setError('Failed to load supplier data');
@@ -103,11 +115,11 @@ export default function EditSupplierPage() {
     setSaving(true);
 
     try {
-      const { type: _type, ...rawPayload } = formData;
       const payload: UpdateSupplierData = {
-        ...rawPayload,
-        bank_name: rawPayload.bank_name?.trim() || undefined,
-        bank_account_number: rawPayload.bank_account_number?.trim() || undefined,
+        ...formData,
+        type: formData.type ? (formData.type as UpdateSupplierData['type']) : undefined,
+        bank_name: formData.bank_name?.trim() || undefined,
+        bank_account_number: formData.bank_account_number?.trim() || undefined,
       };
       const response = await suppliersApi.updateSupplier(payload);
 
@@ -201,7 +213,7 @@ export default function EditSupplierPage() {
                 className="input w-full"
                 disabled={saving}
               >
-                {ENTITY_TYPE_OPTIONS.map(opt => (
+                {SUPPLIER_TYPE_OPTIONS.map(opt => (
                   <option key={opt.value || 'none'} value={opt.value}>
                     {opt.label}
                   </option>
