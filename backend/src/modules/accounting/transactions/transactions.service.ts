@@ -313,8 +313,14 @@ export class TransactionsService {
             account_id: { in: accountScopedChartIds },
           },
         },
-        ...(from && { transaction_date: { gte: from } }),
-        ...(to && { transaction_date: { lte: to } }),
+        ...((from || to)
+          ? {
+              transaction_date: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
       },
       include: {
         entries: {
