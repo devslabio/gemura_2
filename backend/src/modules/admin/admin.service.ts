@@ -14,7 +14,13 @@ import {
   ROLE_DESCRIPTIONS,
   type RoleCode,
 } from './roles-permissions.config';
-import { buildCsvFromRows } from './mcc-onboarding-csv.util';
+import * as ExcelJS from 'exceljs';
+import {
+  buildCsvFromRows,
+  humanizeMccOnboardingValue,
+  MCC_ONBOARDING_CSV_PRIMARY_KEYS,
+  resolveMccOnboardingColumnTitle,
+} from './mcc-onboarding-csv.util';
 
 export type UserActivityMetric =
   | 'suppliers'
@@ -35,6 +41,26 @@ export type UserBusinessResource =
 
 @Injectable()
 export class AdminService {
+  private parseClientLocalDateToUtcBoundary(
+    dateOnly: string,
+    _tzOffsetMinutes: number,
+    endOfDay: boolean,
+  ): Date | null {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOnly);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const hour = endOfDay ? 23 : 0;
+    const minute = endOfDay ? 59 : 0;
+    const second = endOfDay ? 59 : 0;
+    const ms = endOfDay ? 999 : 0;
+    // `reviewed_at` is stored as TIMESTAMP (without timezone) in Postgres.
+    // Use local calendar boundaries directly to avoid UTC-shift mismatches.
+    const dt = new Date(year, month - 1, day, hour, minute, second, ms);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+
   private static readonly USER_ACTIVITY_METRICS = [
     'suppliers',
     'customers',
@@ -1977,6 +2003,10 @@ export class AdminService {
     page = 1,
     limit = 20,
     reviewStatus?: string,
+    search?: string,
+    onboardedFrom?: string,
+    onboardedTo?: string,
+    tzOffsetMinutes?: number,
   ) {
     await this.checkAdminPermission(user, accountId);
     const safeLimit = Math.min(Math.max(limit, 1), 100);
@@ -1992,6 +2022,42 @@ export class AdminService {
     ];
     if (reviewStatus && validStatuses.includes(reviewStatus as MccOnboardingReviewStatus)) {
       where.review_status = reviewStatus as MccOnboardingReviewStatus;
+    }
+    if (search?.trim()) {
+      const q = search.trim();
+      where.OR = [
+        { submission_code: { contains: q, mode: 'insensitive' } },
+        { business_name: { contains: q, mode: 'insensitive' } },
+        { common_name: { contains: q, mode: 'insensitive' } },
+        { manager_first_name: { contains: q, mode: 'insensitive' } },
+        { manager_last_name: { contains: q, mode: 'insensitive' } },
+        { manager_phone: { contains: q, mode: 'insensitive' } },
+        {
+          linked_account: {
+            is: {
+              OR: [
+                { code: { contains: q, mode: 'insensitive' } },
+                { name: { contains: q, mode: 'insensitive' } },
+              ],
+            },
+          },
+        },
+      ];
+    }
+    if (onboardedFrom || onboardedTo) {
+      const createdAt: Prisma.DateTimeFilter = {};
+      const offset = Number.isFinite(tzOffsetMinutes as number) ? (tzOffsetMinutes as number) : 0;
+      if (onboardedFrom) {
+        const from = this.parseClientLocalDateToUtcBoundary(onboardedFrom, offset, false);
+        if (from) createdAt.gte = from;
+      }
+      if (onboardedTo) {
+        const to = this.parseClientLocalDateToUtcBoundary(onboardedTo, offset, true);
+        if (to) createdAt.lte = to;
+      }
+      if (Object.keys(createdAt).length > 0) {
+        where.created_at = createdAt;
+      }
     }
 
     const [submissions, total, pendingCount] = await Promise.all([
@@ -2012,8 +2078,15 @@ export class AdminService {
           pass_count: true,
           review_status: true,
           created_at: true,
+          reviewed_at: true,
           linked_user_id: true,
           linked_account_id: true,
+          linked_account: {
+            select: {
+              code: true,
+              name: true,
+            },
+          },
         },
       }),
       this.prisma.mccOnboardingSubmission.count({ where }),
@@ -2074,7 +2147,14 @@ export class AdminService {
    * One row per submission with curated columns (business/manager/review + key section values),
    * not a full flattened JSON dump.
    */
-  async exportMccOnboardingSubmissionsCsv(user: User, accountId: string, reviewStatus?: string) {
+  private async buildMccOnboardingExportRows(
+    user: User,
+    accountId: string,
+    reviewStatus?: string,
+    onboardedFrom?: string,
+    onboardedTo?: string,
+    tzOffsetMinutes?: number,
+  ) {
     await this.checkAdminPermission(user, accountId);
 
     const where: Prisma.MccOnboardingSubmissionWhereInput = {};
@@ -2086,6 +2166,21 @@ export class AdminService {
     ];
     if (reviewStatus && validStatuses.includes(reviewStatus as MccOnboardingReviewStatus)) {
       where.review_status = reviewStatus as MccOnboardingReviewStatus;
+    }
+    if (onboardedFrom || onboardedTo) {
+      const createdAt: Prisma.DateTimeFilter = {};
+      const offset = Number.isFinite(tzOffsetMinutes as number) ? (tzOffsetMinutes as number) : 0;
+      if (onboardedFrom) {
+        const from = this.parseClientLocalDateToUtcBoundary(onboardedFrom, offset, false);
+        if (from) createdAt.gte = from;
+      }
+      if (onboardedTo) {
+        const to = this.parseClientLocalDateToUtcBoundary(onboardedTo, offset, true);
+        if (to) createdAt.lte = to;
+      }
+      if (Object.keys(createdAt).length > 0) {
+        where.created_at = createdAt;
+      }
     }
 
     const MAX_EXPORT = 5000;
@@ -2273,7 +2368,83 @@ export class AdminService {
       rows.push(row);
     }
 
+    return rows;
+  }
+
+  async exportMccOnboardingSubmissionsCsv(
+    user: User,
+    accountId: string,
+    reviewStatus?: string,
+    onboardedFrom?: string,
+    onboardedTo?: string,
+    tzOffsetMinutes?: number,
+  ) {
+    const rows = await this.buildMccOnboardingExportRows(
+      user,
+      accountId,
+      reviewStatus,
+      onboardedFrom,
+      onboardedTo,
+      tzOffsetMinutes,
+    );
     return buildCsvFromRows(rows);
+  }
+
+  async exportMccOnboardingSubmissionsXlsx(
+    user: User,
+    accountId: string,
+    reviewStatus?: string,
+    onboardedFrom?: string,
+    onboardedTo?: string,
+    tzOffsetMinutes?: number,
+  ): Promise<Buffer> {
+    const rows = await this.buildMccOnboardingExportRows(
+      user,
+      accountId,
+      reviewStatus,
+      onboardedFrom,
+      onboardedTo,
+      tzOffsetMinutes,
+    );
+    const keySet = new Set<string>();
+    for (const row of rows) {
+      Object.keys(row).forEach((key) => keySet.add(key));
+    }
+
+    const orderedPrimaryKeys = MCC_ONBOARDING_CSV_PRIMARY_KEYS.filter((k) => keySet.has(k));
+    for (const k of MCC_ONBOARDING_CSV_PRIMARY_KEYS) keySet.delete(k);
+    const remainingKeys = [...keySet].sort((a, b) => a.localeCompare(b, 'en'));
+    const headers = [...orderedPrimaryKeys, ...remainingKeys];
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'Gemura Admin';
+    workbook.created = new Date();
+    const sheet = workbook.addWorksheet('MCC Onboarding');
+
+    sheet.columns = headers.map((key) => ({
+      header: resolveMccOnboardingColumnTitle(key),
+      key,
+      width: 24,
+    }));
+
+    for (const row of rows) {
+      const excelRow: Record<string, string> = {};
+      for (const key of headers) {
+        excelRow[key] = humanizeMccOnboardingValue(key, row[key] ?? '');
+      }
+      sheet.addRow(excelRow);
+    }
+
+    if (sheet.rowCount > 0) {
+      sheet.getRow(1).font = { bold: true };
+    }
+    sheet.views = [{ state: 'frozen', ySplit: 1 }];
+    sheet.columns.forEach((col) => {
+      if (!col.width || col.width < 20) col.width = 20;
+    });
+
+    const out = await workbook.xlsx.writeBuffer();
+    return Buffer.from(out);
   }
 
   async approveMccOnboardingSubmission(

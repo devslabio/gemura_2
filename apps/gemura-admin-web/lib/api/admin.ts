@@ -268,6 +268,10 @@ export const adminApi = {
     limit = 20,
     accountId?: string,
     reviewStatus?: string,
+    search?: string,
+    onboardedFrom?: string,
+    onboardedTo?: string,
+    tzOffsetMinutes?: number,
   ): Promise<{
     code: number;
     status: string;
@@ -285,8 +289,13 @@ export const adminApi = {
         pass_count: number;
         review_status: string;
         created_at: string;
+        reviewed_at: string | null;
         linked_user_id: string | null;
         linked_account_id: string | null;
+        linked_account: {
+          code: string;
+          name: string;
+        } | null;
       }>;
       pendingCount: number;
       pagination: { page: number; limit: number; total: number; totalPages: number };
@@ -295,6 +304,10 @@ export const adminApi = {
     const params: Record<string, unknown> = { page, limit };
     if (accountId) params.account_id = accountId;
     if (reviewStatus) params.review_status = reviewStatus;
+    if (search) params.search = search;
+    if (onboardedFrom) params.onboarded_from = onboardedFrom;
+    if (onboardedTo) params.onboarded_to = onboardedTo;
+    if (typeof tzOffsetMinutes === 'number') params.tz_offset_minutes = tzOffsetMinutes;
     return apiClient.get('/admin/onboarding-submissions', { params });
   },
 
@@ -302,11 +315,36 @@ export const adminApi = {
    * Full CSV: DB columns, location labels, flattened wizard (wizard_*) and gs_response_* columns.
    * Same `review_status` filter as the list; omit for all statuses.
    */
-  exportOnboardingSubmissionsCsv: async (accountId?: string, reviewStatus?: string): Promise<Blob> => {
+  exportOnboardingSubmissionsCsv: async (
+    accountId?: string,
+    reviewStatus?: string,
+    onboardedFrom?: string,
+    onboardedTo?: string,
+    tzOffsetMinutes?: number,
+  ): Promise<Blob> => {
     const params: Record<string, unknown> = {};
     if (accountId) params.account_id = accountId;
     if (reviewStatus) params.review_status = reviewStatus;
+    if (onboardedFrom) params.onboarded_from = onboardedFrom;
+    if (onboardedTo) params.onboarded_to = onboardedTo;
+    if (typeof tzOffsetMinutes === 'number') params.tz_offset_minutes = tzOffsetMinutes;
     return apiClient.getBlob('/admin/onboarding-submissions/export-csv', { params });
+  },
+
+  exportOnboardingSubmissionsXlsx: async (
+    accountId?: string,
+    reviewStatus?: string,
+    onboardedFrom?: string,
+    onboardedTo?: string,
+    tzOffsetMinutes?: number,
+  ): Promise<Blob> => {
+    const params: Record<string, unknown> = {};
+    if (accountId) params.account_id = accountId;
+    if (reviewStatus) params.review_status = reviewStatus;
+    if (onboardedFrom) params.onboarded_from = onboardedFrom;
+    if (onboardedTo) params.onboarded_to = onboardedTo;
+    if (typeof tzOffsetMinutes === 'number') params.tz_offset_minutes = tzOffsetMinutes;
+    return apiClient.getBlob('/admin/onboarding-submissions/export-xlsx', { params });
   },
 
   getOnboardingSubmission: async (submissionId: string, accountId?: string): Promise<{ code: number; data: Record<string, unknown> }> => {
