@@ -152,6 +152,11 @@ export class TransactionsController {
     type: Number,
     example: 50,
   })
+  @ApiQuery({
+    name: 'farm_id',
+    required: false,
+    description: 'Optional farm UUID for farm-attributed transactions',
+  })
   @ApiResponse({
     status: 200,
     description: 'Transactions fetched successfully',
@@ -200,12 +205,14 @@ export class TransactionsController {
     @Query('date_from') dateFrom?: string,
     @Query('date_to') dateTo?: string,
     @Query('limit') limit?: string,
+    @Query('farm_id') farmId?: string,
   ) {
     return this.transactionsService.getTransactions(user, {
       type,
       date_from: dateFrom,
       date_to: dateTo,
       limit: limit ? parseInt(limit, 10) : undefined,
+      farm_id: farmId,
     });
   }
 

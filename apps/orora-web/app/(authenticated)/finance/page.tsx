@@ -10,6 +10,8 @@ import {
   PayablesSummary,
   ExpenseCategoryAccount,
 } from '@/lib/api/accounting';
+import { farmsApi, type Farm } from '@/lib/api/farms';
+import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
 import Icon, {
   faCalendar,
@@ -43,6 +45,8 @@ function formatAmount(amount: number): string {
 }
 
 export default function FinancePage() {
+  const { currentAccount } = useAuthStore();
+  const accountId = currentAccount?.account_id;
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -61,9 +65,11 @@ export default function FinancePage() {
   const [recordDescription, setRecordDescription] = useState('');
   const [recordDate, setRecordDate] = useState(() => toYYYYMMDD(new Date()));
   const [recordCategoryAccountId, setRecordCategoryAccountId] = useState('');
+  const [recordFarmId, setRecordFarmId] = useState('');
   const [recordDairySharePct, setRecordDairySharePct] = useState('100');
   const [recordCostTags, setRecordCostTags] = useState('dairy');
   const [expenseCategoryAccounts, setExpenseCategoryAccounts] = useState<ExpenseCategoryAccount[]>([]);
+  const [farms, setFarms] = useState<Farm[]>([]);
   const [recordSubmitting, setRecordSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -103,6 +109,20 @@ export default function FinancePage() {
       .catch(() => setExpenseCategoryAccounts([]));
   }, []);
 
+  useEffect(() => {
+    if (!accountId) {
+      setFarms([]);
+      return;
+    }
+    farmsApi
+      .list(accountId)
+      .then((res) => {
+        if (res.code === 200 && res.data) setFarms(res.data);
+        else setFarms([]);
+      })
+      .catch(() => setFarms([]));
+  }, [accountId]);
+
   const handleRecordSubmit = async () => {
     const amount = Number(recordAmount);
     if (!recordDescription.trim() || Number.isNaN(amount) || amount <= 0) {
@@ -126,6 +146,7 @@ export default function FinancePage() {
         description: recordDescription.trim(),
         transaction_date: recordDate,
         account_id: recordType === 'expense' && recordCategoryAccountId ? recordCategoryAccountId : undefined,
+        farm_id: recordFarmId || undefined,
         dairy_share_pct: dairySharePct,
         cost_tags: tags,
       });
@@ -134,6 +155,7 @@ export default function FinancePage() {
       setRecordAmount('');
       setRecordDescription('');
       setRecordCategoryAccountId('');
+      setRecordFarmId('');
       setRecordDairySharePct('100');
       setRecordCostTags('dairy');
       setRecordDate(toYYYYMMDD(new Date()));
@@ -446,6 +468,21 @@ export default function FinancePage() {
               </p>
             </div>
           )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Farm (optional)</label>
+            <select
+              value={recordFarmId}
+              onChange={(e) => setRecordFarmId(e.target.value)}
+              className="input mt-1 w-full"
+            >
+              <option value="">Shared / all farms</option>
+              {farms.map((farm) => (
+                <option key={farm.id} value={farm.id}>
+                  {farm.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Dairy Cost Share (%)</label>
             <input
