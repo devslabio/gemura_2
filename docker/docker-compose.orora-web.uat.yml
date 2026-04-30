@@ -1,0 +1,20 @@
+services:
+  orora-uat-ui:
+    build:
+      context: ../apps/orora-web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://uat.orora.rw/api}
+    container_name: orora-uat-ui
+    restart: unless-stopped
+    ports:
+      - "3026:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://uat.orora.rw/api}
+    networks:
+      - orora-uat-network
+
+networks:
+  orora-uat-network:
+    driver: bridge
