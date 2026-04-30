@@ -61,6 +61,8 @@ export default function FinancePage() {
   const [recordDescription, setRecordDescription] = useState('');
   const [recordDate, setRecordDate] = useState(() => toYYYYMMDD(new Date()));
   const [recordCategoryAccountId, setRecordCategoryAccountId] = useState('');
+  const [recordDairySharePct, setRecordDairySharePct] = useState('100');
+  const [recordCostTags, setRecordCostTags] = useState('dairy');
   const [expenseCategoryAccounts, setExpenseCategoryAccounts] = useState<ExpenseCategoryAccount[]>([]);
   const [recordSubmitting, setRecordSubmitting] = useState(false);
 
@@ -107,6 +109,15 @@ export default function FinancePage() {
       useToastStore.getState().error('Enter a valid amount and description');
       return;
     }
+    const dairySharePct = Number(recordDairySharePct);
+    if (Number.isNaN(dairySharePct) || dairySharePct < 0 || dairySharePct > 100) {
+      useToastStore.getState().error('Dairy share must be between 0 and 100');
+      return;
+    }
+    const tags = recordCostTags
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
     setRecordSubmitting(true);
     try {
       await accountingApi.createTransaction({
@@ -115,12 +126,16 @@ export default function FinancePage() {
         description: recordDescription.trim(),
         transaction_date: recordDate,
         account_id: recordType === 'expense' && recordCategoryAccountId ? recordCategoryAccountId : undefined,
+        dairy_share_pct: dairySharePct,
+        cost_tags: tags,
       });
       useToastStore.getState().success(`${recordType === 'revenue' ? 'Revenue' : 'Expense'} recorded`);
       setShowRecordModal(false);
       setRecordAmount('');
       setRecordDescription('');
       setRecordCategoryAccountId('');
+      setRecordDairySharePct('100');
+      setRecordCostTags('dairy');
       setRecordDate(toYYYYMMDD(new Date()));
       load();
     } catch (e: unknown) {
@@ -431,6 +446,32 @@ export default function FinancePage() {
               </p>
             </div>
           )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Dairy Cost Share (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              value={recordDairySharePct}
+              onChange={(e) => setRecordDairySharePct(e.target.value)}
+              className="input mt-1 w-full"
+              placeholder="100"
+            />
+            <p className="mt-1 text-xs text-gray-500">
+              100 means fully counted in dairy cost; lower values allocate part of this expense to dairy.
+            </p>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Cost Tags (comma separated)</label>
+            <input
+              type="text"
+              value={recordCostTags}
+              onChange={(e) => setRecordCostTags(e.target.value)}
+              className="input mt-1 w-full"
+              placeholder="dairy,feed,labour"
+            />
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700">Date</label>
             <DatePicker

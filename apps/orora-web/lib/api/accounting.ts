@@ -30,6 +30,8 @@ export interface AccountingTransaction {
   description: string;
   transaction_date: string;
   category_account?: string;
+  dairy_share_pct?: number;
+  cost_tags?: string[];
 }
 
 export interface CreateTransactionData {
@@ -38,6 +40,8 @@ export interface CreateTransactionData {
   description: string;
   transaction_date: string; // YYYY-MM-DD
   account_id?: string;
+  dairy_share_pct?: number;
+  cost_tags?: string[];
 }
 
 export interface ExpenseCategoryAccount {
