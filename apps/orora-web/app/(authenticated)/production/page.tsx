@@ -38,6 +38,7 @@ export default function MilkProductionPage() {
   const [costReport, setCostReport] = useState<MilkCostPerLitreReport | null>(null);
   const [includeInventoryFeedCosts, setIncludeInventoryFeedCosts] = useState(true);
   const [avoidDoubleCounting, setAvoidDoubleCounting] = useState(true);
+  const [allocationBasis, setAllocationBasis] = useState<'producing_cows' | 'total_cows' | 'production_litres'>('producing_cows');
   const [filters, setFilters] = useState<MilkProductionFilters>({});
   const [recordModalOpen, setRecordModalOpen] = useState(false);
   const [animals, setAnimals] = useState<Animal[]>([]);
@@ -68,6 +69,7 @@ export default function MilkProductionPage() {
           filters.farm_id,
           includeInventoryFeedCosts,
           avoidDoubleCounting,
+          allocationBasis,
         ),
       ]);
       if (listRes.code === 200 && listRes.data) setRecords(listRes.data);
@@ -82,7 +84,7 @@ export default function MilkProductionPage() {
     } finally {
       setLoading(false);
     }
-  }, [accountId, filters, includeInventoryFeedCosts, avoidDoubleCounting]);
+  }, [accountId, filters, includeInventoryFeedCosts, avoidDoubleCounting, allocationBasis]);
 
   useEffect(() => {
     load();
@@ -254,6 +256,18 @@ export default function MilkProductionPage() {
                   disabled={!includeInventoryFeedCosts}
                 />
                 Avoid double counting (inventory-linked tags)
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                Shared-cost allocation
+                <select
+                  className="input py-1 px-2 text-sm"
+                  value={allocationBasis}
+                  onChange={(e) => setAllocationBasis(e.target.value as 'producing_cows' | 'total_cows' | 'production_litres')}
+                >
+                  <option value="producing_cows">Producing cows</option>
+                  <option value="total_cows">Total cows</option>
+                  <option value="production_litres">Production litres</option>
+                </select>
               </label>
             </div>
             <p className="text-xs text-gray-500 mt-2">

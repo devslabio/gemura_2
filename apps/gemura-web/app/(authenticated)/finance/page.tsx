@@ -68,6 +68,7 @@ export default function FinancePage() {
   const [milkCostReport, setMilkCostReport] = useState<MilkCostPerLitreReport | null>(null);
   const [includeInventoryFeedCosts, setIncludeInventoryFeedCosts] = useState(true);
   const [avoidDoubleCounting, setAvoidDoubleCounting] = useState(true);
+  const [allocationBasis, setAllocationBasis] = useState<'producing_cows' | 'total_cows' | 'production_litres'>('producing_cows');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,6 +91,7 @@ export default function FinancePage() {
           undefined,
           includeInventoryFeedCosts,
           avoidDoubleCounting,
+          allocationBasis,
         );
         if (costRes.code === 200 && costRes.data) setMilkCostReport(costRes.data);
         else setMilkCostReport(null);
@@ -107,7 +109,7 @@ export default function FinancePage() {
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, includeInventoryFeedCosts, avoidDoubleCounting]);
+  }, [fromDate, toDate, includeInventoryFeedCosts, avoidDoubleCounting, allocationBasis]);
 
   useEffect(() => {
     load();
@@ -323,6 +325,18 @@ export default function FinancePage() {
                       disabled={!includeInventoryFeedCosts}
                     />
                     Avoid double counting
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    Shared-cost allocation
+                    <select
+                      className="rounded border border-gray-300 px-2 py-1 text-sm"
+                      value={allocationBasis}
+                      onChange={(e) => setAllocationBasis(e.target.value as 'producing_cows' | 'total_cows' | 'production_litres')}
+                    >
+                      <option value="producing_cows">Producing cows</option>
+                      <option value="total_cows">Total cows</option>
+                      <option value="production_litres">Production litres</option>
+                    </select>
                   </label>
                 </div>
                 <p className="text-sm text-gray-700">
