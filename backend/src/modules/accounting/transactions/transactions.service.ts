@@ -7,6 +7,20 @@ import { CreateTransactionDto, TransactionType } from './dto/create-transaction.
 export class TransactionsService {
   constructor(private prisma: PrismaService) {}
 
+  private readonly dairyExpenseCategorySeeds = [
+    { codeSuffix: 'FEED', name: 'Feed & Fodder' },
+    { codeSuffix: 'LABOUR', name: 'Labour' },
+    { codeSuffix: 'VET', name: 'Veterinary & Drugs' },
+    { codeSuffix: 'BREEDING', name: 'Breeding / AI' },
+    { codeSuffix: 'UTILITIES', name: 'Utilities' },
+    { codeSuffix: 'WATER', name: 'Water' },
+    { codeSuffix: 'ELECTRICITY', name: 'Electricity' },
+    { codeSuffix: 'MAINTENANCE', name: 'Maintenance & Tools' },
+    { codeSuffix: 'INSURANCE', name: 'Livestock Insurance' },
+    { codeSuffix: 'TRANSPORT', name: 'Transport' },
+    { codeSuffix: 'OVERHEAD', name: 'General Overheads' },
+  ] as const;
+
   /**
    * Chart of account IDs that scope P&L and the finance transaction list to one farm/tenant ledger
    * (same rules as ReportsService income statement).
@@ -31,7 +45,7 @@ export class TransactionsService {
     return accountCharts.map((c) => c.id);
   }
 
-  async createTransaction(user: User, createDto: CreateTransactionDto) {
+  private async getDefaultAccount(user: User) {
     if (!user.default_account_id) {
       throw new BadRequestException({
         code: 400,
@@ -39,12 +53,9 @@ export class TransactionsService {
         message: 'No valid default account found. Please set a default account first.',
       });
     }
-
-    // Get user's default account
     const defaultAccount = await this.prisma.account.findUnique({
       where: { id: user.default_account_id },
     });
-
     if (!defaultAccount) {
       throw new BadRequestException({
         code: 400,
@@ -52,6 +63,63 @@ export class TransactionsService {
         message: 'Default account not found.',
       });
     }
+    return defaultAccount;
+  }
+
+  async ensureDairyExpenseAccounts(user: User) {
+    const defaultAccount = await this.getDefaultAccount(user);
+    const prefix = defaultAccount.code || defaultAccount.id.substring(0, 8).toUpperCase();
+    const createdOrExisting = await Promise.all(
+      this.dairyExpenseCategorySeeds.map(async (seed) => {
+        const code = `EXP-${prefix}-${seed.codeSuffix}`;
+        let account = await this.prisma.chartOfAccount.findFirst({
+          where: { code, account_type: 'Expense', is_active: true },
+        });
+        if (!account) {
+          account = await this.prisma.chartOfAccount.create({
+            data: {
+              code,
+              name: `${seed.name} - ${defaultAccount.name}`,
+              account_type: 'Expense',
+              is_active: true,
+            },
+          });
+        }
+        return account;
+      }),
+    );
+    return createdOrExisting;
+  }
+
+  async getExpenseAccounts(user: User, ensureDefaults = false) {
+    const defaultAccount = await this.getDefaultAccount(user);
+    const prefix = defaultAccount.code || defaultAccount.id.substring(0, 8).toUpperCase();
+    if (ensureDefaults) {
+      await this.ensureDairyExpenseAccounts(user);
+    }
+    const accounts = await this.prisma.chartOfAccount.findMany({
+      where: {
+        account_type: 'Expense',
+        is_active: true,
+        code: { startsWith: `EXP-${prefix}` },
+      },
+      orderBy: [{ code: 'asc' }],
+      select: {
+        id: true,
+        code: true,
+        name: true,
+      },
+    });
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Expense accounts fetched successfully.',
+      data: accounts,
+    };
+  }
+
+  async createTransaction(user: User, createDto: CreateTransactionDto) {
+    const defaultAccount = await this.getDefaultAccount(user);
 
     // Find or create Cash/Asset account for this account
     const cashAccountCode = `CASH-${defaultAccount.code || defaultAccount.id.substring(0, 8).toUpperCase()}`;

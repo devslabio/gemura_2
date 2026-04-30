@@ -44,6 +44,22 @@ export interface ProductionReport {
   total_sold_litres: number;
 }
 
+export interface MilkCostPerLitreReport {
+  from: string | null;
+  to: string | null;
+  farm_id: string | null;
+  total_expense: number;
+  total_production_litres: number;
+  total_cows: number;
+  producing_cows: number;
+  non_producing_cows: number;
+  producing_cost_estimate: number;
+  non_producing_cost_estimate: number;
+  cost_per_litre_producing_cows: number;
+  expense_by_category: Array<{ category_name: string; amount: number }>;
+  notes: string[];
+}
+
 export interface ApiResponse<T> {
   code: number;
   status: string;
@@ -72,6 +88,11 @@ export const milkProductionApi = {
   report: (accountId?: string, from?: string, to?: string) =>
     apiClient.get<ApiResponse<ProductionReport>>('/milk-production/report', {
       params: { ...accountParam(accountId), from, to },
+    }),
+
+  costPerLitre: (accountId?: string, from?: string, to?: string, farmId?: string) =>
+    apiClient.get<ApiResponse<MilkCostPerLitreReport>>('/milk-production/cost-per-litre', {
+      params: { ...accountParam(accountId), from, to, farm_id: farmId },
     }),
 
   update: (id: string, data: Partial<CreateMilkProductionData>, accountId?: string) =>

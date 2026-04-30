@@ -209,6 +209,29 @@ export class TransactionsController {
     });
   }
 
+  @Get('expense-accounts/list')
+  @ApiOperation({
+    summary: 'List expense category accounts',
+    description:
+      'Returns account-scoped Expense chart accounts (EXP-*). Optional ensure_defaults=true seeds dairy-specific categories if missing.',
+  })
+  @ApiQuery({
+    name: 'ensure_defaults',
+    required: false,
+    description: 'Create default dairy expense categories before listing',
+    example: 'true',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Expense accounts fetched successfully',
+  })
+  async getExpenseAccounts(
+    @CurrentUser() user: User,
+    @Query('ensure_defaults') ensureDefaults?: string,
+  ) {
+    return this.transactionsService.getExpenseAccounts(user, ensureDefaults === 'true');
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get transaction by ID',

@@ -8,6 +8,7 @@ import {
   AccountingTransaction,
   ReceivablesSummary,
   PayablesSummary,
+  ExpenseCategoryAccount,
 } from '@/lib/api/accounting';
 import { useToastStore } from '@/store/toast';
 import Icon, {
@@ -59,6 +60,8 @@ export default function FinancePage() {
   const [recordAmount, setRecordAmount] = useState('');
   const [recordDescription, setRecordDescription] = useState('');
   const [recordDate, setRecordDate] = useState(() => toYYYYMMDD(new Date()));
+  const [recordCategoryAccountId, setRecordCategoryAccountId] = useState('');
+  const [expenseCategoryAccounts, setExpenseCategoryAccounts] = useState<ExpenseCategoryAccount[]>([]);
   const [recordSubmitting, setRecordSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -91,6 +94,13 @@ export default function FinancePage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    accountingApi
+      .getExpenseAccounts(true)
+      .then((accounts) => setExpenseCategoryAccounts(accounts))
+      .catch(() => setExpenseCategoryAccounts([]));
+  }, []);
+
   const handleRecordSubmit = async () => {
     const amount = Number(recordAmount);
     if (!recordDescription.trim() || Number.isNaN(amount) || amount <= 0) {
@@ -104,11 +114,13 @@ export default function FinancePage() {
         amount,
         description: recordDescription.trim(),
         transaction_date: recordDate,
+        account_id: recordType === 'expense' && recordCategoryAccountId ? recordCategoryAccountId : undefined,
       });
       useToastStore.getState().success(`${recordType === 'revenue' ? 'Revenue' : 'Expense'} recorded`);
       setShowRecordModal(false);
       setRecordAmount('');
       setRecordDescription('');
+      setRecordCategoryAccountId('');
       setRecordDate(toYYYYMMDD(new Date()));
       load();
     } catch (e: unknown) {
@@ -399,6 +411,26 @@ export default function FinancePage() {
               placeholder="e.g. Milk sales"
             />
           </div>
+          {recordType === 'expense' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Expense Category</label>
+              <select
+                value={recordCategoryAccountId}
+                onChange={(e) => setRecordCategoryAccountId(e.target.value)}
+                className="input mt-1 w-full"
+              >
+                <option value="">Select category (recommended)</option>
+                {expenseCategoryAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Choose a category for more accurate automatic milk cost analytics.
+              </p>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700">Date</label>
             <DatePicker

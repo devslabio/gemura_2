@@ -2,7 +2,13 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuthStore } from '@/store/auth';
-import { milkProductionApi, MilkProductionRecord, MILK_PRODUCTION_SESSIONS, MilkProductionFilters } from '@/lib/api/milk-production';
+import {
+  milkProductionApi,
+  MilkProductionRecord,
+  MILK_PRODUCTION_SESSIONS,
+  MilkProductionFilters,
+  MilkCostPerLitreReport,
+} from '@/lib/api/milk-production';
 import { animalsApi, Animal } from '@/lib/api/animals';
 import { useToastStore } from '@/store/toast';
 import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
@@ -28,6 +34,7 @@ export default function MilkProductionPage() {
   const [error, setError] = useState('');
   const [records, setRecords] = useState<MilkProductionRecord[]>([]);
   const [report, setReport] = useState<{ total_production_litres: number; total_sold_litres: number } | null>(null);
+  const [costReport, setCostReport] = useState<MilkCostPerLitreReport | null>(null);
   const [filters, setFilters] = useState<MilkProductionFilters>({});
   const [recordModalOpen, setRecordModalOpen] = useState(false);
   const [animals, setAnimals] = useState<Animal[]>([]);
@@ -47,17 +54,20 @@ export default function MilkProductionPage() {
       setError('');
       const hasFilters = filters.animal_id || filters.session || filters.from || filters.to;
       const listFilters = hasFilters ? filters : undefined;
-      const [listRes, reportRes] = await Promise.all([
+      const [listRes, reportRes, costRes] = await Promise.all([
         milkProductionApi.list(accountId, listFilters),
         milkProductionApi.report(accountId, filters.from, filters.to),
+        milkProductionApi.costPerLitre(accountId, filters.from, filters.to, filters.farm_id),
       ]);
       if (listRes.code === 200 && listRes.data) setRecords(listRes.data);
       if (reportRes.code === 200 && reportRes.data) setReport(reportRes.data);
+      if (costRes.code === 200 && costRes.data) setCostReport(costRes.data);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } }; message?: string };
       setError(e?.response?.data?.message || e?.message || 'Failed to load production');
       setRecords([]);
       setReport(null);
+      setCostReport(null);
     } finally {
       setLoading(false);
     }
@@ -209,7 +219,7 @@ export default function MilkProductionPage() {
       )}
 
       {report != null && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white border border-gray-200 rounded-sm p-4 flex items-center gap-4">
             <div className="w-12 h-12 rounded-sm bg-[var(--primary)]/10 flex items-center justify-center">
               <Icon icon={faBox} className="text-[var(--primary)]" size="lg" />
@@ -228,6 +238,46 @@ export default function MilkProductionPage() {
               <p className="text-sm font-medium text-gray-500">Total sold (L)</p>
               <p className="text-2xl font-bold text-gray-900">{Number(report.total_sold_litres).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</p>
               {(filters.from || filters.to) && <p className="text-xs text-gray-400">In selected period</p>}
+            </div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-sm p-4 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-sm bg-amber-100 flex items-center justify-center">
+              <Icon icon={faChartLine} className="text-amber-700" size="lg" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Cost per litre (producing cows)</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {costReport
+                  ? new Intl.NumberFormat('en-RW', {
+                      style: 'currency',
+                      currency: 'RWF',
+                      minimumFractionDigits: 0,
+                    }).format(costReport.cost_per_litre_producing_cows)
+                  : '—'}
+              </p>
+              <p className="text-xs text-gray-400">
+                {costReport ? `${costReport.producing_cows} producing / ${costReport.total_cows} cows` : '—'}
+              </p>
+            </div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-sm p-4 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-sm bg-slate-100 flex items-center justify-center">
+              <Icon icon={faBox} className="text-slate-600" size="lg" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Allocated non-producing cost</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {costReport
+                  ? new Intl.NumberFormat('en-RW', {
+                      style: 'currency',
+                      currency: 'RWF',
+                      minimumFractionDigits: 0,
+                    }).format(costReport.non_producing_cost_estimate)
+                  : '—'}
+              </p>
+              <p className="text-xs text-gray-400">
+                {costReport ? `${costReport.non_producing_cows} non-producing cows` : '—'}
+              </p>
             </div>
           </div>
         </div>

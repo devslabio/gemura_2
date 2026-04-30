@@ -67,6 +67,28 @@ export class MilkProductionController {
     return { code: 200, status: 'success', message: 'Report retrieved', data };
   }
 
+  @Get('cost-per-litre')
+  @ApiOperation({
+    summary: 'Milk cost-per-litre report',
+    description:
+      'Calculates milk cost per litre from accounting expenses and milk production, allocating total herd cost between producing and non-producing cows.',
+  })
+  @ApiQuery({ name: 'account_id', required: false })
+  @ApiQuery({ name: 'from', required: false, description: 'From date (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'to', required: false, description: 'To date (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'farm_id', required: false, description: 'Optional farm UUID for farm-level report' })
+  @ApiResponse({ status: 200, description: 'Cost-per-litre report' })
+  async costPerLitre(
+    @CurrentUser() user: User,
+    @Query('account_id') accountId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('farm_id') farmId?: string,
+  ) {
+    const data = await this.milkProductionService.reportCostPerLitre(user, accountId, from, to, farmId);
+    return { code: 200, status: 'success', message: 'Cost-per-litre report retrieved', data };
+  }
+
   @Get()
   @ApiOperation({ summary: 'List milk production records', description: 'List production with optional filters by animal, farm, session, date range.' })
   @ApiQuery({ name: 'account_id', required: false })
