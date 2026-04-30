@@ -1110,6 +1110,8 @@ model AccountingTransaction {
   reference_number String?  @unique @map("reference_number")
   description      String?
   total_amount     Decimal  @map("total_amount") @db.Decimal(15, 2)
+  dairy_share_pct  Decimal? @map("dairy_share_pct") @db.Decimal(5, 2)
+  cost_tags        String[] @default([]) @map("cost_tags")
   created_at       DateTime @default(now()) @map("created_at")
   created_by       String?  @map("created_by") @db.Uuid
 

@@ -307,8 +307,11 @@ export class MilkProductionService {
     const expenseByCategory: Record<string, number> = {};
     let totalExpense = 0;
     for (const t of transactions) {
+      const dairySharePct = Number((t as any).dairy_share_pct ?? 100);
+      const shareFactor = Math.min(100, Math.max(0, dairySharePct)) / 100;
       for (const e of t.entries) {
-        const amount = Number(e.debit_amount || 0);
+        const baseAmount = Number(e.debit_amount || 0);
+        const amount = baseAmount * shareFactor;
         if (amount <= 0) continue;
         totalExpense += amount;
         const category = e.account.name || 'Other';
@@ -391,6 +394,7 @@ export class MilkProductionService {
       expense_by_category: expenseSeries,
       notes: [
         'Expenses are taken from account-scoped Expense chart accounts (EXP-*).',
+        'Each transaction is weighted by dairy_share_pct (defaults to 100%).',
         'Costs are allocated between producing and non-producing cows by headcount share.',
       ],
     };

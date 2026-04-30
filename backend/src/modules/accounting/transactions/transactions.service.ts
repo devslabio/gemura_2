@@ -200,12 +200,19 @@ export class TransactionsService {
     // For Expense: Debit Expense account, Credit Cash account
     const transactionDate = new Date(createDto.transaction_date);
     const amount = Number(createDto.amount);
+    const dairySharePct =
+      createDto.dairy_share_pct == null ? 100 : Math.min(100, Math.max(0, Number(createDto.dairy_share_pct)));
+    const costTags = Array.isArray(createDto.cost_tags)
+      ? createDto.cost_tags.map((t) => String(t).trim().toLowerCase()).filter(Boolean)
+      : [];
 
     const transaction = await this.prisma.accountingTransaction.create({
       data: {
         transaction_date: transactionDate,
         description: createDto.description,
         total_amount: amount,
+        dairy_share_pct: dairySharePct,
+        cost_tags: costTags,
         created_by: user.id,
         entries: {
           create: [
@@ -265,6 +272,8 @@ export class TransactionsService {
         account: defaultAccount.name,
         category_account: categoryAccount.name,
         cash_account: cashAccount.name,
+        dairy_share_pct: Number((transaction as any).dairy_share_pct ?? 100),
+        cost_tags: Array.isArray((transaction as any).cost_tags) ? (transaction as any).cost_tags : [],
       },
     };
   }
@@ -374,6 +383,8 @@ export class TransactionsService {
           description: t.description,
           transaction_date: t.transaction_date,
           category_account: categoryAccount,
+          dairy_share_pct: Number((t as any).dairy_share_pct ?? 100),
+          cost_tags: Array.isArray((t as any).cost_tags) ? (t as any).cost_tags : [],
         };
       })
       .filter((t) => t !== null);
@@ -487,6 +498,8 @@ export class TransactionsService {
         transaction_date: transaction.transaction_date,
         category_account: categoryAccount,
         cash_account: transaction.entries.find((e) => e.account.account_type === 'Asset')?.account.name,
+        dairy_share_pct: Number((transaction as any).dairy_share_pct ?? 100),
+        cost_tags: Array.isArray((transaction as any).cost_tags) ? (transaction as any).cost_tags : [],
         entries: transaction.entries.map((e) => ({
           account_name: e.account.name,
           account_type: e.account.account_type,

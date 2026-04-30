@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumber, IsDateString, Min } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsDateString, Min, Max, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 import { IsNotFutureDate } from '../../../../common/validators/not-future-date.validator';
 
@@ -21,4 +21,18 @@ export class UpdateTransactionDto {
   @IsDateString()
   @IsNotFutureDate({ message: 'Transaction date must not be in the future' })
   transaction_date?: string;
+
+  @ApiProperty({ description: 'Optional dairy share percentage (0-100)', example: 75, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  @Min(0)
+  @Max(100)
+  dairy_share_pct?: number;
+
+  @ApiProperty({ description: 'Optional cost tags', type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  cost_tags?: string[];
 }
