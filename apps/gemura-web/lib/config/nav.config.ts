@@ -30,9 +30,16 @@ import {
 
 /** Account types that see user/operations menu (filtered by role + permissions) */
 export const BUSINESS_ACCOUNT_TYPES = ['mcc', 'owner', 'agent', 'tenant', 'branch'] as const;
-export const ADMIN_ROLES = ['owner', 'admin'] as const;
+/** Portal “admin section” roles; includes legacy `owner` slug until all tokens are migrated. */
+export const ADMIN_ROLES = ['system_admin', 'admin', 'owner'] as const;
 export const OPERATIONS_ROLES = [
   'manager',
+  'veterinary_officer',
+  'casual_laborer',
+  'leadership',
+  'regulator',
+  'umucunda_a',
+  'umucunda_b',
   'accountant',
   'collector',
   'viewer',
@@ -70,7 +77,7 @@ export const ADMIN_NAV_ITEMS: NavItem[] = [
 ];
 
 /**
- * Operations section: for role in [manager, collector, viewer, employee] (and optionally owner/admin if we allow both).
+ * Operations section: for role in [manager, collector, viewer, employee] (and optionally system_admin/admin).
  * account_type in [mcc, owner, agent]. Permission checks apply.
  */
 export const OPERATIONS_NAV_ITEMS: NavItem[] = [

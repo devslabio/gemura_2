@@ -42,10 +42,12 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
   const accountType = currentAccount?.account_type ?? '';
   const role = (currentAccount?.role ?? '').toLowerCase();
   const accountId = currentAccount?.account_id ?? '';
-  const isVeterinaryRole = ['veterinary', 'veterinarian', 'veternary', 'agent'].includes(role);
+  const isVeterinaryRole = ['veterinary', 'veterinarian', 'veternary', 'agent', 'veterinary_officer'].includes(role);
   const isLimitedOpsRole =
     role === 'agent' ||
     role === 'collector' ||
+    role === 'veterinary_officer' ||
+    role === 'casual_laborer' ||
     role === 'veterinary' ||
     role === 'veterinarian' ||
     role === 'veternary' ||
@@ -89,7 +91,10 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
       return;
     }
 
-    if ((pathname === '/settings' || pathname.startsWith('/settings/')) && (role === 'collector' || role === 'agent' || role === 'accountant')) {
+    if (
+      (pathname === '/settings' || pathname.startsWith('/settings/')) &&
+      (role === 'collector' || role === 'agent' || role === 'veterinary_officer' || role === 'casual_laborer' || role === 'accountant')
+    ) {
       router.replace('/dashboard');
       return;
     }

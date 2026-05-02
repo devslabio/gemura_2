@@ -3,11 +3,13 @@ import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+/** Canonical demo password for seeded users (login identifier = phone). */
+const SEED_DEMO_PASSWORD = 'Pass123!';
+
 async function main() {
   console.log('🌱 Starting database seed...');
 
-  // Hash the password
-  const hashedPassword = await bcrypt.hash('Pass123', 10);
+  const hashedPassword = await bcrypt.hash(SEED_DEMO_PASSWORD, 10);
 
   // Generate a simple token (in production, this would be JWT)
   const authToken = `token_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -33,6 +35,7 @@ async function main() {
     where: { code: 'USER_MAIN_001' },
     update: {
       name: 'System Admin',
+      email: 'system.admin@gemura.rw',
       password_hash: hashedPassword,
       token: authToken,
       default_account_id: mainAccount.id,
@@ -40,7 +43,7 @@ async function main() {
     create: {
       code: 'USER_MAIN_001',
       name: 'System Admin',
-      email: 'admin@gemura.rw',
+      email: 'system.admin@gemura.rw',
       phone: '250788606765',
       password_hash: hashedPassword,
       account_type: 'mcc',
@@ -62,17 +65,146 @@ async function main() {
         account_id: mainAccount.id,
       },
     },
-    update: {},
+    update: {
+      role: 'system_admin',
+      status: 'active',
+    },
     create: {
       user_id: mainUser.id,
       account_id: mainAccount.id,
-      role: 'owner',
+      role: 'system_admin',
       permissions: { can_manage: true, can_view: true, can_edit: true },
       status: 'active',
       legacy_id: BigInt(1),
     },
   });
   console.log('✅ User linked to main account');
+
+  // 3b. One login per platform role (operators on Main MCC; supplier/customer separate)
+  const roleDemoOnMain = [
+    { phone: '250788409021', code: 'U_ROLE_ADM', name: 'Demo Admin', role: 'admin', email: 'admin@gemura.rw' },
+    { phone: '250788409022', code: 'U_ROLE_MGR', name: 'Demo Manager', role: 'manager', email: 'manager@gemura.rw' },
+    { phone: '250788409028', code: 'U_ROLE_VET', name: 'Demo Veterinary Officer', role: 'veterinary_officer', email: 'veterinary.officer@gemura.rw' },
+    { phone: '250788409029', code: 'U_ROLE_LBR', name: 'Demo Casual Laborer', role: 'casual_laborer', email: 'casual.laborer@gemura.rw' },
+    { phone: '250788409030', code: 'U_ROLE_LED', name: 'Demo Leadership', role: 'leadership', email: 'leadership@gemura.rw' },
+    { phone: '250788409031', code: 'U_ROLE_REG', name: 'Demo Regulator', role: 'regulator', email: 'regulator@gemura.rw' },
+    { phone: '250788409032', code: 'U_ROLE_UMA', name: 'Demo Umucunda Type A', role: 'umucunda_a', email: 'umucunda.a@gemura.rw' },
+    { phone: '250788409033', code: 'U_ROLE_UMB', name: 'Demo Umucunda Type B', role: 'umucunda_b', email: 'umucunda.b@gemura.rw' },
+    { phone: '250788409023', code: 'U_ROLE_ACC', name: 'Demo Accountant', role: 'accountant', email: 'accountant@gemura.rw' },
+    { phone: '250788409024', code: 'U_ROLE_COL', name: 'Demo Collector', role: 'collector', email: 'collector@gemura.rw' },
+    { phone: '250788409025', code: 'U_ROLE_VWR', name: 'Demo Viewer', role: 'viewer', email: 'viewer@gemura.rw' },
+    { phone: '250788409026', code: 'U_ROLE_AGT', name: 'Demo Agent', role: 'agent', email: 'agent@gemura.rw' },
+  ] as const;
+  console.log('👥 Creating platform role demo users (Main MCC)...');
+  for (const row of roleDemoOnMain) {
+    const u = await prisma.user.upsert({
+      where: { phone: row.phone },
+      update: {
+        name: row.name,
+        code: row.code,
+        email: row.email,
+        password_hash: hashedPassword,
+        default_account_id: mainAccount.id,
+        account_type: 'mcc',
+        status: 'active',
+      },
+      create: {
+        code: row.code,
+        name: row.name,
+        phone: row.phone,
+        email: row.email,
+        password_hash: hashedPassword,
+        account_type: 'mcc',
+        status: 'active',
+        default_account_id: mainAccount.id,
+        token: `token_${row.phone}_${Date.now()}`,
+      },
+    });
+    await prisma.userAccount.upsert({
+      where: {
+        user_id_account_id: { user_id: u.id, account_id: mainAccount.id },
+      },
+      update: {
+        role: row.role,
+        status: 'active',
+      },
+      create: {
+        user_id: u.id,
+        account_id: mainAccount.id,
+        role: row.role,
+        permissions: {},
+        status: 'active',
+      },
+    });
+  }
+  console.log(
+    `✅ Role demos on ${mainAccount.code}: admin, manager, veterinary_officer, casual_laborer, leadership, regulator, umucunda_a, umucunda_b, accountant, collector, viewer, agent`,
+  );
+
+  const demoCustomerAccount = await prisma.account.upsert({
+    where: { code: 'A_ROLE_DEMO_CUST' },
+    update: { name: 'Role Demo Customer Org', status: 'active' },
+    create: {
+      code: 'A_ROLE_DEMO_CUST',
+      name: 'Role Demo Customer Org',
+      type: 'tenant',
+      status: 'active',
+    },
+  });
+  await prisma.wallet.upsert({
+    where: { code: 'W_ROLE_DEMO_CUST' },
+    update: {},
+    create: {
+      code: 'W_ROLE_DEMO_CUST',
+      account_id: demoCustomerAccount.id,
+      type: 'regular',
+      is_joint: false,
+      is_default: true,
+      balance: 0,
+      currency: 'RWF',
+      status: 'active',
+    },
+  });
+  const demoCustomerUser = await prisma.user.upsert({
+    where: { phone: '250788409027' },
+    update: {
+      name: 'Demo Customer',
+      code: 'U_ROLE_CUST',
+      email: 'customer@gemura.rw',
+      password_hash: hashedPassword,
+      default_account_id: demoCustomerAccount.id,
+      account_type: 'customer',
+      status: 'active',
+    },
+    create: {
+      code: 'U_ROLE_CUST',
+      name: 'Demo Customer',
+      phone: '250788409027',
+      email: 'customer@gemura.rw',
+      password_hash: hashedPassword,
+      account_type: 'customer',
+      status: 'active',
+      default_account_id: demoCustomerAccount.id,
+      token: `token_role_cust_${Date.now()}`,
+    },
+  });
+  await prisma.userAccount.upsert({
+    where: {
+      user_id_account_id: {
+        user_id: demoCustomerUser.id,
+        account_id: demoCustomerAccount.id,
+      },
+    },
+    update: { role: 'customer', status: 'active' },
+    create: {
+      user_id: demoCustomerUser.id,
+      account_id: demoCustomerAccount.id,
+      role: 'customer',
+      permissions: {},
+      status: 'active',
+    },
+  });
+  console.log(`✅ Customer role demo: ${demoCustomerUser.phone} → ${demoCustomerAccount.code}`);
 
   // 4. Create main account wallet
   console.log('💰 Creating main account wallet...');
@@ -147,7 +279,9 @@ async function main() {
     // Create supplier user
     const supplierUser = await prisma.user.upsert({
       where: { code: supplier.user_code },
-      update: {},
+      update: {
+        password_hash: hashedPassword,
+      },
       create: {
         code: supplier.user_code,
         name: supplier.name,
@@ -175,7 +309,7 @@ async function main() {
       create: {
         user_id: supplierUser.id,
         account_id: supplierAccount.id,
-        role: 'owner',
+        role: 'supplier',
         permissions: { can_view: true },
         status: 'active',
       },
@@ -404,9 +538,16 @@ async function main() {
   console.log('\n🎉 Database seeding completed successfully!\n');
   console.log('📋 Summary:');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`👤 Main User: ${mainUser.phone}`);
-  console.log(`📧 Email: ${mainUser.email}`);
-  console.log(`🔑 Password: Pass123`);
+  console.log(`🔑 All seeded demo logins use password: ${SEED_DEMO_PASSWORD}`);
+  console.log(`👤 system_admin: ${mainUser.phone} (${mainAccount.code})`);
+  console.log('👤 Main MCC role demos:');
+  console.log('   250788409021 admin · 250788409022 manager · 250788409028 veterinary_officer');
+  console.log('   250788409029 casual_laborer · 250788409030 leadership · 250788409031 regulator');
+  console.log('   250788409032 umucunda_a · 250788409033 umucunda_b · 250788409023 accountant');
+  console.log('   250788409024 collector · 250788409025 viewer · 250788409026 agent');
+  console.log(`👤 supplier (Jean Baptiste): 250788111222 (+ 250788333444, 250788555666)`);
+  console.log(`👤 customer (own account): 250788409027`);
+  console.log(`📧 Main email: ${mainUser.email}`);
   console.log(`🎫 Token: ${authToken}`);
   console.log(`💼 Account: ${mainAccount.code}`);
   console.log(`💰 Wallet Balance: ${mainWallet.balance} RWF`);
@@ -417,7 +558,7 @@ async function main() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   console.log('🧪 Test the API:');
   console.log('1. Login: POST http://159.198.65.38:3004/api/auth/login');
-  console.log('   Body: { "identifier": "250788606765", "password": "Pass123" }');
+  console.log(`   Body: { "identifier": "250788606765", "password": "${SEED_DEMO_PASSWORD}" }`);
   console.log('\n2. Use the returned token for authenticated requests');
   console.log('   Header: Authorization: Bearer <token>');
   console.log('\n📚 Swagger Docs: http://159.198.65.38:3004/api/docs\n');
