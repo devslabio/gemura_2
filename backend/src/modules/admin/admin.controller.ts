@@ -38,6 +38,7 @@ import { RejectOnboardingDto } from './dto/reject-onboarding.dto';
 import { NeedsChangesOnboardingDto } from './dto/needs-changes-onboarding.dto';
 import { CreatePlatformRoleDto } from './dto/create-platform-role.dto';
 import { UpdatePlatformRoleDto } from './dto/update-platform-role.dto';
+import { AssignUserAccountMembershipDto } from './dto/assign-user-account-membership.dto';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -122,6 +123,23 @@ export class AdminController {
     @CurrentAccount() accountId: string,
   ) {
     return this.adminService.getPermissions(user, accountId);
+  }
+
+  @Get('accounts/assignable')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Search tenant/branch accounts for user membership assignment',
+    description: 'Paginated-lite list used by admin UI to attach a user to another operational account.',
+  })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  async searchAssignableAccounts(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('search') search?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.adminService.searchAssignableAccounts(user, accountId, search, limit ? parseInt(limit, 10) : undefined);
   }
 
   @Post('platform-roles')
@@ -603,6 +621,41 @@ export class AdminController {
       customer_account_code: customerAccountCode,
       search,
     });
+  }
+
+  @Post('users/:id/account-memberships')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Grant target user access to an account',
+    description:
+      'Creates or reactivates a user_accounts row. Defaults to viewer role when platform_role_id is omitted.',
+  })
+  @ApiParam({ name: 'id', description: 'Target user UUID' })
+  @ApiBody({ type: AssignUserAccountMembershipDto })
+  async addUserAccountMembership(
+    @CurrentUser() admin: User,
+    @CurrentAccount() accountId: string,
+    @Param('id') targetUserId: string,
+    @Body() dto: AssignUserAccountMembershipDto,
+  ) {
+    return this.adminService.addUserAccountMembership(admin, accountId, targetUserId, dto);
+  }
+
+  @Delete('users/:id/account-memberships/:membershipAccountId')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Revoke target user access to an account',
+    description: 'Marks the membership inactive. Cannot remove the user\'s only active account access.',
+  })
+  @ApiParam({ name: 'id', description: 'Target user UUID' })
+  @ApiParam({ name: 'membershipAccountId', description: 'Account UUID to detach' })
+  async removeUserAccountMembership(
+    @CurrentUser() admin: User,
+    @CurrentAccount() accountId: string,
+    @Param('id') targetUserId: string,
+    @Param('membershipAccountId') membershipAccountId: string,
+  ) {
+    return this.adminService.removeUserAccountMembership(admin, accountId, targetUserId, membershipAccountId);
   }
 
   @Put('users/:userId/immis-link')

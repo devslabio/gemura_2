@@ -132,6 +132,32 @@ select:disabled {
   opacity: 0.6;
 }
 
+/* `<select class="input">`: `.input` alone wins over bare `select {}` (class > element),
+   so padding/background were wrong and `h-10` clipped the selected label. */
+select.input {
+  height: auto;
+  min-height: 2.75rem;
+  padding: 0.5rem 2.5rem 0.5rem 1rem;
+  line-height: 1.45;
+  box-sizing: border-box;
+  appearance: none;
+  cursor: pointer;
+  background-color: #f9fafb;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+  background-position: right 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+}
+
+select.input:focus {
+  background-color: white;
+}
+
+select.input:disabled {
+  background-color: #f3f4f6;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E");
+}
+
 .safe-area-inset {
   padding-left: env(safe-area-inset-left, 0);
   padding-right: env(safe-area-inset-right, 0);

@@ -1,5 +1,13 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from "axios";
 
+/** POST /auth/login and /auth/register can return 401 for invalid credentials — do not clear session + hard-redirect like an expired JWT. */
+function isCredentialSubmissionRequest(config?: InternalAxiosRequestConfig): boolean {
+  const method = (config?.method ?? 'get').toLowerCase();
+  if (method !== 'post') return false;
+  const raw = typeof config?.url === 'string' ? config.url.split('?')[0].replace(/\/$/, '') : '';
+  return raw.endsWith('/auth/login') || raw.endsWith('/auth/register');
+}
+
 // Same Nest backend and DB as Gemura Web; only the Next app host differs.
 // If NEXT_PUBLIC_API_URL is not set, default to same-origin `/api` (e.g. nginx proxies admin host to the API).
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
@@ -42,6 +50,9 @@ class ApiClient {
       (error: AxiosError) => {
         if (error.response?.status === 401) {
           if (typeof window !== "undefined") {
+            if (isCredentialSubmissionRequest(error.config)) {
+              return Promise.reject(error);
+            }
             localStorage.removeItem("gemura-auth-token");
             localStorage.removeItem("gemura-auth-storage");
             window.location.href = "/auth/login";
