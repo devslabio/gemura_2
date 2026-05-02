@@ -3,12 +3,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { User } from '@prisma/client';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ImmisService } from '../immis/immis.service';
+import { RbacService } from '../rbac/rbac.service';
 
 @Injectable()
 export class ProfileService {
   constructor(
     private prisma: PrismaService,
     private immisService: ImmisService,
+    private rbac: RbacService,
   ) {}
 
   async getProfile(user: User) {
@@ -32,10 +34,9 @@ export class ProfileService {
       },
     });
 
-    // Format accounts
-    const accounts = userAccounts
-      .filter((ua) => ua.account && ua.account.status === 'active')
-      .map((ua) => ({
+    const filteredUa = userAccounts.filter((ua) => ua.account && ua.account.status === 'active');
+    const accounts = await Promise.all(
+      filteredUa.map(async (ua) => ({
         account_id: ua.account!.id,
         account_code: ua.account!.code,
         account_name: ua.account!.name,
@@ -43,15 +44,16 @@ export class ProfileService {
         account_status: ua.account!.status,
         account_created_at: ua.account!.created_at,
         role: ua.role,
-        permissions: ua.permissions
-          ? typeof ua.permissions === 'string'
-            ? JSON.parse(ua.permissions)
-            : ua.permissions
-          : null,
+        permissions: await this.rbac.formatPermissionsForApi({
+          role: ua.role,
+          platform_role_id: ua.platform_role_id,
+          permissions: ua.permissions,
+        }),
         user_account_status: ua.status,
         access_granted_at: ua.created_at,
         is_default: user.default_account_id === ua.account!.id,
-      }));
+      })),
+    );
 
     // Find default account
     const defaultAccount = accounts.find((a) => a.is_default);
@@ -61,6 +63,8 @@ export class ProfileService {
           code: defaultAccount.account_code,
           name: defaultAccount.account_name,
           type: defaultAccount.account_type,
+          role: defaultAccount.role,
+          permissions: defaultAccount.permissions,
         }
       : null;
 
@@ -104,6 +108,10 @@ export class ProfileService {
           token: user.token,
           immis_member_id: user.immis_member_id ?? null,
           immis_linked_at: user.immis_linked_at ?? null,
+          role: defaultAccount?.role ?? '',
+          permissions: defaultAccount?.permissions ?? null,
+          account_code: defaultAccount?.account_code ?? null,
+          account_name: defaultAccount?.account_name ?? null,
         },
         account: defaultAccountData,
         accounts,

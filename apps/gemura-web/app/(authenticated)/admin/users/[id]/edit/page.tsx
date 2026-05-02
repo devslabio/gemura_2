@@ -13,7 +13,7 @@ import { DetailPageSkeleton } from '@/app/components/SkeletonLoader';
 
 // Available roles and account types
 const ROLES = [
-  { value: 'owner', label: 'Owner' },
+  { value: 'system_admin', label: 'System admin' },
   { value: 'admin', label: 'Admin' },
   { value: 'manager', label: 'Manager' },
   { value: 'accountant', label: 'Accountant' },
@@ -130,7 +130,7 @@ export default function EditUserPage() {
           confirmPassword: '',
           account_type: user.account_type || 'mcc',
           status: user.status || 'active',
-          role: user.role || 'viewer',
+          role: user.role === 'owner' ? 'system_admin' : user.role || 'viewer',
           permissions: permissions || {},
           firstName,
           lastName,

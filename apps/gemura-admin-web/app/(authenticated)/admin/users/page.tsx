@@ -15,7 +15,7 @@ import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
 
 const ROLE_OPTIONS = [
   { value: '', label: 'All Roles' },
-  { value: 'owner', label: 'Owner' },
+  { value: 'system_admin', label: 'System admin' },
   { value: 'admin', label: 'Admin' },
   { value: 'manager', label: 'Manager' },
   { value: 'accountant', label: 'Accountant' },
@@ -41,7 +41,7 @@ const ACCOUNT_TYPE_OPTIONS = [
   { value: 'supplier', label: 'Supplier' },
   { value: 'customer', label: 'Customer' },
   { value: 'farmer', label: 'Farmer' },
-  { value: 'owner', label: 'Owner' },
+  { value: 'system_admin', label: 'System admin' },
 ];
 
 const PAGE_SIZES = [10, 20, 50, 100];
@@ -69,6 +69,9 @@ export default function UsersPage() {
   const accountIdRef = useRef(currentAccount?.account_id);
   const initializedFromQueryRef = useRef(false);
   const skipNextSearchDebounceRef = useRef(false);
+
+  /** Primitive snapshot — avoids effect loops when `useSearchParams` returns a new object each render. */
+  const searchParamsKey = searchParams.toString();
 
   /** Keep non-search filter fields in sync with the ref so loadUsers reads the latest values. */
   useEffect(() => {
@@ -171,7 +174,8 @@ export default function UsersPage() {
 
       loadUsers(1);
     }
-  }, [canManageUsers, isAdmin, loadUsers, router, searchParams, pageSize]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- search handled by debounced effect; avoid extra churn from pageSize after first load
+  }, [canManageUsers, isAdmin, loadUsers, router, searchParamsKey]);
 
   useEffect(() => {
     if (!canManageUsers() && !isAdmin()) return;
@@ -190,7 +194,7 @@ export default function UsersPage() {
     }, 380);
 
     return () => clearTimeout(delay);
-  }, [search, canManageUsers, isAdmin, loadUsers]);
+  }, [search, loadUsers, canManageUsers, isAdmin]);
 
   const handleExport = async () => {
     try {

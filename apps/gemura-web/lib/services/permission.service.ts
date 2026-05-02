@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/store/auth';
+import { isPlatformSuperAdminRole, platformRolesMatch } from '@/lib/utils/platform-rbac';
 
 export interface Permission {
   [key: string]: boolean;
@@ -14,15 +15,15 @@ export class PermissionService {
    */
   static hasPermission(permission: string): boolean {
     const { user, currentAccount } = useAuthStore.getState();
-    
+
     if (!user || !currentAccount) {
       return false;
     }
 
     const role = this.normalizeRole(currentAccount.role);
 
-    // Owner and admin have all permissions
-    if (role === 'owner' || role === 'admin') {
+    // System admin tier and admin receive full checks (matches backend RBAC).
+    if (isPlatformSuperAdminRole(currentAccount.role)) {
       return true;
     }
 
@@ -37,10 +38,10 @@ export class PermissionService {
       return false;
     }
 
-    // Check if permissions is array or object
     if (Array.isArray(permissions)) {
       return permissions.includes(permission);
-    } else if (typeof permissions === 'object') {
+    }
+    if (typeof permissions === 'object') {
       return permissions[permission] === true;
     }
 
@@ -51,14 +52,14 @@ export class PermissionService {
    * Check if user has any of the specified permissions
    */
   static hasAnyPermission(permissions: string[]): boolean {
-    return permissions.some(permission => this.hasPermission(permission));
+    return permissions.some((permission) => this.hasPermission(permission));
   }
 
   /**
    * Check if user has all of the specified permissions
    */
   static hasAllPermissions(permissions: string[]): boolean {
-    return permissions.every(permission => this.hasPermission(permission));
+    return permissions.every((permission) => this.hasPermission(permission));
   }
 
   /**
@@ -66,16 +67,20 @@ export class PermissionService {
    */
   static hasRole(role: string): boolean {
     const { currentAccount } = useAuthStore.getState();
-    return this.normalizeRole(currentAccount?.role) === this.normalizeRole(role);
+    return platformRolesMatch(currentAccount?.role, role);
   }
 
   /**
-   * Check if user is admin or owner
+   * Platform super-admin tier (`system_admin`, legacy `owner`) or `admin` role — client-side permission bypass.
    */
-  static isAdmin(): boolean {
+  static isSuperAdminOrAdmin(): boolean {
     const { currentAccount } = useAuthStore.getState();
-    const role = this.normalizeRole(currentAccount?.role);
-    return role === 'admin' || role === 'owner';
+    return isPlatformSuperAdminRole(currentAccount?.role);
+  }
+
+  /** @deprecated Prefer {@link isSuperAdminOrAdmin}; identical behavior. */
+  static isAdmin(): boolean {
+    return this.isSuperAdminOrAdmin();
   }
 
   /**

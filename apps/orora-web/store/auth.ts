@@ -94,10 +94,10 @@ export const useAuthStore = create<AuthStore>()(
           const msg = error?.response?.data?.message;
           const isNetwork = !error?.response && (error?.message === 'Network Error' || error?.code === 'ERR_NETWORK');
           if (isNetwork) {
-            const backendHint =
-              typeof window !== 'undefined' && window.location.hostname === 'localhost'
-                ? 'http://localhost:3007'
-                : 'the API URL';
+            const host = typeof window !== 'undefined' ? window.location.hostname : '';
+            const onLoopback =
+              host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+            const backendHint = onLoopback ? 'http://127.0.0.1:3007' : 'the API URL';
             return { error: `Cannot reach server. Is the backend running at ${backendHint}?` };
           }
           return { error: msg || error?.message || 'Login failed. Please try again.' };

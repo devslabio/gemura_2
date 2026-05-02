@@ -1,9 +1,12 @@
 #!/bin/bash
 #
-# Deploy Gemura API + gemura-web to Kwezi (rsync + docker build with cache).
+# Deploy Gemura API then gemura-web to Kwezi (rsync + docker build with cache).
+# Builds and starts one service at a time (gemura-api, then gemura-ui) — not a single
+# combined compose build, and does not run `docker compose down` on the whole project.
 # Does NOT build gemura-admin-ui (Compose profile "admin"). For admin:
-#   docker compose -f docker/docker-compose.kwezi.yml --profile admin up -d --build gemura-admin-ui
-# For API-only (leaves gemura-ui container as-is): use deploy-gemura-backend-only.sh
+#   ./scripts/gemura/deployment/deploy-gemura-admin-only.sh
+# For API-only (leaves gemura-ui as-is): deploy-gemura-backend-only.sh
+# For web-only (leaves gemura-api as-is): deploy-gemura-web-only.sh
 #
 # Usage (from project root):
 #   ./scripts/gemura/deployment/deploy-gemura.sh
@@ -73,8 +76,9 @@ rsync -avz \
 echo "   ✅ Sync complete"
 
 echo ""
-echo "🔨 Building and starting containers (Docker cache used)..."
-sshpass -p "$SERVER_PASS" ssh $SSH_OPTS $SERVER_USER@$SERVER_IP 'bash -s' << 'ENDSSH'
+echo "🔨 Step 1/2: gemura-api (then gemura-ui — not one combined build)..."
+ssh $SSH_OPTS -o ControlPath=$SSH_CONTROL_PATH $SERVER_USER@$SERVER_IP 'bash -s' << 'ENDSSH'
+set -e
 export LC_ALL=C.UTF-8
 cd /opt/gemura
 POSTGRES_PASSWORD=$(grep -E '^POSTGRES_PASSWORD=' /opt/kwezi/.env 2>/dev/null | cut -d= -f2- || echo "KweziPg2025!")
@@ -89,10 +93,41 @@ NEXT_PUBLIC_API_URL=https://app.gemura.rw/api
 CORS_ORIGIN=http://localhost:3006,http://209.74.80.195:3006,http://209.74.80.195:3007,http://209.74.80.195:3011,https://app.gemura.rw,https://app.orora.rw
 EOF
 fi
-docker compose -f docker/docker-compose.kwezi.yml down --timeout 30 2>/dev/null || true
-sleep 2
-# API + main web only; gemura-admin-ui is opt-in via profile "admin" in compose file
-docker compose -f docker/docker-compose.kwezi.yml --env-file .env up -d --build gemura-api gemura-ui
+COMPOSE="docker compose -f docker/docker-compose.kwezi.yml --env-file .env"
+
+echo "   → Building & starting gemura-api only..."
+$COMPOSE up -d --build gemura-api
+
+echo "   ⏳ Waiting for gemura-api (localhost:3007)..."
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  if curl -s -m 3 http://localhost:3007/api/health > /dev/null 2>&1; then
+    echo "   ✅ gemura-api is healthy"
+    break
+  fi
+  if [ "$i" -eq 12 ]; then
+    echo "   ⚠️  gemura-api not responding yet; continuing to UI deploy"
+  else
+    sleep 5
+  fi
+done
+
+echo "   → Building & starting gemura-ui only..."
+$COMPOSE up -d --build gemura-ui
+
+echo "   ⏳ Waiting for gemura-ui (localhost:3006)..."
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  if curl -s -m 3 http://localhost:3006/auth/login > /dev/null 2>&1; then
+    echo "   ✅ gemura-ui is healthy"
+    break
+  fi
+  if [ "$i" -eq 12 ]; then
+    echo "   ⚠️  gemura-ui not responding yet"
+  else
+    sleep 5
+  fi
+done
+
+$COMPOSE ps gemura-api gemura-ui
 ENDSSH
 
 echo ""

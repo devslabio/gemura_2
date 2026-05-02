@@ -42,18 +42,6 @@ enum UserAccountType {
   owner
 }
 
-enum UserAccountRole {
-  owner
-  admin
-  manager
-  accountant
-  collector
-  supplier
-  customer
-  agent
-  viewer
-}
-
 enum UserAccountStatus {
   active
   inactive
@@ -419,26 +407,77 @@ model User {
   @@map("users")
 }
 
+/// Granular permission codes (admin-managed catalog; synced from defaults on boot via RbacService).
+model PlatformPermission {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(100)
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  category    String?  @db.VarChar(100)
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+
+  role_links PlatformRolePermission[]
+
+  @@index([category])
+  @@map("platform_permissions")
+}
+
+/// Dynamic platform role (slug matches UserAccount.role strings; legacy `owner` is migrated to `system_admin`).
+model PlatformRole {
+  id             String   @id @default(uuid()) @db.Uuid
+  slug           String   @unique @db.VarChar(64)
+  name           String   @db.VarChar(150)
+  description    String?  @db.Text
+  is_system      Boolean  @default(false) @map("is_system")
+  is_active      Boolean  @default(true) @map("is_active")
+  /// When false, role is hidden from employee-invite pickers (e.g. supplier, customer account types).
+  is_assignable  Boolean  @default(true) @map("is_assignable")
+  created_at     DateTime @default(now()) @map("created_at")
+  updated_at     DateTime @updatedAt @map("updated_at")
+
+  permission_links PlatformRolePermission[]
+  user_accounts    UserAccount[]
+
+  @@index([is_active])
+  @@map("platform_roles")
+}
+
+model PlatformRolePermission {
+  platform_role_id       String @map("platform_role_id") @db.Uuid
+  platform_permission_id String @map("platform_permission_id") @db.Uuid
+
+  role       PlatformRole       @relation(fields: [platform_role_id], references: [id], onDelete: Cascade)
+  permission PlatformPermission @relation(fields: [platform_permission_id], references: [id], onDelete: Cascade)
+
+  @@id([platform_role_id, platform_permission_id])
+  @@index([platform_permission_id])
+  @@map("platform_role_permissions")
+}
+
 model UserAccount {
-  id          String            @id @default(uuid()) @db.Uuid
-  legacy_id   BigInt?           @unique @map("legacy_id") // For migration reference
-  user_id     String            @map("user_id") @db.Uuid
-  account_id  String            @map("account_id") @db.Uuid
-  role        UserAccountRole   @default(supplier)
-  permissions Json? // JSONB for permissions
-  status      UserAccountStatus @default(active)
-  created_at  DateTime          @default(now()) @map("created_at")
-  created_by  String?           @map("created_by") @db.Uuid
-  updated_by  String?           @map("updated_by") @db.Uuid
+  id               String            @id @default(uuid()) @db.Uuid
+  legacy_id        BigInt?           @unique @map("legacy_id") // For migration reference
+  user_id          String            @map("user_id") @db.Uuid
+  account_id       String            @map("account_id") @db.Uuid
+  role             String            @default("supplier") @db.VarChar(64)
+  platform_role_id String?           @map("platform_role_id") @db.Uuid
+  permissions      Json? // Legacy overrides / snapshot; effective permissions resolved via RbacService
+  status           UserAccountStatus @default(active)
+  created_at       DateTime          @default(now()) @map("created_at")
+  created_by       String?           @map("created_by") @db.Uuid
+  updated_by       String?           @map("updated_by") @db.Uuid
 
   // Relations
-  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  account Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  account       Account        @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  platform_role PlatformRole?  @relation(fields: [platform_role_id], references: [id], onDelete: SetNull)
 
   @@unique([user_id, account_id])
   @@index([user_id])
   @@index([account_id])
   @@index([role])
+  @@index([platform_role_id])
   @@index([status])
   @@map("user_accounts")
 }

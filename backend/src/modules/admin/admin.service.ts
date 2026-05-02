@@ -1,4 +1,10 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  ForbiddenException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MccOnboardingReviewStatus, Prisma, User } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -12,6 +18,8 @@ import {
   ROLE_DEFAULT_PERMISSIONS,
   ROLE_LABELS,
   ROLE_DESCRIPTIONS,
+  canonicalPlatformRoleSlug,
+  isPlatformSuperAdminRole,
   type RoleCode,
 } from './roles-permissions.config';
 import * as ExcelJS from 'exceljs';
@@ -21,6 +29,9 @@ import {
   MCC_ONBOARDING_CSV_PRIMARY_KEYS,
   resolveMccOnboardingColumnTitle,
 } from './mcc-onboarding-csv.util';
+import { RbacService } from '../rbac/rbac.service';
+import { CreatePlatformRoleDto } from './dto/create-platform-role.dto';
+import { UpdatePlatformRoleDto } from './dto/update-platform-role.dto';
 
 export type UserActivityMetric =
   | 'suppliers'
@@ -98,6 +109,7 @@ export class AdminService {
     private prisma: PrismaService,
     private immisService: ImmisService,
     private locationsService: LocationsService,
+    private rbac: RbacService,
   ) {}
 
   private normalizeGroupCount(row: { _count?: number | { _all?: number } }): number {
@@ -248,8 +260,8 @@ export class AdminService {
       });
     }
 
-    // Owner and admin have all permissions
-    if (userAccount.role === 'owner' || userAccount.role === 'admin') {
+    // System admin and admin have all permissions
+    if (isPlatformSuperAdminRole(userAccount.role)) {
       return;
     }
 
@@ -1158,12 +1170,24 @@ export class AdminService {
     });
 
     // Create user account access
-    if (createDto.role || createDto.permissions) {
+    if (createDto.role || createDto.permissions || createDto.platform_role_id) {
+      await this.rbac.ensureCatalogFromConfig();
+      let roleSlug = canonicalPlatformRoleSlug((createDto.role || 'viewer').trim().slice(0, 64));
+      let platformRoleId =
+        createDto.platform_role_id || (await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug));
+      if (createDto.platform_role_id && !createDto.role) {
+        const s = await this.rbac.resolveSlugFromPlatformRoleId(createDto.platform_role_id);
+        if (s) roleSlug = s;
+      }
+      if (!platformRoleId) {
+        platformRoleId = await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug);
+      }
       await this.prisma.userAccount.create({
         data: {
           user_id: newUser.id,
           account_id: accountId,
-          role: createDto.role || 'viewer',
+          role: roleSlug,
+          platform_role_id: platformRoleId,
           permissions: createDto.permissions ? JSON.stringify(createDto.permissions) : null,
           status: 'active',
           created_by: user.id,
@@ -1245,8 +1269,13 @@ export class AdminService {
       data: updateData,
     });
 
-    // Update user account access if role/permissions provided
-    if (updateDto.role !== undefined || updateDto.permissions !== undefined) {
+    // Update user account access if role/permissions/platform_role_id provided
+    if (
+      updateDto.role !== undefined ||
+      updateDto.permissions !== undefined ||
+      updateDto.platform_role_id !== undefined
+    ) {
+      await this.rbac.ensureCatalogFromConfig();
       const userAccount = await this.prisma.userAccount.findFirst({
         where: {
           user_id: userId,
@@ -1255,21 +1284,49 @@ export class AdminService {
       });
 
       if (userAccount) {
+        let roleSlug =
+          updateDto.role !== undefined
+            ? canonicalPlatformRoleSlug(updateDto.role.trim().slice(0, 64))
+            : userAccount.role.trim().slice(0, 64);
+        let platformRoleId =
+          updateDto.platform_role_id !== undefined
+            ? updateDto.platform_role_id
+            : updateDto.role !== undefined
+              ? await this.rbac.resolvePlatformRoleIdFromSlug(updateDto.role)
+              : userAccount.platform_role_id;
+        if (updateDto.platform_role_id !== undefined && updateDto.role === undefined) {
+          const s = await this.rbac.resolveSlugFromPlatformRoleId(updateDto.platform_role_id);
+          if (s) roleSlug = s;
+        }
+        if (!platformRoleId && updateDto.role !== undefined) {
+          platformRoleId = await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug);
+        }
         await this.prisma.userAccount.update({
           where: { id: userAccount.id },
           data: {
-            role: updateDto.role || userAccount.role,
-            permissions: updateDto.permissions ? JSON.stringify(updateDto.permissions) : userAccount.permissions,
+            role: roleSlug,
+            platform_role_id: platformRoleId ?? undefined,
+            permissions:
+              updateDto.permissions !== undefined
+                ? JSON.stringify(updateDto.permissions)
+                : userAccount.permissions,
             updated_by: user.id,
           },
         });
-      } else if (updateDto.role || updateDto.permissions) {
-        // Create new user account access
+      } else if (updateDto.role || updateDto.permissions || updateDto.platform_role_id) {
+        let roleSlug = canonicalPlatformRoleSlug((updateDto.role || 'viewer').trim().slice(0, 64));
+        let platformRoleId =
+          updateDto.platform_role_id || (await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug));
+        if (updateDto.platform_role_id && !updateDto.role) {
+          const s = await this.rbac.resolveSlugFromPlatformRoleId(updateDto.platform_role_id);
+          if (s) roleSlug = s;
+        }
         await this.prisma.userAccount.create({
           data: {
             user_id: userId,
             account_id: accountId,
-            role: updateDto.role || 'viewer',
+            role: roleSlug,
+            platform_role_id: platformRoleId,
             permissions: updateDto.permissions ? JSON.stringify(updateDto.permissions) : null,
             status: 'active',
             created_by: user.id,
@@ -1724,17 +1781,33 @@ export class AdminService {
   }
 
   /**
-   * Get all roles with their default permissions (ResolveIT-style)
+   * Get all platform roles with permission codes (database-backed; seeded from defaults).
    */
   async getRoles(user: User, accountId: string) {
     await this.checkAdminPermission(user, accountId);
-    const roles = ROLES.map((role) => ({
-      code: role,
-      name: ROLE_LABELS[role as RoleCode],
-      description: ROLE_DESCRIPTIONS[role as RoleCode],
-      permissions: ROLE_DEFAULT_PERMISSIONS[role as RoleCode],
-      permissionCount: ROLE_DEFAULT_PERMISSIONS[role as RoleCode].length,
-    }));
+    await this.rbac.ensureCatalogFromConfig();
+    const rows = await this.prisma.platformRole.findMany({
+      orderBy: [{ is_system: 'desc' }, { slug: 'asc' }],
+      include: {
+        permission_links: {
+          include: { permission: true },
+        },
+      },
+    });
+    const roles = rows.map((r) => {
+      const codes = r.permission_links.map((l) => l.permission.code).sort();
+      return {
+        id: r.id,
+        code: r.slug,
+        name: r.name,
+        description: r.description ?? '',
+        permissions: codes,
+        permissionCount: codes.length,
+        is_system: r.is_system,
+        is_active: r.is_active,
+        is_assignable: r.is_assignable,
+      };
+    });
     return {
       code: 200,
       status: 'success',
@@ -1744,30 +1817,246 @@ export class AdminService {
   }
 
   /**
-   * Get all permissions with which roles have them (ResolveIT-style)
+   * Get all permissions with role assignments (database-backed).
    */
   async getPermissions(user: User, accountId: string) {
     await this.checkAdminPermission(user, accountId);
-    const permissions = PERMISSIONS.map((perm) => {
-      const rolesWithPermission = ROLES.filter((role) =>
-        ROLE_DEFAULT_PERMISSIONS[role as RoleCode].includes(perm.code),
-      );
-      return {
-        code: perm.code,
-        name: perm.name,
-        description: perm.description,
-        category: perm.category,
-        roles: rolesWithPermission.map((r) => ({
-          code: r,
-          name: ROLE_LABELS[r as RoleCode],
-        })),
-      };
+    await this.rbac.ensureCatalogFromConfig();
+    const permRows = await this.prisma.platformPermission.findMany({
+      orderBy: [{ category: 'asc' }, { code: 'asc' }],
     });
+    const links = await this.prisma.platformRolePermission.findMany({
+      include: { role: true },
+    });
+    const byPerm = new Map<string, { id: string; code: string; name: string }[]>();
+    for (const l of links) {
+      const list = byPerm.get(l.platform_permission_id) ?? [];
+      list.push({ id: l.role.id, code: l.role.slug, name: l.role.name });
+      byPerm.set(l.platform_permission_id, list);
+    }
+    const permissions = permRows.map((perm) => ({
+      id: perm.id,
+      code: perm.code,
+      name: perm.name,
+      description: perm.description,
+      category: perm.category,
+      roles: byPerm.get(perm.id) ?? [],
+    }));
     return {
       code: 200,
       status: 'success',
       message: 'Permissions retrieved successfully.',
       data: { permissions },
+    };
+  }
+
+  private slugifyRoleName(name: string): string {
+    const base = name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 64);
+    return base || 'role';
+  }
+
+  private async ensureUniqueSlug(base: string): Promise<string> {
+    let slug = base.slice(0, 64);
+    let n = 0;
+    while (await this.prisma.platformRole.findUnique({ where: { slug } })) {
+      n += 1;
+      const suffix = `-${n}`;
+      slug = `${base.slice(0, Math.max(1, 64 - suffix.length))}${suffix}`;
+    }
+    return slug;
+  }
+
+  async createPlatformRole(user: User, accountId: string, dto: CreatePlatformRoleDto) {
+    await this.checkAdminPermission(user, accountId);
+    await this.rbac.ensureCatalogFromConfig();
+    const baseSlug = dto.slug?.trim() ? dto.slug.trim().slice(0, 64) : this.slugifyRoleName(dto.name);
+    const slug = await this.ensureUniqueSlug(baseSlug);
+    const permissionRows = await this.prisma.platformPermission.findMany({
+      where: { id: { in: dto.permission_ids } },
+    });
+    if (permissionRows.length !== dto.permission_ids.length) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'One or more permission IDs are invalid.',
+      });
+    }
+    const role = await this.prisma.platformRole.create({
+      data: {
+        slug,
+        name: dto.name.trim(),
+        description: dto.description?.trim() ?? null,
+        is_system: false,
+        is_active: dto.is_active !== false,
+        is_assignable: dto.is_assignable !== false,
+      },
+    });
+    const uniquePermRows = [...new Map(permissionRows.map((p) => [p.id, p])).values()];
+    await this.prisma.platformRolePermission.createMany({
+      data: uniquePermRows.map((p) => ({
+        platform_role_id: role.id,
+        platform_permission_id: p.id,
+      })),
+      skipDuplicates: true,
+    });
+    const links = await this.prisma.platformRolePermission.findMany({
+      where: { platform_role_id: role.id },
+      include: { permission: true },
+    });
+    const codes = links.map((l) => l.permission.code).sort();
+    return {
+      code: 201,
+      status: 'success',
+      message: 'Role created successfully.',
+      data: {
+        role: {
+          id: role.id,
+          code: role.slug,
+          name: role.name,
+          description: role.description ?? '',
+          permissions: codes,
+          permissionCount: codes.length,
+          is_system: false,
+          is_active: role.is_active,
+          is_assignable: role.is_assignable,
+        },
+      },
+    };
+  }
+
+  async updatePlatformRole(user: User, accountId: string, roleId: string, dto: UpdatePlatformRoleDto) {
+    await this.checkAdminPermission(user, accountId);
+    const existing = await this.prisma.platformRole.findUnique({ where: { id: roleId } });
+    if (!existing) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'Role not found.' });
+    }
+    if (existing.is_system && dto.slug !== undefined && dto.slug.trim() !== existing.slug) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Cannot change slug of a system role.',
+      });
+    }
+
+    let newSlug = existing.slug;
+    if (dto.slug !== undefined && dto.slug.trim() !== existing.slug) {
+      const candidate = dto.slug.trim().slice(0, 64);
+      const clash = await this.prisma.platformRole.findFirst({
+        where: { slug: candidate, NOT: { id: existing.id } },
+      });
+      if (clash) {
+        throw new ConflictException({
+          code: 409,
+          status: 'error',
+          message: 'Another role already uses this slug.',
+        });
+      }
+      newSlug = candidate;
+    }
+
+    if (dto.permission_ids !== undefined) {
+      const permissionRows = await this.prisma.platformPermission.findMany({
+        where: { id: { in: dto.permission_ids } },
+      });
+      if (permissionRows.length !== dto.permission_ids.length) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'One or more permission IDs are invalid.',
+        });
+      }
+      await this.prisma.platformRolePermission.deleteMany({
+        where: { platform_role_id: existing.id },
+      });
+      const uniquePermRows = [...new Map(permissionRows.map((p) => [p.id, p])).values()];
+      await this.prisma.platformRolePermission.createMany({
+        data: uniquePermRows.map((p) => ({
+          platform_role_id: existing.id,
+          platform_permission_id: p.id,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    const updated = await this.prisma.platformRole.update({
+      where: { id: roleId },
+      data: {
+        slug: newSlug,
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.description !== undefined ? { description: dto.description } : {}),
+        ...(dto.is_active !== undefined ? { is_active: dto.is_active } : {}),
+        ...(dto.is_assignable !== undefined ? { is_assignable: dto.is_assignable } : {}),
+      },
+    });
+
+    const cascadeSlug =
+      dto.slug !== undefined && dto.slug.trim() !== existing.slug ? newSlug : undefined;
+    if (cascadeSlug) {
+      await this.prisma.userAccount.updateMany({
+        where: { platform_role_id: existing.id },
+        data: { role: cascadeSlug },
+      });
+    }
+
+    const links = await this.prisma.platformRolePermission.findMany({
+      where: { platform_role_id: updated.id },
+      include: { permission: true },
+    });
+    const codes = links.map((l) => l.permission.code).sort();
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Role updated successfully.',
+      data: {
+        role: {
+          id: updated.id,
+          code: updated.slug,
+          name: updated.name,
+          description: updated.description ?? '',
+          permissions: codes,
+          permissionCount: codes.length,
+          is_system: updated.is_system,
+          is_active: updated.is_active,
+          is_assignable: updated.is_assignable,
+        },
+      },
+    };
+  }
+
+  async deletePlatformRole(user: User, accountId: string, roleId: string) {
+    await this.checkAdminPermission(user, accountId);
+    const existing = await this.prisma.platformRole.findUnique({ where: { id: roleId } });
+    if (!existing) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'Role not found.' });
+    }
+    if (existing.is_system) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'System roles cannot be deleted.',
+      });
+    }
+    const inUse = await this.prisma.userAccount.count({
+      where: { platform_role_id: roleId },
+    });
+    if (inUse > 0) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: `Role is assigned to ${inUse} user account link(s). Reassign users before deleting.`,
+      });
+    }
+    await this.prisma.platformRole.delete({ where: { id: roleId } });
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Role deleted successfully.',
+      data: null,
     };
   }
 
@@ -2476,7 +2765,7 @@ export class AdminService {
         data: {
           user_id: linkedUser.id,
           account_id: newAccount.id,
-          role: 'owner',
+          role: 'system_admin',
           permissions: ownerPermissions as unknown as Prisma.InputJsonValue,
           status: 'active',
           created_by: user.id,

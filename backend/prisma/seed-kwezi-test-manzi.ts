@@ -16,7 +16,7 @@ const PHONE = '250788000000';
 const EMAIL = 'manzi.fabrice+kwezi-test@gemura.local';
 
 async function main() {
-  const hashedPassword = await bcrypt.hash('Pass123', 10);
+  const hashedPassword = await bcrypt.hash('Pass123!', 10);
   const token = `token_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
   const byPhone = await prisma.user.findUnique({ where: { phone: PHONE } });
@@ -149,21 +149,21 @@ async function main() {
       user_id_account_id: { user_id: user.id, account_id: account.id },
     },
     update: {
-      role: 'owner',
+      role: 'system_admin',
       status: 'active',
       permissions: { can_manage: true, can_view: true, can_edit: true },
     },
     create: {
       user_id: user.id,
       account_id: account.id,
-      role: 'owner',
+      role: 'system_admin',
       permissions: { can_manage: true, can_view: true, can_edit: true },
       status: 'active',
     },
   });
 
   console.log(`User ${user.code} | Account ${account.code} | Wallet ${WALLET_CODE}`);
-  console.log(`Login: ${PHONE} / Pass123`);
+  console.log(`Login: ${PHONE} / Pass123!`);
 }
 
 main()

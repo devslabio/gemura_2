@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../config/app_config.dart';
+import '../utils/auth_session_merge.dart';
 import '../../shared/models/registration_request.dart';
 import 'secure_storage_service.dart';
 import 'authenticated_dio_service.dart';
@@ -31,9 +32,14 @@ class AuthService {
             await SecureStorageService.saveAuthToken(data['user']['token']);
           }
           
-          // Save user data
           if (data['user'] != null) {
-            await SecureStorageService.saveUserData(data['user']);
+            final userMap = Map<String, dynamic>.from(data['user'] as Map);
+            if (data['account'] != null) {
+              final acc = Map<String, dynamic>.from(data['account'] as Map);
+              userMap['accountCode'] = userMap['accountCode'] ?? acc['code'];
+              userMap['accountName'] = userMap['accountName'] ?? acc['name'];
+            }
+            await SecureStorageService.saveUserData(userMap);
           }
           
           // Save login state
@@ -86,14 +92,16 @@ class AuthService {
             await SecureStorageService.saveAuthToken(data['user']['token']);
           }
           
-          // Save user data with account information
-          if (data['user'] != null && data['account'] != null) {
-            final userData = Map<String, dynamic>.from(data['user']);
-            userData['role'] = data['account']['type'];
-            userData['accountCode'] = data['account']['code'];
-            userData['accountName'] = data['account']['name']; // Save account name
-            userData['accountType'] = data['account']['type'] ?? 'mcc'; // Save account type
-            await SecureStorageService.saveUserData(userData);
+          // Save merged user map: platform role from UserAccount + codes from default Account
+          if (data['user'] != null) {
+            final accountsList = data['accounts'] is List ? List<dynamic>.from(data['accounts'] as List) : null;
+            final accountMap = data['account'] != null ? Map<String, dynamic>.from(data['account'] as Map) : null;
+            final merged = mergeAuthSessionUser(
+              user: Map<String, dynamic>.from(data['user'] as Map),
+              account: accountMap,
+              accounts: accountsList,
+            );
+            await SecureStorageService.saveUserData(merged);
           }
           
           // Save login state
@@ -203,12 +211,20 @@ class AuthService {
       
       // Cache the profile data
       if (response.statusCode == 200 && response.data['data'] != null) {
-        final userData = response.data['data']['user'];
-        if (userData != null) {
-          await SecureStorageService.saveUserData(userData);
+        final data = response.data['data'] as Map<String, dynamic>;
+        final rawUser = data['user'];
+        if (rawUser is Map<String, dynamic>) {
+          final accountsList = data['accounts'] is List ? List<dynamic>.from(data['accounts'] as List) : null;
+          final accountMap = data['account'] != null ? Map<String, dynamic>.from(data['account'] as Map) : null;
+          final merged = mergeAuthSessionUser(
+            user: Map<String, dynamic>.from(rawUser),
+            account: accountMap,
+            accounts: accountsList,
+          );
+          await SecureStorageService.saveUserData(merged);
         }
       }
-      
+
       return response.data;
     } on DioException catch (e) {
       // If API call fails, try to get from cache as fallback
@@ -248,12 +264,20 @@ class AuthService {
       
       // Cache the fresh profile data
       if (response.statusCode == 200 && response.data['data'] != null) {
-        final userData = response.data['data']['user'];
-        if (userData != null) {
-          await SecureStorageService.saveUserData(userData);
+        final data = response.data['data'] as Map<String, dynamic>;
+        final rawUser = data['user'];
+        if (rawUser is Map<String, dynamic>) {
+          final accountsList = data['accounts'] is List ? List<dynamic>.from(data['accounts'] as List) : null;
+          final accountMap = data['account'] != null ? Map<String, dynamic>.from(data['account'] as Map) : null;
+          final merged = mergeAuthSessionUser(
+            user: Map<String, dynamic>.from(rawUser),
+            account: accountMap,
+            accounts: accountsList,
+          );
+          await SecureStorageService.saveUserData(merged);
         }
       }
-      
+
       return response.data;
     } on DioException catch (e) {
       print('Refresh profile DioException: ${e.message}');
@@ -294,12 +318,18 @@ class AuthService {
       print('🔧 AuthService: Response status: ${response.statusCode}');
       print('🔧 AuthService: Response data: ${response.data}');
       
-      // Update cached user data (response shape: { data: { user: {...}, account: {...} } })
       if (response.statusCode == 200 && response.data['data'] != null) {
-        final updatedUser = response.data['data']['user'];
-        if (updatedUser != null) {
-          print('🔧 AuthService: Updating cached user data');
-          await SecureStorageService.saveUserData(updatedUser);
+        final data = response.data['data'] as Map<String, dynamic>;
+        final rawUser = data['user'];
+        if (rawUser is Map<String, dynamic>) {
+          final accountsList = data['accounts'] is List ? List<dynamic>.from(data['accounts'] as List) : null;
+          final accountMap = data['account'] != null ? Map<String, dynamic>.from(data['account'] as Map) : null;
+          final merged = mergeAuthSessionUser(
+            user: Map<String, dynamic>.from(rawUser),
+            account: accountMap,
+            accounts: accountsList,
+          );
+          await SecureStorageService.saveUserData(merged);
         }
       }
       

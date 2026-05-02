@@ -17,6 +17,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # NEXT_PUBLIC_* must be present at build time to be inlined in client bundle
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# Cap Node.js heap to avoid OOM on memory-constrained servers
+ENV NODE_OPTIONS=--max-old-space-size=1024
 RUN npm run build
 
 FROM base AS runner

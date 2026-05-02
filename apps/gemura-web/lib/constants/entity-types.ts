@@ -15,3 +15,5 @@ export const ENTITY_TYPE_OPTIONS = [
   { value: 'agent', label: 'Agent' },
   { value: 'household', label: 'Household' },
 ];
+
+export const SUPPLIER_TYPE_OPTIONS = ENTITY_TYPE_OPTIONS;

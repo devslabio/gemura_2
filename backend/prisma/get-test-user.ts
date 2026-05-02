@@ -45,7 +45,7 @@ async function main() {
     console.log('---\n');
   });
 
-  console.log('\nNote: Default password for test users is typically "password" or check your seed scripts.');
+  console.log('\nNote: prisma/seed.ts demo users use password Pass123! (see seed summary for phones per role).');
 }
 
 main()

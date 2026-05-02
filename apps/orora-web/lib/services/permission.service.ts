@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/store/auth';
+import { isPlatformSuperAdminRole, platformRolesMatch } from '@/lib/utils/platform-rbac';
 
 export interface Permission {
   [key: string]: boolean;
@@ -16,7 +17,7 @@ export class PermissionService {
     }
 
     // Owner and admin have all permissions
-    if (currentAccount.role === 'owner' || currentAccount.role === 'admin') {
+    if (isPlatformSuperAdminRole(currentAccount.role)) {
       return true;
     }
 
@@ -54,15 +55,20 @@ export class PermissionService {
    */
   static hasRole(role: string): boolean {
     const { currentAccount } = useAuthStore.getState();
-    return currentAccount?.role === role;
+    return platformRolesMatch(currentAccount?.role, role);
   }
 
   /**
-   * Check if user is admin or owner
+   * Platform super-admin tier (`system_admin`, legacy `owner`) or `admin` role — client-side permission bypass.
    */
-  static isAdmin(): boolean {
+  static isSuperAdminOrAdmin(): boolean {
     const { currentAccount } = useAuthStore.getState();
-    return currentAccount?.role === 'admin' || currentAccount?.role === 'owner';
+    return isPlatformSuperAdminRole(currentAccount?.role);
+  }
+
+  /** @deprecated Prefer {@link isSuperAdminOrAdmin}; identical behavior. */
+  static isAdmin(): boolean {
+    return this.isSuperAdminOrAdmin();
   }
 
   /**

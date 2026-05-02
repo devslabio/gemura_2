@@ -78,6 +78,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   Color _getRoleColor(String role) {
     switch (role.toLowerCase()) {
       case 'owner':
+      case 'system_admin':
         return AppTheme.successColor;
       case 'admin':
         return AppTheme.primaryColor;
@@ -93,6 +94,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   IconData _getRoleIcon(String role) {
     switch (role.toLowerCase()) {
       case 'owner':
+      case 'system_admin':
         return Icons.person_outline;
       case 'admin':
         return Icons.admin_panel_settings;

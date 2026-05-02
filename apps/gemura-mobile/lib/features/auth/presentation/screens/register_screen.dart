@@ -30,7 +30,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isLoading = false;
-  final String _selectedRole = 'owner'; // Default role for dairy business owners
+  final String _selectedRole = 'system_admin'; // Primary platform role for new tenant accounts (legacy API alias: owner)
   String _selectedAccountType = User.accountTypeMCC; // Default account type
 
   @override

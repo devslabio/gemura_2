@@ -13,7 +13,12 @@ CREDS_FILE="$REPO_ROOT/scripts/shared/deployment/server-credentials.sh"
 NGINX_CONF_SRC="$REPO_ROOT/docker/nginx/gemura-orora.conf"
 CONF_NAME="gemura-orora.conf"
 
+_DEPLOY_SERVER_PASS_FROM_ENV="${SERVER_PASS-}"
 [ -f "$CREDS_FILE" ] && source "$CREDS_FILE"
+if [ -n "$_DEPLOY_SERVER_PASS_FROM_ENV" ]; then
+  SERVER_PASS="$_DEPLOY_SERVER_PASS_FROM_ENV"
+fi
+unset _DEPLOY_SERVER_PASS_FROM_ENV
 SERVER_IP="${SERVER_IP:-209.74.80.195}"
 SERVER_USER="${SERVER_USER:-root}"
 SITES_AVAILABLE="/etc/nginx/sites-available"

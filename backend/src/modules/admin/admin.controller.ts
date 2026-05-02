@@ -36,6 +36,8 @@ import { LinkUserImmisDto } from './dto/link-user-immis.dto';
 import { ApproveOnboardingDto } from './dto/approve-onboarding.dto';
 import { RejectOnboardingDto } from './dto/reject-onboarding.dto';
 import { NeedsChangesOnboardingDto } from './dto/needs-changes-onboarding.dto';
+import { CreatePlatformRoleDto } from './dto/create-platform-role.dto';
+import { UpdatePlatformRoleDto } from './dto/update-platform-role.dto';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -120,6 +122,42 @@ export class AdminController {
     @CurrentAccount() accountId: string,
   ) {
     return this.adminService.getPermissions(user, accountId);
+  }
+
+  @Post('platform-roles')
+  @RequirePermission('manage_users')
+  @ApiOperation({ summary: 'Create a dynamic platform role' })
+  async createPlatformRole(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Body() dto: CreatePlatformRoleDto,
+  ) {
+    return this.adminService.createPlatformRole(user, accountId, dto);
+  }
+
+  @Put('platform-roles/:roleId')
+  @RequirePermission('manage_users')
+  @ApiOperation({ summary: 'Update a platform role and its permissions' })
+  @ApiParam({ name: 'roleId', description: 'PlatformRole id (UUID)' })
+  async updatePlatformRole(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('roleId') roleId: string,
+    @Body() dto: UpdatePlatformRoleDto,
+  ) {
+    return this.adminService.updatePlatformRole(user, accountId, roleId, dto);
+  }
+
+  @Delete('platform-roles/:roleId')
+  @RequirePermission('manage_users')
+  @ApiOperation({ summary: 'Delete a non-system platform role (must have no users)' })
+  @ApiParam({ name: 'roleId', description: 'PlatformRole id (UUID)' })
+  async deletePlatformRole(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('roleId') roleId: string,
+  ) {
+    return this.adminService.deletePlatformRole(user, accountId, roleId);
   }
 
   @Get('onboarding-submissions/pending-count')
@@ -248,7 +286,7 @@ export class AdminController {
   @Post('onboarding-submissions/:submissionId/approve')
   @RequirePermission('manage_users')
   @ApiOperation({
-    summary: 'Approve onboarding: create tenant account, wallet, owner user (or link existing user)',
+    summary: 'Approve onboarding: create tenant account, wallet, system_admin user link (or link existing user)',
   })
   @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
   @ApiBody({ type: ApproveOnboardingDto })
@@ -354,7 +392,7 @@ export class AdminController {
     name: 'role',
     required: false,
     type: String,
-    description: 'Filter by account role: owner, admin, manager, collector, supplier, customer',
+    description: 'Filter by account role: system_admin, admin, manager, collector, supplier, customer (legacy owner)',
     example: 'admin',
   })
   @ApiQuery({

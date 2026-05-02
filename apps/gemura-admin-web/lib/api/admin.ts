@@ -113,19 +113,42 @@ export interface UpdateUserData {
 }
 
 export interface RoleItem {
+  id?: string;
   code: string;
   name: string;
   description: string;
   permissions: string[];
   permissionCount: number;
+  is_system?: boolean;
+  is_active?: boolean;
+  is_assignable?: boolean;
 }
 
 export interface PermissionItem {
+  id?: string;
   code: string;
   name: string;
   description: string;
   category?: string;
-  roles: Array<{ code: string; name: string }>;
+  roles: Array<{ id?: string; code: string; name: string }>;
+}
+
+export interface CreatePlatformRolePayload {
+  name: string;
+  slug?: string;
+  description?: string;
+  permission_ids: string[];
+  is_active?: boolean;
+  is_assignable?: boolean;
+}
+
+export interface UpdatePlatformRolePayload {
+  name?: string;
+  slug?: string;
+  description?: string | null;
+  permission_ids?: string[];
+  is_active?: boolean;
+  is_assignable?: boolean;
 }
 
 export type UserActivityMetric = 'suppliers' | 'customers' | 'sales' | 'collections' | 'farms' | 'accounts';
@@ -152,6 +175,31 @@ export const adminApi = {
   getPermissions: async (accountId?: string): Promise<{ code: number; status: string; message: string; data: { permissions: PermissionItem[] } }> => {
     const params = accountId ? { account_id: accountId } : {};
     return apiClient.get('/admin/permissions', { params });
+  },
+
+  createPlatformRole: async (
+    payload: CreatePlatformRolePayload,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: { role: RoleItem } }> => {
+    const body = accountId ? { ...payload, account_id: accountId } : payload;
+    return apiClient.post('/admin/platform-roles', body);
+  },
+
+  updatePlatformRole: async (
+    roleId: string,
+    payload: UpdatePlatformRolePayload,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: { role: RoleItem } }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.put(`/admin/platform-roles/${roleId}`, payload, { params });
+  },
+
+  deletePlatformRole: async (
+    roleId: string,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: unknown }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.delete(`/admin/platform-roles/${roleId}`, { params });
   },
 
   getUsers: async (

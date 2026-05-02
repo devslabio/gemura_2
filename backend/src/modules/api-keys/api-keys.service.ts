@@ -82,7 +82,7 @@ export class ApiKeysService {
         where: {
           user_id: userId,
           account: { type: 'admin' },
-          role: { in: ['owner', 'admin'] },
+          role: { in: ['system_admin', 'admin', 'owner'] },
           status: 'active',
         },
       });
@@ -260,7 +260,7 @@ export class ApiKeysService {
             where: {
               user_id: userId,
               account_id: apiKey.account_id,
-              role: { in: ['owner', 'admin'] },
+              role: { in: ['system_admin', 'admin', 'owner'] },
               status: 'active',
             },
           })
@@ -340,7 +340,7 @@ export class ApiKeysService {
             where: {
               user_id: userId,
               account_id: apiKey.account_id,
-              role: { in: ['owner', 'admin'] },
+              role: { in: ['system_admin', 'admin', 'owner'] },
               status: 'active',
             },
           })

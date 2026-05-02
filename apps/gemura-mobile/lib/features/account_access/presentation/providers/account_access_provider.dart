@@ -25,7 +25,7 @@ class AccountAccessNotifier extends StateNotifier<AsyncValue<List<AccountAccess>
             id: '1',
             accountOwnerId: userId,
             grantedUserId: userId,
-            role: AccountAccess.roleOwner,
+            role: AccountAccess.roleSystemAdmin,
             permissions: {
               'view': true,
               'edit': true,

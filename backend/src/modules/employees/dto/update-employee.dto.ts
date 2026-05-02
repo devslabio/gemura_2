@@ -1,16 +1,20 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsOptional, IsEnum, MaxLength, IsUUID } from 'class-validator';
 
 export class UpdateEmployeeDto {
-  @ApiProperty({
-    description: 'New role for employee',
-    enum: ['owner', 'admin', 'manager', 'accountant', 'collector', 'viewer', 'agent'],
+  @ApiPropertyOptional({
+    description: 'Platform role slug',
     example: 'admin',
-    required: false,
   })
   @IsOptional()
-  @IsEnum(['owner', 'admin', 'manager', 'accountant', 'collector', 'viewer', 'agent'], { message: 'Invalid role' })
+  @IsString()
+  @MaxLength(64)
   role?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID('4')
+  platform_role_id?: string;
 
   @ApiProperty({
     description: 'Permission group preset',

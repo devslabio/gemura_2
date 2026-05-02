@@ -11,7 +11,7 @@ import { useToastStore } from '@/store/toast';
 import Icon, { faUser, faEnvelope, faPhone, faLock, faBuilding, faUserShield, faCheckCircle, faTimes, faSpinner } from '@/app/components/Icon';
 import { DetailPageSkeleton } from '@/app/components/SkeletonLoader';
 
-const ROLES = ['owner', 'admin', 'manager', 'accountant', 'collector', 'viewer', 'agent', 'supplier', 'customer'];
+const ROLES = ['system_admin', 'admin', 'manager', 'accountant', 'collector', 'viewer', 'agent', 'supplier', 'customer'];
 const ACCOUNT_TYPES = ['mcc', 'agent', 'collector', 'veterinarian', 'supplier', 'customer', 'farmer', 'owner'];
 const STATUS_OPTIONS = ['active', 'inactive'];
 
@@ -80,7 +80,7 @@ export default function EditUserPage() {
           confirmPassword: '',
           account_type: user.account_type || 'mcc',
           status: user.status || 'active',
-          role: user.role || 'viewer',
+          role: user.role === 'owner' ? 'system_admin' : user.role || 'viewer',
           permissions: permissions || {},
           firstName,
           lastName,

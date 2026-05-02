@@ -6,10 +6,14 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PERMISSION_KEY, ROLE_KEY } from '../decorators/permission.decorator';
+import { RbacService } from '../../modules/rbac/rbac.service';
 
 @Injectable()
 export class PermissionGuard implements CanActivate {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private rbac: RbacService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
@@ -59,60 +63,14 @@ export class PermissionGuard implements CanActivate {
       });
     }
 
-    // Check role first
     if (requiredRole) {
-      if (userAccount.role === requiredRole || userAccount.role === 'owner' || userAccount.role === 'admin') {
-        // Owner and admin have all permissions
-        if (userAccount.role === 'owner' || userAccount.role === 'admin') {
-          return true;
-        }
-        // Check specific role
-        if (userAccount.role === requiredRole) {
-          return true;
-        }
-      }
+      const okRole = await this.rbac.assertGuardRole(userAccount, requiredRole);
+      if (okRole) return true;
     }
 
-    // Check permission
     if (requiredPermission) {
-      // Owner and admin have all permissions
-      if (userAccount.role === 'owner' || userAccount.role === 'admin') {
-        return true;
-      }
-
-      // Parse permissions
-      let permissions: any = null;
-      if (userAccount.permissions) {
-        if (typeof userAccount.permissions === 'string') {
-          try {
-            permissions = JSON.parse(userAccount.permissions);
-          } catch {
-            permissions = null;
-          }
-        } else {
-          permissions = userAccount.permissions;
-        }
-      }
-
-      if (!permissions) {
-        throw new ForbiddenException({
-          code: 403,
-          status: 'error',
-          message: 'No permissions found for this account.',
-        });
-      }
-
-      // Check if permissions is array or object
-      let hasPermission = false;
-      if (Array.isArray(permissions)) {
-        // Array format: ["manage_users", "view_sales"]
-        hasPermission = permissions.includes(requiredPermission);
-      } else if (typeof permissions === 'object') {
-        // Object format: {"manage_users": true, "view_sales": true}
-        hasPermission = permissions[requiredPermission] === true;
-      }
-
-      if (!hasPermission) {
+      const okPerm = await this.rbac.assertGuardPermission(userAccount, requiredPermission);
+      if (!okPerm) {
         throw new ForbiddenException({
           code: 403,
           status: 'error',

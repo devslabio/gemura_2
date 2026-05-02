@@ -14,7 +14,7 @@ export class ApproveOnboardingDto {
 
   @ApiPropertyOptional({
     description:
-      'Link an existing Gemura user (phone must match submission manager phone). Skips user creation; creates account + wallet + owner access.',
+      'Link an existing Gemura user (phone must match submission manager phone). Skips user creation; creates account + wallet + system_admin UserAccount link.',
   })
   @IsOptional()
   @IsUUID()

@@ -40,6 +40,7 @@ import { LocationsModule } from './modules/locations/locations.module';
 import { MilkProductionModule } from './modules/milk-production/milk-production.module';
 import { ImmisModule } from './modules/immis/immis.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { RbacModule } from './modules/rbac/rbac.module';
 import { PublicAnalyticsModule } from './modules/public-analytics/public-analytics.module';
 import { AppController } from './app.controller';
 
@@ -56,6 +57,7 @@ import { AppController } from './app.controller';
       },
     ]),
     PrismaModule,
+    RbacModule,
     AuthModule,
     AccountsModule,
     SuppliersModule,

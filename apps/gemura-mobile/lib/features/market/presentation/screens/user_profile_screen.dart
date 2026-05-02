@@ -171,7 +171,7 @@ class _UserProfileScreenState extends ConsumerState<UserProfileScreen>
           name: widget.user.name,
           email: widget.user.email ?? '${widget.user.code}@user.com',
           avatar: widget.user.imageUrl,
-          role: 'owner',
+          role: 'system_admin',
           joinedAt: DateTime.now(),
           isOnline: true,
         ),

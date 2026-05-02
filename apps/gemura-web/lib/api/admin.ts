@@ -105,19 +105,24 @@ export interface UpdateUserData {
 }
 
 export interface RoleItem {
+  id?: string;
   code: string;
   name: string;
   description: string;
   permissions: string[];
   permissionCount: number;
+  is_system?: boolean;
+  is_active?: boolean;
+  is_assignable?: boolean;
 }
 
 export interface PermissionItem {
+  id?: string;
   code: string;
   name: string;
   description: string;
   category?: string;
-  roles: Array<{ code: string; name: string }>;
+  roles: Array<{ id?: string; code: string; name: string }>;
 }
 
 export const adminApi = {
