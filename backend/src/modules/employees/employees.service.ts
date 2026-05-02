@@ -7,12 +7,11 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { InviteEmployeeDto } from './dto/invite-employee.dto';
 import {
   ROLES,
-  ROLE_LABELS,
-  ROLE_DESCRIPTIONS,
   ROLE_DEFAULT_PERMISSIONS,
-  PERMISSIONS,
+  canonicalPlatformRoleSlug,
   type RoleCode,
 } from '../admin/roles-permissions.config';
+import { RbacService } from '../rbac/rbac.service';
 
 // Updated: Include is_owner flag for account owners
 type AccessGroup = 'general_access' | 'limited_access' | 'milk_receptionist_access';
@@ -58,7 +57,10 @@ const ACCESS_GROUP_PERMISSIONS: Record<AccessGroup, string[]> = {
 
 @Injectable()
 export class EmployeesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private rbac: RbacService,
+  ) {}
 
   private resolvePermissions(
     role?: string,
@@ -68,29 +70,30 @@ export class EmployeesService {
     if (Array.isArray(explicitPermissions)) {
       return explicitPermissions;
     }
+    const slug = role?.trim() ? canonicalPlatformRoleSlug(role.trim().slice(0, 64)) : undefined;
     // Role-based granularity inside each group to keep 4-role model distinct.
     if (accessGroup === 'general_access') {
-      if (role === 'manager' || role === 'accountant') {
-        return ROLE_DEFAULT_PERMISSIONS[role as RoleCode] || null;
+      if (slug === 'manager' || slug === 'accountant') {
+        return ROLE_DEFAULT_PERMISSIONS[slug as RoleCode] || null;
       }
       return ACCESS_GROUP_PERMISSIONS.general_access;
     }
     if (accessGroup === 'limited_access' || accessGroup === 'milk_receptionist_access') {
-      if (role === 'collector' || role === 'viewer' || role === 'agent') {
-        return ROLE_DEFAULT_PERMISSIONS[role as RoleCode] || null;
+      if (slug === 'collector' || slug === 'viewer' || slug === 'agent') {
+        return ROLE_DEFAULT_PERMISSIONS[slug as RoleCode] || null;
       }
       return ACCESS_GROUP_PERMISSIONS.limited_access;
     }
     if (accessGroup && ACCESS_GROUP_PERMISSIONS[accessGroup]) {
       return ACCESS_GROUP_PERMISSIONS[accessGroup];
     }
-    if (role && ROLES.includes(role as RoleCode)) {
-      return ROLE_DEFAULT_PERMISSIONS[role as RoleCode] || null;
+    if (slug && ROLES.includes(slug as RoleCode)) {
+      return ROLE_DEFAULT_PERMISSIONS[slug as RoleCode] || null;
     }
     return null;
   }
 
-  /** Resolve account ID and ensure current user can manage it (owner, admin, or manager). */
+  /** Resolve account ID and ensure current user can manage it (system admin, admin, or manager; legacy owner). */
   private async ensureCanManageAccount(user: User, accountId?: string | null): Promise<string> {
     const resolved = accountId || user.default_account_id;
     if (!resolved) {
@@ -104,7 +107,7 @@ export class EmployeesService {
       where: {
         user_id: user.id,
         account_id: resolved,
-        role: { in: ['owner', 'admin', 'manager'] },
+        role: { in: ['system_admin', 'admin', 'manager', 'owner'] },
         status: 'active',
       },
     });
@@ -137,11 +140,17 @@ export class EmployeesService {
       });
     }
 
+    await this.rbac.ensureCatalogFromConfig();
+    const roleSlug = canonicalPlatformRoleSlug(createDto.role.trim().slice(0, 64));
+    const platformRoleId =
+      createDto.platform_role_id || (await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug));
+
     const employee = await this.prisma.userAccount.create({
       data: {
         user_id: createDto.user_id,
         account_id: accountId,
-        role: createDto.role as any,
+        role: roleSlug,
+        platform_role_id: platformRoleId,
         permissions: createDto.permissions ? JSON.stringify(createDto.permissions) : null,
         status: 'active',
         created_by: user.id,
@@ -253,9 +262,23 @@ export class EmployeesService {
     }
 
     const updateData: any = { updated_by: user.id };
-    if (updateDto.role) updateData.role = updateDto.role as any;
+    if (updateDto.role || updateDto.platform_role_id !== undefined) {
+      const nextSlug = updateDto.role
+        ? canonicalPlatformRoleSlug(updateDto.role.trim().slice(0, 64))
+        : employee.role;
+      updateData.role = nextSlug;
+      if (updateDto.platform_role_id !== undefined) {
+        updateData.platform_role_id = updateDto.platform_role_id;
+      } else if (updateDto.role) {
+        updateData.platform_role_id = await this.rbac.resolvePlatformRoleIdFromSlug(nextSlug);
+      }
+    }
     if (updateDto.permissions !== undefined || updateDto.access_group !== undefined) {
-      const resolved = this.resolvePermissions(updateDto.role || employee.role, updateDto.permissions, updateDto.access_group);
+      const resolved = this.resolvePermissions(
+        updateDto.role || employee.role,
+        updateDto.permissions,
+        updateDto.access_group,
+      );
       updateData.permissions = resolved ? JSON.stringify(resolved) : null;
     }
     if (updateDto.status) updateData.status = updateDto.status as any;
@@ -387,14 +410,25 @@ export class EmployeesService {
       });
     }
 
-    const resolvedPermissions = this.resolvePermissions(dto.role, dto.permissions, dto.access_group);
+    await this.rbac.ensureCatalogFromConfig();
+    const roleSlug = canonicalPlatformRoleSlug(dto.role.trim().slice(0, 64));
+    let platformRoleId = dto.platform_role_id || (await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug));
+
+    let permissionsStored: string | null = null;
+    if (dto.permissions && dto.permissions.length > 0) {
+      permissionsStored = JSON.stringify(dto.permissions);
+    } else if (!platformRoleId) {
+      const resolved = this.resolvePermissions(dto.role, undefined, dto.access_group);
+      permissionsStored = resolved ? JSON.stringify(resolved) : null;
+    }
 
     const employee = await this.prisma.userAccount.create({
       data: {
         user_id: targetUser!.id,
         account_id: accountId,
-        role: dto.role as any,
-        permissions: resolvedPermissions ? JSON.stringify(resolvedPermissions) : null,
+        role: roleSlug,
+        platform_role_id: platformRoleId,
+        permissions: permissionsStored,
         status: 'active',
         created_by: user.id,
       },
@@ -434,13 +468,27 @@ export class EmployeesService {
 
   async getRoles(user: User, accountId?: string | null) {
     await this.ensureCanManageAccount(user, accountId);
-    const roles = ROLES.filter((r) => r !== 'supplier' && r !== 'customer').map((role) => ({
-      code: role,
-      name: ROLE_LABELS[role as RoleCode],
-      description: ROLE_DESCRIPTIONS[role as RoleCode],
-      permissions: ROLE_DEFAULT_PERMISSIONS[role as RoleCode],
-      permissionCount: ROLE_DEFAULT_PERMISSIONS[role as RoleCode].length,
-    }));
+    await this.rbac.ensureCatalogFromConfig();
+    const rows = await this.prisma.platformRole.findMany({
+      where: { is_assignable: true, is_active: true },
+      orderBy: { slug: 'asc' },
+      include: {
+        permission_links: {
+          include: { permission: true },
+        },
+      },
+    });
+    const roles = rows.map((r) => {
+      const codes = r.permission_links.map((l) => l.permission.code);
+      return {
+        id: r.id,
+        code: r.slug,
+        name: r.name,
+        description: r.description ?? '',
+        permissions: codes,
+        permissionCount: codes.length,
+      };
+    });
     return {
       code: 200,
       status: 'success',
@@ -451,22 +499,28 @@ export class EmployeesService {
 
   async getPermissions(user: User, accountId?: string | null) {
     await this.ensureCanManageAccount(user, accountId);
-    const businessRoles = ROLES.filter((r) => r !== 'supplier' && r !== 'customer');
-    const permissions = PERMISSIONS.map((perm) => {
-      const rolesWithPermission = businessRoles.filter((role) =>
-        ROLE_DEFAULT_PERMISSIONS[role as RoleCode].includes(perm.code),
-      );
-      return {
-        code: perm.code,
-        name: perm.name,
-        description: perm.description,
-        category: perm.category,
-        roles: rolesWithPermission.map((r) => ({
-          code: r,
-          name: ROLE_LABELS[r as RoleCode],
-        })),
-      };
+    await this.rbac.ensureCatalogFromConfig();
+    const permRows = await this.prisma.platformPermission.findMany({
+      orderBy: [{ category: 'asc' }, { code: 'asc' }],
     });
+    const links = await this.prisma.platformRolePermission.findMany({
+      include: { role: true },
+    });
+    const byPerm = new Map<string, { code: string; name: string }[]>();
+    for (const l of links) {
+      if (!l.role.is_assignable) continue;
+      const list = byPerm.get(l.platform_permission_id) ?? [];
+      list.push({ code: l.role.slug, name: l.role.name });
+      byPerm.set(l.platform_permission_id, list);
+    }
+    const permissions = permRows.map((perm) => ({
+      id: perm.id,
+      code: perm.code,
+      name: perm.name,
+      description: perm.description,
+      category: perm.category,
+      roles: byPerm.get(perm.id) ?? [],
+    }));
     return {
       code: 200,
       status: 'success',

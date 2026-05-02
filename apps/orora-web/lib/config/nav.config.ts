@@ -38,7 +38,8 @@ export const ADMIN_ACCOUNT_TYPE = 'admin' as const;
 
 /** Account types that see user/operations menu (filtered by role + permissions) */
 export const BUSINESS_ACCOUNT_TYPES = ['mcc', 'owner', 'agent', 'tenant', 'branch'] as const;
-export const ADMIN_ROLES = ['owner', 'admin'] as const;
+/** Portal “admin section” roles; includes legacy `owner` slug until all tokens are migrated. */
+export const ADMIN_ROLES = ['system_admin', 'admin', 'owner'] as const;
 export const OPERATIONS_ROLES = ['manager', 'accountant', 'collector', 'viewer', 'employee', 'agent'] as const;
 export const EXTERNAL_ACCOUNT_TYPES = ['supplier', 'customer', 'farmer'] as const;
 

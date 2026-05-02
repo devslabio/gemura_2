@@ -12,6 +12,7 @@ export function usePermission() {
     hasAnyPermission: (permissions: string[]) => PermissionService.hasAnyPermission(permissions),
     hasAllPermissions: (permissions: string[]) => PermissionService.hasAllPermissions(permissions),
     hasRole: (role: string) => PermissionService.hasRole(role),
+    isSuperAdminOrAdmin: () => PermissionService.isSuperAdminOrAdmin(),
     isAdmin: () => PermissionService.isAdmin(),
     canManageUsers: () => PermissionService.canManageUsers(),
     canViewDashboard: () => PermissionService.canViewDashboard(),

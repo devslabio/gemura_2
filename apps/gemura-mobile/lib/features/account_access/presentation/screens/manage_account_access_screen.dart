@@ -509,6 +509,9 @@ class _ManageAccountAccessScreenState extends ConsumerState<ManageAccountAccessS
 
   void _showEditAccessBottomSheet(Employee employee) {
     String selectedRole = employee.role.isNotEmpty ? employee.role : AccountAccess.roleViewer;
+    if (selectedRole == AccountAccess.roleOwner || selectedRole == 'system_admin') {
+      selectedRole = AccountAccess.roleSystemAdmin;
+    }
 
     showModalBottomSheet(
       context: context,
@@ -586,8 +589,8 @@ class _ManageAccountAccessScreenState extends ConsumerState<ManageAccountAccessS
               ),
               items: [
                 DropdownMenuItem(
-                  value: AccountAccess.roleOwner,
-                  child: const Text('Owner - Full control'),
+                  value: AccountAccess.roleSystemAdmin,
+                  child: const Text('System admin — full control'),
                 ),
                 DropdownMenuItem(
                   value: AccountAccess.roleAdmin,
@@ -827,6 +830,7 @@ class _ManageAccountAccessScreenState extends ConsumerState<ManageAccountAccessS
 
   Map<String, dynamic> _getPermissionsForRole(String role) {
     switch (role) {
+      case AccountAccess.roleSystemAdmin:
       case AccountAccess.roleOwner:
         return {
           'view': true,
@@ -876,8 +880,9 @@ class _ManageAccountAccessScreenState extends ConsumerState<ManageAccountAccessS
 
   String _getRoleDisplayName(String role) {
     switch (role) {
+      case AccountAccess.roleSystemAdmin:
       case AccountAccess.roleOwner:
-        return 'Owner';
+        return 'System admin';
       case AccountAccess.roleViewer:
         return 'Viewer';
       case 'umucunda':

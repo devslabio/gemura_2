@@ -40,7 +40,7 @@ export class AccountsController {
             account_name: 'Main Account',
             account_type: 'tenant',
             account_status: 'active',
-            role: 'owner',
+            role: 'system_admin',
             permissions: { can_manage: true },
             is_default: true,
           },

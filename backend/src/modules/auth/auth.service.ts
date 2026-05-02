@@ -9,6 +9,8 @@ import { RegisterDto } from './dto/register.dto';
 import { VerifyTokenDto } from './dto/verify-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { RbacService } from '../rbac/rbac.service';
+import { canonicalPlatformRoleSlug } from '../admin/roles-permissions.config';
 
 @Injectable()
 export class AuthService {
@@ -16,7 +18,16 @@ export class AuthService {
     private prisma: PrismaService,
     private smsService: SmsService,
     private emailService: EmailService,
+    private rbac: RbacService,
   ) {}
+
+  private async userAccountRoleFor(userId: string, accountId: string): Promise<string> {
+    const ua = await this.prisma.userAccount.findFirst({
+      where: { user_id: userId, account_id: accountId, status: 'active' },
+      select: { role: true },
+    });
+    return ua?.role ?? '';
+  }
 
   async login(loginDto: LoginDto, ipAddress?: string, userAgent?: string): Promise<AuthResponseDto> {
     const { identifier, password } = loginDto;
@@ -70,10 +81,9 @@ export class AuthService {
       },
     });
 
-    // Format accounts (matching PHP response structure)
-    const accounts = userAccounts
-      .filter((ua) => ua.account && ua.account.status === 'active')
-      .map((ua) => ({
+    const filteredAccounts = userAccounts.filter((ua) => ua.account && ua.account.status === 'active');
+    const accounts = await Promise.all(
+      filteredAccounts.map(async (ua) => ({
         account_id: ua.account!.id,
         account_code: ua.account!.code,
         account_name: ua.account!.name,
@@ -82,12 +92,17 @@ export class AuthService {
         account_status: ua.account!.status,
         account_created_at: ua.account!.created_at,
         role: ua.role,
-        permissions: ua.permissions ? (typeof ua.permissions === 'string' ? JSON.parse(ua.permissions) : ua.permissions) : null,
+        permissions: await this.rbac.formatPermissionsForApi({
+          role: ua.role,
+          platform_role_id: ua.platform_role_id,
+          permissions: ua.permissions,
+        }),
         user_account_status: ua.status,
         access_granted_at: ua.created_at,
         is_default: user.default_account_id === ua.account!.id,
         supplier_segment: user.supplier_segment ?? null,
-      }));
+      })),
+    );
 
     // Find default account
     const defaultAccount = accounts.find((a) => a.is_default);
@@ -97,6 +112,8 @@ export class AuthService {
           code: defaultAccount.account_code,
           name: defaultAccount.account_name,
           type: defaultAccount.account_type,
+          role: defaultAccount.role,
+          permissions: defaultAccount.permissions,
         }
       : null;
 
@@ -155,6 +172,10 @@ export class AuthService {
           supplier_segment: user.supplier_segment ?? null,
           status: user.status,
           token: authToken,
+          role: defaultAccount?.role ?? '',
+          permissions: defaultAccount?.permissions ?? null,
+          account_code: defaultAccount?.account_code ?? null,
+          account_name: defaultAccount?.account_name ?? null,
         },
         account: defaultAccountData,
         accounts,
@@ -204,6 +225,7 @@ export class AuthService {
       can_view_reports: true,
     };
     const userPermissions = permissions || defaultPermissions;
+    await this.rbac.ensureCatalogFromConfig();
 
     // If user exists, update their profile instead of throwing error
     // This handles cases where users were registered by customers or referrals
@@ -240,12 +262,14 @@ export class AuthService {
             },
           });
 
-          // Link user to account
+          const linkSlug = canonicalPlatformRoleSlug((role ?? 'system_admin').trim().slice(0, 64));
+          const linkPrId = await this.rbac.resolvePlatformRoleIdFromSlug(linkSlug);
           await tx.userAccount.create({
             data: {
               user_id: updatedUser.id,
               account_id: account.id,
-              role: role || 'owner',
+              role: linkSlug,
+              platform_role_id: linkPrId,
               permissions: userPermissions,
               status: 'active',
               created_by: updatedUser.id,
@@ -268,17 +292,17 @@ export class AuthService {
 
           // Update user_account role and permissions only when explicitly provided.
           if (existingUserAccount && (role || permissions)) {
+            const nextSlug = canonicalPlatformRoleSlug((role || existingUserAccount.role).trim().slice(0, 64));
+            const nextPrId = await this.rbac.resolvePlatformRoleIdFromSlug(nextSlug);
             const updateData: any = {
-              role: role || existingUserAccount.role,
+              role: nextSlug,
+              platform_role_id: nextPrId,
             };
-            
-            // Only update permissions if explicitly provided in the request
-            // Otherwise preserve existing permissions
+
             if (permissions) {
               updateData.permissions = userPermissions;
             }
-            // If permissions not provided, keep existing permissions (don't update)
-            
+
             await tx.userAccount.update({
               where: { id: existingUserAccount.id },
               data: updateData,
@@ -316,6 +340,8 @@ export class AuthService {
         return { user: updatedUser, account, wallet: walletData };
       });
 
+      const registrationRole = await this.userAccountRoleFor(result.user.id, result.account.id);
+
       // Return same success response format
       return {
         code: 201,
@@ -331,6 +357,7 @@ export class AuthService {
             account_type: result.user.account_type,
             status: result.user.status,
             token: result.user.token,
+            role: registrationRole,
           },
           account: {
             code: result.account.code,
@@ -357,6 +384,9 @@ export class AuthService {
     const accountCode = `A_${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
     const walletCode = `W_${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
     const token = `token_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+    const newLinkSlug = canonicalPlatformRoleSlug((role ?? 'system_admin').trim().slice(0, 64));
+    const newLinkPrId = await this.rbac.resolvePlatformRoleIdFromSlug(newLinkSlug);
 
     // Create user, account, wallet in transaction
     const result = await this.prisma.$transaction(async (tx) => {
@@ -386,12 +416,12 @@ export class AuthService {
         },
       });
 
-      // Link user to account
       await tx.userAccount.create({
         data: {
           user_id: user.id,
           account_id: account.id,
-          role: role || 'owner',
+          role: newLinkSlug,
+          platform_role_id: newLinkPrId,
           permissions: userPermissions,
           status: 'active',
           created_by: user.id,
@@ -436,6 +466,7 @@ export class AuthService {
           account_type: result.user.account_type,
           status: result.user.status,
           token: result.user.token,
+          role: newLinkSlug,
         },
         account: {
           code: result.account.code,

@@ -10,6 +10,7 @@ export interface Supplier {
   address?: string;
   bank_name?: string;
   bank_account_number?: string;
+  type?: string;
   account: {
     id: string;
     code: string;
@@ -65,6 +66,7 @@ export interface UpdateSupplierData {
   relationship_status?: 'active' | 'inactive';
   bank_name?: string;
   bank_account_number?: string;
+  type?: string;
 }
 
 export interface SuppliersResponse {

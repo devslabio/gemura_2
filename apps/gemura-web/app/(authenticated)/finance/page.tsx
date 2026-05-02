@@ -347,13 +347,6 @@ export default function FinancePage() {
                       : '—'}
                   </span>
                 </p>
-                {milkCostReport?.notes?.length ? (
-                  <ul className="text-xs text-gray-500 list-disc pl-4">
-                    {milkCostReport.notes.map((note) => (
-                      <li key={note}>{note}</li>
-                    ))}
-                  </ul>
-                ) : null}
               </div>
               <div className="rounded-sm border border-gray-200 bg-white p-4">
                 <h3 className="text-sm font-semibold text-gray-700">Financial Breakdown</h3>

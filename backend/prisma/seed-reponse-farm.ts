@@ -11,7 +11,7 @@ const USER_CODE = process.env.SEED_REPONSE_USER_CODE ?? 'USER_REPONSE_001';
 async function main() {
   console.log('🌾 Seeding account, user and farm for Reponse Iradukunda...\n');
 
-  const hashedPassword = await bcrypt.hash('Pass123', 10);
+  const hashedPassword = await bcrypt.hash('Pass123!', 10);
 
   // 1. Create account for Reponse
   const account = await prisma.account.upsert({
@@ -56,12 +56,12 @@ async function main() {
     create: {
       user_id: user.id,
       account_id: account.id,
-      role: 'owner',
+      role: 'system_admin',
       permissions: { can_manage: true, can_view: true, can_edit: true },
       status: 'active',
     },
   });
-  console.log('✅ Linked user to account (owner role)');
+  console.log('✅ Linked user to account (system_admin role)');
 
   // 4. Wallet for Reponse account
   const walletCode = 'W_REPONSE_001';
@@ -106,7 +106,7 @@ async function main() {
 
   console.log('\n🎉 Reponse Iradukunda account and farm seed completed.');
   console.log('   Login phone: 250783349295');
-  console.log('   Password:    Pass123');
+  console.log('   Password:    Pass123!');
 }
 
 main()

@@ -1,12 +1,19 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-// When running on localhost/127.0.0.1, use local backend unless NEXT_PUBLIC_API_URL is set.
+/** True when the UI is opened on a loopback host (including IPv6 literal [::1]). */
+function isBrowserLocalDevHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+}
+
+// When running on localhost, use local backend unless NEXT_PUBLIC_API_URL is set.
+// Use 127.0.0.1 (not "localhost") so the browser hits IPv4; Nest often binds 0.0.0.0 only,
+// while "localhost" may resolve to ::1 and fail with a network error.
 // Production / deployed app uses NEXT_PUBLIC_API_URL or remote default.
 function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3007/api';
+    if (isBrowserLocalDevHost(host)) {
+      return process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:3004/api';
     }
   }
   return process.env.NEXT_PUBLIC_API_URL || 'http://159.198.65.38:3007/api';

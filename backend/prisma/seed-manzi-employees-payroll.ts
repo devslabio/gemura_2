@@ -11,7 +11,12 @@ const MILK_SEED_NOTES = '[seed-manzi-milk]';
 /** How many past full calendar months get a completed + paid payroll run (default 18 ≈ 3× former 6). */
 const PAYROLL_MONTHS = parseInt(process.env.MANZI_PAYROLL_SEED_MONTHS ?? '18', 10);
 
-type EmployeeRow = { name: string; phone: string; code: string; role: 'manager' | 'admin' | 'collector' | 'viewer' | 'agent' };
+type EmployeeRow = {
+  name: string;
+  phone: string;
+  code: string;
+  role: 'manager' | 'admin' | 'collector' | 'viewer' | 'agent' | 'accountant';
+};
 
 const EMPLOYEES: EmployeeRow[] = [
   { name: 'Divine Uwimana', phone: '250788302001', code: 'U_MFZ_MGR', role: 'manager' },
@@ -19,6 +24,7 @@ const EMPLOYEES: EmployeeRow[] = [
   { name: 'Sandrine Mukamana', phone: '250788302003', code: 'U_MFZ_COL', role: 'collector' },
   { name: 'Pacifique Ndayishimiye', phone: '250788302004', code: 'U_MFZ_VWR', role: 'viewer' },
   { name: 'Joseph Niyonsaba', phone: '250788302005', code: 'U_MFZ_AGT', role: 'agent' },
+  { name: 'Audrey Ntambara', phone: '250788302016', code: 'U_MFZ_ACT', role: 'accountant' },
   { name: 'Claudette Mukamana', phone: '250788302006', code: 'U_MFZ_E06', role: 'manager' },
   { name: 'Denis Nkurunziza', phone: '250788302007', code: 'U_MFZ_E07', role: 'collector' },
   { name: 'Evelyne Uwimana', phone: '250788302008', code: 'U_MFZ_E08', role: 'manager' },
@@ -63,7 +69,7 @@ async function main() {
     throw new Error('No milk suppliers linked to Manzi. Run seed:manzi-dummy-suppliers first.');
   }
 
-  const pwd = await bcrypt.hash('Pass123', 10);
+  const pwd = await bcrypt.hash('Pass123!', 10);
   const tokenBase = `emp_${Date.now()}`;
 
   for (let i = 0; i < EMPLOYEES.length; i++) {
@@ -228,7 +234,7 @@ async function main() {
   }
 
   console.log(
-    `Employees: ${EMPLOYEES.length} on ${BUYER_ACCOUNT} (Pass123, phones 250788302001–015). ` +
+    `Employees: ${EMPLOYEES.length} on ${BUYER_ACCOUNT} (Pass123!, phones 250788302001–016 incl. accountant). ` +
       `Payroll: ${inbound.length} milk suppliers on payroll; ` +
       `${runs} runs, ${payslips} payslips (${months.length} full months, seed milk in range settled as paid).`,
   );

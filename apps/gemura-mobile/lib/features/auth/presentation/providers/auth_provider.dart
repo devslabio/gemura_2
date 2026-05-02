@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 
 import '../../../../core/services/auth_service.dart';
+import '../../../../core/utils/auth_session_merge.dart';
 import '../../../../core/services/secure_storage_service.dart';
 import '../../../../shared/models/user.dart';
 import '../../../../shared/models/registration_request.dart';
@@ -51,7 +52,14 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
           final profileResponse = await _authService.getProfile();
                                 // print('🔍 DEBUG: Profile API Response: $profileResponse');
           if (profileResponse['data'] != null && profileResponse['data']['user'] != null) {
-            final updatedUser = User.fromJson(profileResponse['data']['user']);
+            final data = Map<String, dynamic>.from(profileResponse['data'] as Map);
+            final rawUser = Map<String, dynamic>.from(data['user'] as Map);
+            final merged = mergeAuthSessionUser(
+              user: rawUser,
+              account: data['account'] != null ? Map<String, dynamic>.from(data['account'] as Map) : null,
+              accounts: data['accounts'] is List ? List<dynamic>.from(data['accounts'] as List) : null,
+            );
+            final updatedUser = User.fromJson(merged);
                       // print('🔍 DEBUG: Updated User Role: ${updatedUser.role}');
           // print('🔍 DEBUG: Updated User AccountCode: ${updatedUser.accountCode}');
             state = AsyncValue.data(updatedUser);
@@ -82,17 +90,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       final response = await _authService.login(emailOrPhone, password);
       
       // Create user from API response
-      final userData = response['data']['user'];
-      final accountData = response['data']['account'];
-      
-      // Create user from login response data, which already contains complete profile info
-      final userDataWithRole = Map<String, dynamic>.from(userData);
-      userDataWithRole['role'] = accountData['type']?.toString() ?? 'owner';
-      userDataWithRole['accountCode'] = accountData['code']?.toString() ?? '';
-      userDataWithRole['accountName'] = accountData['name']?.toString() ?? '';
-      userDataWithRole['accountType'] = accountData['type']?.toString() ?? 'owner'; // Add account type
-      
-      final user = User.fromJson(userDataWithRole);
+      final data = response['data'] as Map<String, dynamic>;
+      final userData = Map<String, dynamic>.from(data['user'] as Map);
+      final accountData = data['account'] != null ? Map<String, dynamic>.from(data['account'] as Map) : null;
+      final accountsRaw = data['accounts'] is List ? List<dynamic>.from(data['accounts'] as List) : null;
+      final merged = mergeAuthSessionUser(user: userData, account: accountData, accounts: accountsRaw);
+      final user = User.fromJson(merged);
       
       // User data and token are already saved by AuthService
       

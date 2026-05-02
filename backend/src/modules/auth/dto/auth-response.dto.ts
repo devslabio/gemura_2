@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class AccountDto {
   @ApiProperty()
@@ -62,6 +62,20 @@ export class UserDto {
 
   @ApiProperty()
   token: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Platform role slug on the default UserAccount link (e.g. system_admin, manager).',
+  })
+  role?: string;
+
+  @ApiPropertyOptional({ description: 'Effective permission codes for the default account link (from RBAC).' })
+  permissions?: string[] | null;
+
+  @ApiPropertyOptional({ description: 'Default linked account code.' })
+  account_code?: string | null;
+
+  @ApiPropertyOptional({ description: 'Default linked account display name.' })
+  account_name?: string | null;
 }
 
 export class DefaultAccountDto {
@@ -76,6 +90,12 @@ export class DefaultAccountDto {
 
   @ApiProperty()
   type: string;
+
+  @ApiPropertyOptional({ description: 'UserAccount.role for this link.' })
+  role?: string;
+
+  @ApiPropertyOptional({ description: 'Effective permission codes for this link.' })
+  permissions?: string[] | null;
 }
 
 export class LoginResponseDataDto {

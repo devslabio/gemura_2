@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsEmail, IsOptional, IsEnum, IsObject, MinLength } from 'class-validator';
-import { UserStatus, UserAccountType, UserAccountRole } from '@prisma/client';
+import { IsString, IsEmail, IsOptional, IsEnum, IsObject, MinLength, MaxLength, IsUUID } from 'class-validator';
+import { UserStatus, UserAccountType } from '@prisma/client';
 
 export class UpdateUserDto {
   @ApiPropertyOptional({ example: 'John Doe Updated' })
@@ -34,10 +34,16 @@ export class UpdateUserDto {
   @IsOptional()
   status?: UserStatus;
 
-  @ApiPropertyOptional({ enum: UserAccountRole })
-  @IsEnum(UserAccountRole)
+  @ApiPropertyOptional({ description: 'Role slug (PlatformRole.slug)' })
   @IsOptional()
-  role?: UserAccountRole;
+  @IsString()
+  @MaxLength(64)
+  role?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsUUID('4')
+  platform_role_id?: string;
 
   @ApiPropertyOptional({ example: { manage_users: true, view_sales: true } })
   @IsObject()

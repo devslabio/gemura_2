@@ -1,18 +1,18 @@
-### Loans API – test with login 250788606765 / Pass123
+### Loans API – test with login 250788606765 / Pass123!
 ### 1) Run "Login" request, then copy data.user.token from response into @token below.
 ### 2) Run the Loans requests. Ensure backend is on http://localhost:3004
 
 @baseUrl = http://localhost:3004/api
 @token = your-auth-token-here
 
-### --- Login (250788606765 / Pass123) ---
+### --- Login (250788606765 / Pass123!) ---
 # @name login
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 {
   "identifier": "250788606765",
-  "password": "Pass123"
+  "password": "Pass123!"
 }
 
 ### After login, copy data.user.token into @token above.

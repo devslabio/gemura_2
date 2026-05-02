@@ -192,7 +192,7 @@ export class MigrationService {
         let passwordHash = v1User.password_hash;
         if (!passwordHash) {
           // Set default password if missing
-          passwordHash = await bcrypt.hash('Pass123', 10);
+          passwordHash = await bcrypt.hash('Pass123!', 10);
         }
 
         // Create user in V2

@@ -18,7 +18,7 @@ export class EmployeesController {
   @Post()
   @ApiOperation({
     summary: 'Create employee',
-    description: 'Add a user as an employee to your default account. The user can be identified by phone, email, or account code. Requires owner or admin role. If the user doesn\'t exist, they will be created.',
+    description: 'Add a user as an employee to your default account. The user can be identified by phone, email, or account code. Requires system_admin, admin, manager, or legacy owner on the account. If the user doesn\'t exist, they will be created.',
   })
   @ApiBody({
     type: CreateEmployeeDto,
@@ -90,11 +90,11 @@ export class EmployeesController {
     },
   })
   @ApiForbiddenResponse({
-    description: 'Insufficient permissions - requires owner or admin role',
+    description: 'Insufficient permissions — requires system_admin, admin, manager, or legacy owner',
     example: {
       code: 403,
       status: 'error',
-      message: 'Insufficient permissions. Owner or admin role required.',
+      message: 'Insufficient permissions. System admin, admin, or manager role required.',
     },
   })
   @ApiUnauthorizedResponse({
@@ -112,7 +112,7 @@ export class EmployeesController {
   @Get()
   @ApiOperation({
     summary: 'Get employees',
-    description: 'Get all employees for the given account (or default). Optional status filter: active | inactive. For owner/admin of the account.',
+    description: 'Get all employees for the given account (or default). Optional status filter: active | inactive. Caller must be system_admin, admin, manager, or legacy owner on the account.',
   })
   @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (default: user default account)' })
   @ApiQuery({ name: 'status', required: false, description: 'Filter by status: active | inactive' })
@@ -190,7 +190,7 @@ export class EmployeesController {
     description: 'Email or phone required; user already in account',
   })
   @ApiForbiddenResponse({
-    description: 'Insufficient permissions - requires owner, admin, or manager role',
+    description: 'Insufficient permissions — requires system_admin, admin, manager, or legacy owner',
   })
   async inviteEmployee(@CurrentUser() user: User, @Body() dto: InviteEmployeeDto) {
     return this.employeesService.inviteEmployee(user, dto);
@@ -199,7 +199,7 @@ export class EmployeesController {
   @Get('roles')
   @ApiOperation({
     summary: 'Get roles config',
-    description: 'Returns roles and default permissions for use in employee management UI. Requires owner or admin on the account.',
+    description: 'Returns roles and default permissions for use in employee management UI. Requires system_admin, admin, manager, or legacy owner on the account.',
   })
   @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (default: user default account)' })
   @ApiResponse({ status: 200, description: 'Roles config' })
@@ -210,7 +210,7 @@ export class EmployeesController {
   @Get('permissions')
   @ApiOperation({
     summary: 'Get permissions config',
-    description: 'Returns permissions list for use in employee management UI. Requires owner or admin on the account.',
+    description: 'Returns permissions list for use in employee management UI. Requires system_admin, admin, manager, or legacy owner on the account.',
   })
   @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (default: user default account)' })
   @ApiResponse({ status: 200, description: 'Permissions config' })
@@ -221,7 +221,7 @@ export class EmployeesController {
   @Put(':id/access')
   @ApiOperation({
     summary: 'Update employee access',
-    description: 'Update employee role, permissions, or status. Requires owner or admin role. Can update role, permissions array, or status (active/inactive).',
+    description: 'Update employee role, permissions, or status. Requires system_admin, admin, manager, or legacy owner. Can update role, permissions array, or status (active/inactive).',
   })
   @ApiParam({
     name: 'id',
@@ -294,11 +294,11 @@ export class EmployeesController {
     },
   })
   @ApiForbiddenResponse({
-    description: 'Insufficient permissions - requires owner or admin role',
+    description: 'Insufficient permissions — requires system_admin, admin, manager, or legacy owner',
     example: {
       code: 403,
       status: 'error',
-      message: 'Insufficient permissions. Owner or admin role required.',
+      message: 'Insufficient permissions. System admin, admin, or manager role required.',
     },
   })
   @ApiUnauthorizedResponse({
@@ -321,7 +321,7 @@ export class EmployeesController {
   @Delete(':id')
   @ApiOperation({
     summary: 'Delete employee',
-    description: 'Remove an employee from your default account (soft delete). The employee will be deactivated but not permanently deleted. Requires owner or admin role.',
+    description: 'Remove an employee from your default account (soft delete). The employee will be deactivated but not permanently deleted. Requires system_admin, admin, manager, or legacy owner.',
   })
   @ApiParam({
     name: 'id',
@@ -360,11 +360,11 @@ export class EmployeesController {
     },
   })
   @ApiForbiddenResponse({
-    description: 'Insufficient permissions - requires owner or admin role',
+    description: 'Insufficient permissions — requires system_admin, admin, manager, or legacy owner',
     example: {
       code: 403,
       status: 'error',
-      message: 'Insufficient permissions. Owner or admin role required.',
+      message: 'Insufficient permissions. System admin, admin, or manager role required.',
     },
   })
   @ApiUnauthorizedResponse({

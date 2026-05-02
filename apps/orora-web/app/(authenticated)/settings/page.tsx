@@ -27,7 +27,7 @@ const ROLE_LABELS: Record<string, string> = {
 export default function SettingsPage() {
   const { user, setUser, currentAccount } = useAuthStore();
   const showToast = useToastStore((s) => s.show);
-  const { canManageUsers, isAdmin, hasRole } = usePermission();
+  const { canManageUsers } = usePermission();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<{ firstName: string; lastName: string; email: string; phone: string }>({
@@ -47,7 +47,7 @@ export default function SettingsPage() {
   type TabId = 'profile' | 'password' | 'team' | 'preferences';
   const [activeTab, setActiveTab] = useState<TabId>('profile');
 
-  const canManageEmployees = currentAccount?.account_id && (canManageUsers() || isAdmin() || hasRole('owner') || hasRole('admin'));
+  const canManageEmployees = !!currentAccount?.account_id && canManageUsers();
 
   const tabs: { id: TabId; label: string; icon: typeof faUser }[] = [
     { id: 'profile', label: 'Profile', icon: faUser },

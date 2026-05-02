@@ -15,7 +15,7 @@ import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
 
 const ROLE_OPTIONS = [
   { value: '', label: 'All Roles' },
-  { value: 'owner', label: 'Owner' },
+  { value: 'system_admin', label: 'System admin' },
   { value: 'admin', label: 'Admin' },
   { value: 'manager', label: 'Manager' },
   { value: 'accountant', label: 'Accountant' },

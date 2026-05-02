@@ -7,7 +7,7 @@ async function main() {
   console.log('🌱 Starting database seed...');
 
   // Hash the password
-  const hashedPassword = await bcrypt.hash('Pass123', 10);
+  const hashedPassword = await bcrypt.hash('Pass123!', 10);
 
   // Generate a simple token
   const authToken = `token_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -241,7 +241,7 @@ async function main() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log(`👤 Main User: ${mainUser.phone}`);
   console.log(`📧 Email: ${mainUser.email}`);
-  console.log(`🔑 Password: Pass123`);
+  console.log(`🔑 Password: Pass123!`);
   console.log(`🎫 Token: ${authToken}`);
   console.log(`💼 Account: ${mainAccount.code}`);
   console.log(`💰 Wallet Balance: ${mainWallet.balance} RWF`);
@@ -250,7 +250,7 @@ async function main() {
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   console.log('🧪 Test the API:');
   console.log('1. Login: POST http://159.198.65.38:3004/api/auth/login');
-  console.log('   Body: { "identifier": "250788606765", "password": "Pass123" }');
+  console.log('   Body: { "identifier": "250788606765", "password": "Pass123!" }');
   console.log('\n2. Use the returned token for authenticated requests');
   console.log('   Header: Authorization: Bearer <token>');
   console.log('\n📚 Swagger Docs: http://159.198.65.38:3004/api/docs\n');

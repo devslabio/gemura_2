@@ -85,14 +85,14 @@ export class RegisterDto {
   nid?: string;
 
   @ApiProperty({
-    description: 'User role',
-    enum: ['owner', 'admin', 'collector', 'supplier', 'customer'],
+    description: 'Platform role slug for the new account link (legacy `owner` is normalized to `system_admin`)',
+    enum: ['system_admin', 'owner', 'admin', 'collector', 'supplier', 'customer'],
     example: 'customer',
     required: false,
   })
   @IsOptional()
-  @IsEnum(['owner', 'admin', 'collector', 'supplier', 'customer'])
-  role?: 'owner' | 'admin' | 'collector' | 'supplier' | 'customer';
+  @IsEnum(['system_admin', 'owner', 'admin', 'collector', 'supplier', 'customer'])
+  role?: 'system_admin' | 'owner' | 'admin' | 'collector' | 'supplier' | 'customer';
 
   @ApiProperty({
     description: 'Custom permissions object (optional)',

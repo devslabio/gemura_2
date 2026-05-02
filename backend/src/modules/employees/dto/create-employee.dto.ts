@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsOptional, IsEnum, IsUUID } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, MaxLength } from 'class-validator';
 
 export class CreateEmployeeDto {
   @ApiProperty({
@@ -20,13 +20,20 @@ export class CreateEmployeeDto {
   account_id?: string;
 
   @ApiProperty({
-    description: 'Employee role',
-    enum: ['owner', 'admin', 'manager', 'accountant', 'collector', 'viewer', 'agent'],
+    description: 'Platform role slug (see GET /employees/roles or admin roles)',
     example: 'manager',
   })
   @IsNotEmpty({ message: 'Role is required' })
-  @IsEnum(['owner', 'admin', 'manager', 'accountant', 'collector', 'viewer', 'agent'], { message: 'Invalid role' })
+  @IsString()
+  @MaxLength(64)
   role: string;
+
+  @ApiPropertyOptional({
+    description: 'Assign by PlatformRole id (optional alternative to slug)',
+  })
+  @IsOptional()
+  @IsUUID('4')
+  platform_role_id?: string;
 
   @ApiProperty({
     description: 'Permission codes array',

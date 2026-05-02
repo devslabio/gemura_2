@@ -29,7 +29,9 @@ class AccountAccess {
 
   Map<String, dynamic> toJson() => _$AccountAccessToJson(this);
 
-  // Predefined roles
+  /// Canonical full-control platform role (legacy stored value may be [roleOwner]).
+  static const String roleSystemAdmin = 'system_admin';
+  // Predefined roles — legacy alias for API/store compatibility
   static const String roleOwner = 'owner';
   static const String roleAdmin = 'admin';
   static const String roleManager = 'manager';

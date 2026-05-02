@@ -94,7 +94,7 @@ async function main() {
           data: {
             user_id: user.id,
             account_id: acc.id,
-            role: 'owner',
+            role: 'system_admin',
             status: 'active'
           }
         });

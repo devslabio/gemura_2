@@ -531,7 +531,8 @@ export class MilkProductionService {
         includeInventoryFeedCosts && avoidDoubleCounting
           ? 'Transactions tagged inventory_feed/inventory_linked are excluded to avoid double counting.'
           : 'No tag-based double-count prevention applied.',
-        'Costs are allocated between producing and non-producing cows by headcount share.',
+        'Cost per litre (producing cows) = producing_cost_estimate ÷ total production litres in the period.',
+        'Producing cost estimate = total_expense × producing_cows ÷ total_female_dairy_cows in scope (headcount allocates herd cost between producing vs non-producing animals).',
       ],
     };
   }

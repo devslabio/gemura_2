@@ -15,7 +15,7 @@ const USER_CODE = process.env.SEED_GAHENGERI_USER_CODE ?? 'USER_GAHENGERI_001';
 async function main() {
   console.log('🌾 Seeding farms and Orora account (Gahengeri)...\n');
 
-  const hashedPassword = await bcrypt.hash('Pass123', 10);
+  const hashedPassword = await bcrypt.hash('Pass123!', 10);
 
   // 1. Create Gahengeri account
   const account = await prisma.account.upsert({
@@ -59,7 +59,7 @@ async function main() {
     create: {
       user_id: user.id,
       account_id: account.id,
-      role: 'owner',
+      role: 'system_admin',
       permissions: { can_manage: true, can_view: true, can_edit: true },
       status: 'active',
     },

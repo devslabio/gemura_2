@@ -12,7 +12,7 @@ import Icon, { faUser, faEnvelope, faPhone, faLock, faBuilding, faUserShield, fa
 
 // Available roles and account types
 const ROLES = [
-  { value: 'owner', label: 'Owner' },
+  { value: 'system_admin', label: 'System admin' },
   { value: 'admin', label: 'Admin' },
   { value: 'manager', label: 'Manager' },
   { value: 'accountant', label: 'Accountant' },
@@ -31,7 +31,7 @@ const ACCOUNT_TYPES = [
   { value: 'supplier', label: 'Supplier' },
   { value: 'customer', label: 'Customer' },
   { value: 'farmer', label: 'Farmer' },
-  { value: 'owner', label: 'Owner' },
+  { value: 'system_admin', label: 'System admin' },
 ];
 
 const STATUS_OPTIONS = [

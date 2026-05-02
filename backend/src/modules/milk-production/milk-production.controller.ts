@@ -71,7 +71,7 @@ export class MilkProductionController {
   @ApiOperation({
     summary: 'Milk cost-per-litre report',
     description:
-      'Calculates milk cost per litre from accounting expenses and milk production, allocating total herd cost between producing and non-producing cows.',
+      'Derives producing-herd cost from account-scoped expenses (and optional inventory feed), splits it by producing vs female dairy cow headcount, divides the producing share by litres recorded in the period.',
   })
   @ApiQuery({ name: 'account_id', required: false })
   @ApiQuery({ name: 'from', required: false, description: 'From date (YYYY-MM-DD)' })

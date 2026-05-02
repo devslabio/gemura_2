@@ -1,6 +1,6 @@
 ### Bulk import & template – test with Hubert's account
 ### 1) Login with Hubert's phone (250788606765) to get token, then run template/bulk requests.
-### Replace {password} with Hubert's password (seed uses Pass123 for 250788606765).
+### Replace {password} with Hubert's password (seed uses Pass123! for 250788606765).
 
 @baseUrl = http://localhost:3004/api
 @token = your-auth-token-here

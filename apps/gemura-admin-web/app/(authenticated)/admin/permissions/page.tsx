@@ -105,7 +105,7 @@ export default function AdminPermissionsPage() {
                     <td className="py-3 px-4">
                       <div className="flex flex-wrap gap-1.5">
                         {perm.roles.length > 0 ? (
-                          perm.roles.map((r) => <span key={r.code} className="inline-flex px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 text-xs font-medium">{r.name}</span>)
+                          perm.roles.map((r) => <span key={r.id ?? r.code} className="inline-flex px-2.5 py-1 rounded-full bg-blue-50 text-blue-800 text-xs font-medium">{r.name}</span>)
                         ) : (
                           <span className="text-gray-400 text-xs">No default roles</span>
                         )}

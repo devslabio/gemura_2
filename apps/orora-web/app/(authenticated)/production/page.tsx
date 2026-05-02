@@ -238,41 +238,61 @@ export default function MilkProductionPage() {
 
       {report != null && (
         <div className="space-y-3">
-          <div className="bg-white border border-gray-200 rounded-sm p-3">
-            <div className="flex flex-wrap items-center gap-4">
-              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={includeInventoryFeedCosts}
-                  onChange={(e) => setIncludeInventoryFeedCosts(e.target.checked)}
-                />
-                Include inventory feed costs
-              </label>
-              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={avoidDoubleCounting}
-                  onChange={(e) => setAvoidDoubleCounting(e.target.checked)}
-                  disabled={!includeInventoryFeedCosts}
-                />
-                Avoid double counting (inventory-linked tags)
-              </label>
-              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                Shared-cost allocation
+          <div className="bg-white border border-gray-200 rounded-sm p-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
+              <div className="flex flex-col gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                  Scenario
+                </span>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                  <label className="inline-flex select-none items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-gray-300 text-[var(--primary)] focus:ring-[var(--primary)]"
+                      checked={includeInventoryFeedCosts}
+                      onChange={(e) => setIncludeInventoryFeedCosts(e.target.checked)}
+                    />
+                    Include inventory feed costs
+                  </label>
+                  <label
+                    className={`inline-flex select-none items-center gap-2 text-sm cursor-pointer ${
+                      includeInventoryFeedCosts ? 'text-gray-700' : 'text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-gray-300 text-[var(--primary)] focus:ring-[var(--primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                      checked={avoidDoubleCounting}
+                      onChange={(e) => setAvoidDoubleCounting(e.target.checked)}
+                      disabled={!includeInventoryFeedCosts}
+                    />
+                    Avoid double counting
+                  </label>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1 sm:min-w-[14rem]">
+                <label
+                  htmlFor="allocation-basis"
+                  className="text-[11px] font-semibold uppercase tracking-wide text-gray-500"
+                >
+                  Shared-cost allocation
+                </label>
                 <select
-                  className="input py-1 px-2 text-sm"
+                  id="allocation-basis"
+                  className="input py-1.5 px-3 text-sm"
                   value={allocationBasis}
-                  onChange={(e) => setAllocationBasis(e.target.value as 'producing_cows' | 'total_cows' | 'production_litres')}
+                  onChange={(e) =>
+                    setAllocationBasis(
+                      e.target.value as 'producing_cows' | 'total_cows' | 'production_litres',
+                    )
+                  }
                 >
                   <option value="producing_cows">Producing cows</option>
                   <option value="total_cows">Total cows</option>
                   <option value="production_litres">Production litres</option>
                 </select>
-              </label>
+              </div>
             </div>
-            <p className="text-xs text-gray-500 mt-2">
-              Use these switches for scenario analysis before locking pricing policy.
-            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -338,26 +358,6 @@ export default function MilkProductionPage() {
           </div>
           </div>
 
-          {costReport && (
-            <div className="bg-white border border-gray-200 rounded-sm p-4 space-y-2">
-              <h3 className="text-sm font-semibold text-gray-900">Costing assumptions</h3>
-              <p className="text-sm text-gray-700">
-                Accounting expense: {new Intl.NumberFormat('en-RW', { style: 'currency', currency: 'RWF', minimumFractionDigits: 0 }).format(costReport.total_expense_accounting)}
-                {' · '}
-                Inventory feed expense: {new Intl.NumberFormat('en-RW', { style: 'currency', currency: 'RWF', minimumFractionDigits: 0 }).format(costReport.total_expense_inventory_feed)}
-              </p>
-              {costReport.farm_id && (
-                <p className="text-xs text-amber-700">
-                  Farm filter is applied to production/cow counts, but some costs can remain account-level unless farm-tagged.
-                </p>
-              )}
-              <ul className="text-xs text-gray-500 list-disc pl-4">
-                {costReport.notes.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       )}
 

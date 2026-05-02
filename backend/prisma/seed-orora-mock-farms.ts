@@ -10,7 +10,7 @@
  *
  * Optional env:
  *   SEED_USER_PHONE=250788606765
- *   SEED_USER_PASSWORD=Pass123   (updates bcrypt hash; omit to skip password update)
+ *   SEED_USER_PASSWORD=Pass123!   (updates bcrypt hash; omit to skip password update)
  */
 import {
   Prisma,
@@ -134,7 +134,7 @@ async function main() {
     throw new Error('DATABASE_URL is required (e.g. load backend/.env in your shell).');
   }
 
-  const hashedPassword = await bcrypt.hash(process.env.SEED_USER_PASSWORD ?? 'Pass123', 10);
+  const hashedPassword = await bcrypt.hash(process.env.SEED_USER_PASSWORD ?? 'Pass123!', 10);
 
   const user = await prisma.user.findUnique({
     where: { phone: PHONE },
@@ -152,7 +152,7 @@ async function main() {
       where: { id: user.id },
       data: { password_hash: hashedPassword },
     });
-    console.log('✅ Password hash updated (Pass123 unless SEED_USER_PASSWORD was set).\n');
+    console.log('✅ Password hash updated (Pass123! unless SEED_USER_PASSWORD was set).\n');
   } else {
     console.log('⏭️  SEED_SKIP_PASSWORD=1 — password unchanged.\n');
   }
@@ -306,7 +306,7 @@ async function main() {
   }
 
   console.log('\n🎉 Mock seed complete.');
-  console.log('   Log in on Orora with phone', PHONE, 'and password Pass123 (unless you overrode SEED_USER_PASSWORD).');
+  console.log('   Log in on Orora with phone', PHONE, 'and password Pass123! (unless you overrode SEED_USER_PASSWORD).');
   console.log('   Select each “Demo · …” farm to see milk / poultry / pig nav gates change.\n');
 }
 
