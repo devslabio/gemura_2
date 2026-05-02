@@ -402,7 +402,7 @@ export default function UserBusinessRecordsPage() {
         <div className="bg-white border border-gray-200 rounded-sm p-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">Operational account (user must belong)</label>
           <select
-            className="input h-10 text-sm max-w-xl text-gray-900"
+            className="input text-sm max-w-xl text-gray-900"
             value={operationalAccountId ?? ''}
             onChange={(e) => setOperationalAndUrl(e.target.value)}
           >

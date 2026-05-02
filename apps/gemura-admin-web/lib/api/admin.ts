@@ -97,8 +97,9 @@ export interface CreateUserData {
   password: string;
   account_type?: string;
   status?: string;
+  /** PlatformRole.slug (optional if platform_role_id is set) */
   role?: string;
-  permissions?: Record<string, boolean>;
+  platform_role_id?: string;
 }
 
 export interface UpdateUserData {
@@ -109,7 +110,7 @@ export interface UpdateUserData {
   account_type?: string;
   status?: string;
   role?: string;
-  permissions?: Record<string, boolean>;
+  platform_role_id?: string;
 }
 
 export interface RoleItem {
@@ -287,6 +288,42 @@ export const adminApi = {
   deleteUser: async (userId: string, accountId?: string): Promise<any> => {
     const params = accountId ? { account_id: accountId } : {};
     return apiClient.delete(`/admin/users/${userId}`, { params });
+  },
+
+  searchAssignableAccounts: async (options?: {
+    accountId?: string;
+    search?: string;
+    limit?: number;
+  }): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { accounts: Array<{ id: string; code: string | null; name: string; type: string }> };
+  }> => {
+    const params: Record<string, unknown> = {};
+    if (options?.accountId) params.account_id = options.accountId;
+    if (options?.search?.trim()) params.search = options.search.trim();
+    if (options?.limit != null) params.limit = options.limit;
+    return apiClient.get('/admin/accounts/assignable', { params });
+  },
+
+  assignUserAccountMembership: async (
+    targetUserId: string,
+    body: { link_account_id: string; platform_role_id?: string },
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data?: unknown }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.post(`/admin/users/${targetUserId}/account-memberships`, body, { params });
+  },
+
+  removeUserAccountMembership: async (
+    targetUserId: string,
+    membershipAccountId: string,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data?: unknown }> => {
+    const params: Record<string, unknown> = {};
+    if (accountId) params.account_id = accountId;
+    return apiClient.delete(`/admin/users/${targetUserId}/account-memberships/${membershipAccountId}`, { params });
   },
 
   /** Link Gemura user to IMMIS member, or pass null to unlink. Requires manage_users. */

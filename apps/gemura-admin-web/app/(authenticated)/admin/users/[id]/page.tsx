@@ -4,13 +4,19 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { PermissionService } from '@/lib/services/permission.service';
-import { adminApi } from '@/lib/api/admin';
+import { adminApi, type RoleItem } from '@/lib/api/admin';
+import { selectPlatformRolesForAssignment } from '@/lib/utils/platform-roles-picker';
 import { useAuthStore } from '@/store/auth';
-import Icon, { faUser, faEnvelope, faPhone, faBuilding, faUserShield, faEdit, faTrash, faArrowLeft, faCalendar } from '@/app/components/Icon';
+import Icon, { faUser, faEnvelope, faPhone, faBuilding, faUserShield, faEdit, faTrash, faArrowLeft, faCalendar, faCheckCircle, faSpinner, faMinus } from '@/app/components/Icon';
 import { useToastStore } from '@/store/toast';
 import { DetailPageSkeleton } from '@/app/components/SkeletonLoader';
+import ConfirmDialog from '@/app/components/ConfirmDialog';
 
 type ActivityKey = 'suppliers' | 'customers' | 'sales' | 'collections' | 'farms' | 'accounts';
+
+function slugKey(s: string) {
+  return s.trim().toLowerCase();
+}
 
 export default function UserDetailsPage() {
   const router = useRouter();
@@ -20,6 +26,21 @@ export default function UserDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [user, setUser] = useState<any>(null);
+  const [catalogRoles, setCatalogRoles] = useState<RoleItem[]>([]);
+  const [draftPlatformRoleId, setDraftPlatformRoleId] = useState('');
+  const [assigningRole, setAssigningRole] = useState(false);
+
+  const [assignableAccounts, setAssignableAccounts] = useState<Array<{ id: string; code: string | null; name: string; type: string }>>([]);
+  const [loadingAssignable, setLoadingAssignable] = useState(false);
+  const [membershipSearch, setMembershipSearch] = useState('');
+  const [draftLinkAccountId, setDraftLinkAccountId] = useState('');
+  const [draftLinkRoleId, setDraftLinkRoleId] = useState('');
+  const [membershipBusy, setMembershipBusy] = useState<'add' | false>(false);
+  const [removingAccountId, setRemovingAccountId] = useState<string | null>(null);
+  const [revokeMembershipTarget, setRevokeMembershipTarget] = useState<{
+    accountId: string;
+    accountLabel: string;
+  } | null>(null);
 
   const [listAccountId, setListAccountId] = useState<string | null>(null);
 
@@ -48,6 +69,76 @@ export default function UserDetailsPage() {
     };
   }, [router, userId, currentAccount?.account_id]);
 
+  useEffect(() => {
+    const aid = currentAccount?.account_id;
+    if (!aid) return;
+    adminApi.getRoles(aid).then((res) => {
+      if (res.code === 200 && res.data?.roles?.length) setCatalogRoles(res.data.roles);
+      else setCatalogRoles([]);
+    });
+  }, [currentAccount?.account_id]);
+
+  useEffect(() => {
+    const aid = currentAccount?.account_id;
+    if (!aid || loading) return;
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      setLoadingAssignable(true);
+      adminApi
+        .searchAssignableAccounts({ accountId: aid, search: membershipSearch.trim() || undefined, limit: 60 })
+        .then((res) => {
+          if (!cancelled && res.code === 200 && Array.isArray(res.data?.accounts)) {
+            setAssignableAccounts(res.data.accounts);
+          }
+        })
+        .catch(() => !cancelled && setAssignableAccounts([]))
+        .finally(() => !cancelled && setLoadingAssignable(false));
+    }, 340);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [currentAccount?.account_id, membershipSearch, loading]);
+
+  useEffect(() => {
+    if (!user) return;
+    const cid = user.platform_role_id as string | undefined;
+    if (cid) {
+      setDraftPlatformRoleId(cid);
+      return;
+    }
+    const slug = typeof user.role === 'string' ? user.role.replace(/^owner$/i, 'system_admin') : '';
+    const match = catalogRoles.find((r) => r.code === slug || r.code === slugKey(slug));
+    setDraftPlatformRoleId(match?.id ?? '');
+  }, [user, catalogRoles]);
+
+  const handleAssignRole = async () => {
+    const aid = currentAccount?.account_id;
+    if (!aid || !draftPlatformRoleId) {
+      useToastStore.getState().error('Choose a platform role.');
+      return;
+    }
+    setAssigningRole(true);
+    try {
+      const res = await adminApi.updateUser(userId, { platform_role_id: draftPlatformRoleId }, aid);
+      if (res.code !== 200) {
+        useToastStore.getState().error(res.message || 'Failed to update role');
+        return;
+      }
+      useToastStore.getState().success('Platform role assigned.');
+      const refreshed = await adminApi.getUserById(userId, aid);
+      if (refreshed.code === 200 && refreshed.data) setUser(refreshed.data);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ||
+        (err as { message?: string })?.message ||
+        'Failed to update role.';
+      useToastStore.getState().error(msg);
+    } finally {
+      setAssigningRole(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!user) return;
     if (!confirm(`Are you sure you want to delete "${user.name}"?`)) return;
@@ -60,22 +151,23 @@ export default function UserDetailsPage() {
     }
   };
 
-  const getPermissions = () => {
-    if (!user?.permissions) return [];
-    let permissions = user.permissions;
-    if (typeof permissions === 'string') {
-      try {
-        permissions = JSON.parse(permissions);
-      } catch {
-        return [];
-      }
-    }
-    if (Array.isArray(permissions)) return permissions;
-    if (typeof permissions === 'object') return Object.keys(permissions).filter((key) => permissions[key] === true);
-    return [];
-  };
+  const selectableRoles = useMemo(
+    () => selectPlatformRolesForAssignment(catalogRoles, user?.platform_role_id as string | undefined),
+    [catalogRoles, user?.platform_role_id],
+  );
 
-  const permissions = getPermissions();
+  const roleCodesFromAssignment = Array.isArray(user?.role_permission_codes)
+    ? (user.role_permission_codes as string[])
+    : [];
+
+  const hasLegacyOverrides =
+    !!user?.permissions &&
+    (typeof user.permissions === 'object'
+      ? Array.isArray(user.permissions)
+        ? user.permissions.length > 0
+        : Object.keys(user.permissions).length > 0
+      : false);
+
   const stats = user?.stats || {
     accounts: 0,
     suppliers: 0,
@@ -84,7 +176,107 @@ export default function UserDetailsPage() {
     collections: 0,
     farms: 0,
   };
+
   const userAccounts = Array.isArray(user?.user_accounts) ? user.user_accounts : [];
+
+  const activeMemberships = useMemo(() => userAccounts.filter((u: any) => u.status === 'active'), [userAccounts]);
+
+  const rolesForNewMembership = useMemo(
+    () => selectPlatformRolesForAssignment(catalogRoles),
+    [catalogRoles],
+  );
+
+  const activeMemberAccountIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const row of activeMemberships as any[]) {
+      const id = row.account_id ?? row.account?.id;
+      if (id) s.add(id);
+    }
+    return s;
+  }, [activeMemberships]);
+
+  const filteredAssignableAccounts = useMemo(
+    () => assignableAccounts.filter((a) => !activeMemberAccountIds.has(a.id)),
+    [assignableAccounts, activeMemberAccountIds],
+  );
+
+  useEffect(() => {
+    if (draftLinkRoleId) return;
+    const rid = rolesForNewMembership.find((r) => r.id)?.id;
+    if (rid) setDraftLinkRoleId(rid);
+  }, [rolesForNewMembership, draftLinkRoleId]);
+
+  const reloadUserFromApi = async () => {
+    const aid = currentAccount?.account_id;
+    if (!aid) return;
+    const refreshed = await adminApi.getUserById(userId, aid);
+    if (refreshed.code === 200 && refreshed.data) setUser(refreshed.data);
+  };
+
+  const handleAddMembership = async () => {
+    const aid = currentAccount?.account_id;
+    if (!aid || !draftLinkAccountId) {
+      useToastStore.getState().error('Choose an account to grant access.');
+      return;
+    }
+    setMembershipBusy('add');
+    try {
+      const res = await adminApi.assignUserAccountMembership(
+        userId,
+        { link_account_id: draftLinkAccountId, ...(draftLinkRoleId ? { platform_role_id: draftLinkRoleId } : {}) },
+        aid,
+      );
+      if (res.code !== 200) {
+        useToastStore.getState().error(res.message || 'Failed to grant access');
+        return;
+      }
+      useToastStore.getState().success('Account access granted.');
+      setDraftLinkAccountId('');
+      await reloadUserFromApi();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ||
+        (err as { message?: string })?.message ||
+        'Failed to grant access.';
+      useToastStore.getState().error(msg);
+    } finally {
+      setMembershipBusy(false);
+    }
+  };
+
+  const handleRevokeMembershipConfirm = async () => {
+    const aid = currentAccount?.account_id;
+    const target = revokeMembershipTarget;
+    if (!target || !aid) {
+      setRevokeMembershipTarget(null);
+      return;
+    }
+    if (activeMemberships.length <= 1) {
+      useToastStore.getState().error('Grant access to another account before removing the only membership.');
+      setRevokeMembershipTarget(null);
+      return;
+    }
+
+    setRemovingAccountId(target.accountId);
+    try {
+      const res = await adminApi.removeUserAccountMembership(userId, target.accountId, aid);
+      if (res.code !== 200) {
+        useToastStore.getState().error(res.message || 'Failed to remove access');
+        return;
+      }
+      useToastStore.getState().success('Account access removed.');
+      setRevokeMembershipTarget(null);
+      await reloadUserFromApi();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ||
+        (err as { message?: string })?.message ||
+        'Failed to remove access.';
+      useToastStore.getState().error(msg);
+    } finally {
+      setRemovingAccountId(null);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -114,6 +306,10 @@ export default function UserDetailsPage() {
     },
     [userId, listAccountId],
   );
+
+  const persistedPlatformRoleId = typeof user?.platform_role_id === 'string' ? user.platform_role_id : '';
+  const sameAsSavedPlatformRole =
+    !!draftPlatformRoleId && !!persistedPlatformRoleId && draftPlatformRoleId === persistedPlatformRoleId;
 
   if (loading) return <DetailPageSkeleton />;
 
@@ -207,10 +403,201 @@ export default function UserDetailsPage() {
             )}
 
             <div className="bg-white border border-gray-200 rounded-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Account Settings</h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Account settings</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div><label className="block text-sm text-gray-500 mb-1">Account Type</label><div className="flex items-center"><Icon icon={faBuilding} size="sm" className="mr-2 text-gray-400" />{user.account_type || 'N/A'}</div></div>
-                <div><label className="block text-sm text-gray-500 mb-1">Role</label><div className="flex items-center"><Icon icon={faUserShield} size="sm" className="mr-2 text-gray-400" />{user.role || 'N/A'}</div></div>
+                <div>
+                  <label className="block text-sm text-gray-500 mb-1">Account type</label>
+                  <div className="flex items-center text-gray-900">
+                    <Icon icon={faBuilding} size="sm" className="mr-2 text-gray-400" />
+                    {user.account_type || 'N/A'}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-500 mb-1">Current platform role</label>
+                  <div className="flex items-start text-gray-900">
+                    <Icon icon={faUserShield} size="sm" className="mr-2 mt-0.5 text-gray-400" />
+                    <div>
+                      <div className="font-medium">{user.platform_role_name || user.role || '—'}</div>
+                      {(user.platform_role_slug || user.role) && (
+                        <div className="text-xs font-mono text-gray-500 mt-0.5">{user.platform_role_slug || user.role}</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-gray-100">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Assign platform role (this account)</label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Permissions come from the role definition; assigning a role clears legacy per-user permission overrides here.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+                  <div className="flex-1 min-w-[200px]">
+                    <select
+                      value={draftPlatformRoleId}
+                      onChange={(e) => setDraftPlatformRoleId(e.target.value)}
+                      className="input w-full text-sm text-gray-900"
+                      disabled={!selectableRoles.length}
+                    >
+                      <option value="">{catalogRoles.length ? 'Select role…' : 'Loading roles…'}</option>
+                      {selectableRoles.map((r) => (
+                        <option key={r.id} value={r.id!}>
+                          {r.name} ({r.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleAssignRole()}
+                    disabled={assigningRole || !draftPlatformRoleId || sameAsSavedPlatformRole}
+                    className="btn btn-primary h-10 px-4 text-sm inline-flex items-center justify-center gap-2 whitespace-nowrap"
+                  >
+                    {assigningRole ? (
+                      <>
+                        <Icon icon={faSpinner} size="sm" spin />
+                        Saving…
+                      </>
+                    ) : (
+                      <>
+                        <Icon icon={faCheckCircle} size="sm" />
+                        Assign role
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-sm p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Account memberships</h2>
+              <p className="text-xs text-gray-500 mb-4">
+                Operational accounts this user can open in the app. You cannot revoke the last remaining membership until another account is granted.
+              </p>
+              <div className="divide-y divide-gray-100 rounded-sm border border-gray-100 mb-6">
+                {activeMemberships.length === 0 ? (
+                  <p className="p-4 text-sm text-gray-500">No active memberships.</p>
+                ) : (
+                  activeMemberships.map((row: any) => {
+                    const accId = row.account_id ?? row.account?.id;
+                    if (!accId) return null;
+                    const label =
+                      row.account?.name != null
+                        ? `${row.account.name}${row.account?.code ? ` (${row.account.code})` : ''}`
+                        : row.account?.code ?? accId;
+                    const onlyOne = activeMemberships.length <= 1;
+                    return (
+                      <div key={accId} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-4">
+                        <div>
+                          <div className="text-sm font-medium text-gray-900">{label}</div>
+                          {(row.role || row.account?.role) && (
+                            <div className="text-xs text-gray-500 mt-1">Role in account: {row.role ?? row.account?.role}</div>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (activeMemberships.length <= 1) {
+                              useToastStore.getState().error(
+                                'Grant access to another account before removing the only membership.',
+                              );
+                              return;
+                            }
+                            setRevokeMembershipTarget({ accountId: accId, accountLabel: label });
+                          }}
+                          disabled={
+                            onlyOne ||
+                            removingAccountId !== null ||
+                            membershipBusy ||
+                            revokeMembershipTarget !== null
+                          }
+                          className="btn btn-secondary text-sm px-3 py-2 inline-flex items-center gap-2 border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 whitespace-nowrap"
+                          title={
+                            onlyOne
+                              ? 'Grant access to another account before removing this one'
+                              : 'Remove access to this account'
+                          }
+                        >
+                          {removingAccountId === accId ? (
+                            <Icon icon={faSpinner} size="sm" spin />
+                          ) : (
+                            <Icon icon={faMinus} size="sm" />
+                          )}
+                          Remove access
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <h3 className="text-sm font-medium text-gray-800 mb-2">Grant access to another account</h3>
+              <div className="space-y-3">
+                <input
+                  type="search"
+                  placeholder="Search by account name or code…"
+                  value={membershipSearch}
+                  onChange={(e) => setMembershipSearch(e.target.value)}
+                  className="input w-full max-w-xl text-sm"
+                />
+                <div className="flex flex-col lg:flex-row gap-3 lg:items-end">
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Account</label>
+                    <select
+                      value={draftLinkAccountId}
+                      onChange={(e) => setDraftLinkAccountId(e.target.value)}
+                      className="input w-full max-w-xl text-sm text-gray-900"
+                      disabled={loadingAssignable || filteredAssignableAccounts.length === 0}
+                    >
+                      <option value="">
+                        {loadingAssignable
+                          ? 'Loading accounts…'
+                          : filteredAssignableAccounts.length
+                            ? 'Select account…'
+                            : membershipSearch.trim()
+                              ? 'No matching accounts'
+                              : 'No accounts left to add'}
+                      </option>
+                      {filteredAssignableAccounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}{a.code ? ` (${a.code})` : ''} · {a.type}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Platform role in new account</label>
+                    <select
+                      value={draftLinkRoleId}
+                      onChange={(e) => setDraftLinkRoleId(e.target.value)}
+                      className="input w-full max-w-xl text-sm text-gray-900"
+                      disabled={!rolesForNewMembership.length}
+                    >
+                      {rolesForNewMembership.map((r) => (
+                        <option key={r.id} value={r.id!}>
+                          {r.name} ({r.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleAddMembership()}
+                    disabled={
+                      membershipBusy || removingAccountId !== null || !draftLinkAccountId || !rolesForNewMembership.length
+                    }
+                    className="btn btn-primary h-10 px-4 text-sm inline-flex items-center justify-center gap-2 whitespace-nowrap"
+                  >
+                    {membershipBusy ? (
+                      <>
+                        <Icon icon={faSpinner} size="sm" spin />
+                        Granting…
+                      </>
+                    ) : (
+                      <>Grant access</>
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -222,7 +609,7 @@ export default function UserDetailsPage() {
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Lists scoped to account</label>
                 <select
-                  className="input h-10 text-sm max-w-lg text-gray-900"
+                  className="input text-sm max-w-lg text-gray-900"
                   value={listAccountId ?? ''}
                   onChange={(e) => setListAccountId(e.target.value || null)}
                   disabled={!userAccounts.filter((u: any) => u.status === 'active').length}
@@ -266,31 +653,60 @@ export default function UserDetailsPage() {
             </div>
 
             <div className="bg-white border border-gray-200 rounded-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Permissions</h2>
-              {permissions.length > 0 ? (
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Permissions from assigned role</h2>
+              <p className="text-xs text-gray-500 mb-3">
+                These permission codes match the linked platform role. Per-user edits are managed only through the role catalogue.
+              </p>
+              {roleCodesFromAssignment.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
-                  {permissions.map((permission: string) => (
-                    <span key={permission} className="inline-flex px-3 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">
-                      {permission.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                  {roleCodesFromAssignment.map((code: string) => (
+                    <span
+                      key={code}
+                      className="inline-flex px-3 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full"
+                    >
+                      {code.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
                     </span>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-500">No specific permissions assigned</p>
+                <p className="text-sm text-gray-500">No permissions linked for this platform role.</p>
               )}
+              {hasLegacyOverrides ? (
+                <p className="mt-4 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-sm px-3 py-2">
+                  Stored legacy per-user overrides are present in the database. Assigning a role from this screen clears those overrides when you save.
+                </p>
+              ) : null}
             </div>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-sm p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Meta</h2>
             <div className="space-y-3">
-              <div><label className="block text-sm text-gray-500 mb-1">User ID</label><p className="text-sm font-mono">{user.id}</p></div>
               <div><label className="block text-sm text-gray-500 mb-1">Created At</label><div className="flex items-center text-sm"><Icon icon={faCalendar} size="sm" className="mr-2 text-gray-400" />{user.created_at ? new Date(user.created_at).toLocaleString() : 'N/A'}</div></div>
               {user.last_login && <div><label className="block text-sm text-gray-500 mb-1">Last Login</label><div className="flex items-center text-sm"><Icon icon={faCalendar} size="sm" className="mr-2 text-gray-400" />{new Date(user.last_login).toLocaleString()}</div></div>}
             </div>
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!revokeMembershipTarget}
+        onClose={() => !removingAccountId && setRevokeMembershipTarget(null)}
+        onConfirm={() => void handleRevokeMembershipConfirm()}
+        title="Revoke account access?"
+        message={
+          revokeMembershipTarget && user?.name
+            ? `Revoke ${user.name}'s access to “${revokeMembershipTarget.accountLabel}”? Tenant data stays.`
+            : revokeMembershipTarget
+              ? `Revoke access to “${revokeMembershipTarget.accountLabel}”? Tenant data stays.`
+              : ''
+        }
+        confirmText="Revoke access"
+        cancelText="Cancel"
+        type="danger"
+        loading={Boolean(removingAccountId && revokeMembershipTarget?.accountId === removingAccountId)}
+        closeOnOverlayClick={!removingAccountId}
+      />
     </div>
   );
 }

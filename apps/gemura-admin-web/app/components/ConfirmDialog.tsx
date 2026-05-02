@@ -35,6 +35,12 @@ const ICON_COLOR: Record<ConfirmDialogType, string> = {
   info: 'text-[var(--primary)]',
 };
 
+const ICON_SURFACE: Record<ConfirmDialogType, string> = {
+  danger: 'bg-red-50 ring-1 ring-red-100/80',
+  warning: 'bg-amber-50 ring-1 ring-amber-100/80',
+  info: 'bg-blue-50/90 ring-1 ring-blue-100/70',
+};
+
 const CONFIRM_BTN_CLASS: Record<ConfirmDialogType, string> = {
   danger: 'bg-red-600 hover:bg-red-700 text-white',
   warning: 'bg-amber-500 hover:bg-amber-600 text-white',
@@ -92,16 +98,24 @@ export default function ConfirmDialog({
         onClick={handleOverlayClick}
         aria-hidden="true"
       />
-      <div className="relative w-full max-w-[420px] bg-white rounded-lg border border-gray-200 shadow-xl p-6 sm:p-8 text-center" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="relative w-full max-w-[440px] bg-white rounded-2xl border border-gray-100 shadow-2xl shadow-gray-900/12 p-7 sm:p-9 text-center ring-1 ring-gray-950/[0.04]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {showIcon && (
-          <div className="flex justify-center mb-4">
-            <Icon icon={IconComponent} size="2x" className={ICON_COLOR[type]} />
+          <div className="flex justify-center mb-5">
+            <div
+              className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl ${ICON_SURFACE[type]}`}
+              aria-hidden
+            >
+              <Icon icon={IconComponent} size="lg" className={ICON_COLOR[type]} />
+            </div>
           </div>
         )}
-        <h3 id="confirm-dialog-title" className="text-xl sm:text-[1.375rem] font-semibold text-gray-900 mb-3">
+        <h3 id="confirm-dialog-title" className="text-xl sm:text-[1.375rem] font-semibold tracking-tight text-gray-900 mb-2">
           {title}
         </h3>
-        <p className="text-[0.9375rem] sm:text-base text-gray-600 leading-relaxed mb-6">{message}</p>
+        <p className="text-[0.9375rem] sm:text-[0.95rem] text-gray-600 leading-relaxed mb-7">{message}</p>
         <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end sm:flex-wrap">
           <button type="button" onClick={onClose} disabled={loading} className="btn btn-secondary w-full sm:w-auto min-w-[100px]">
             {cancelText}

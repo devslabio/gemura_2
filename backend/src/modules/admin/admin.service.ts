@@ -32,6 +32,7 @@ import {
 import { RbacService } from '../rbac/rbac.service';
 import { CreatePlatformRoleDto } from './dto/create-platform-role.dto';
 import { UpdatePlatformRoleDto } from './dto/update-platform-role.dto';
+import { AssignUserAccountMembershipDto } from './dto/assign-user-account-membership.dto';
 
 export type UserActivityMetric =
   | 'suppliers'
@@ -453,12 +454,49 @@ export class AdminService {
     const ua =
       targetUser.user_accounts?.find((row) => row.account_id === accountId && row.status === 'active') ?? null;
 
-    let permissions: Record<string, boolean> | null = null;
+    let legacyPermissionOverrides: Record<string, boolean> | null = null;
     if (ua?.permissions) {
       try {
-        permissions = typeof ua.permissions === 'string' ? JSON.parse(ua.permissions) : ua.permissions;
+        legacyPermissionOverrides =
+          typeof ua.permissions === 'string' ? JSON.parse(ua.permissions) : ua.permissions;
       } catch {
-        permissions = null;
+        legacyPermissionOverrides = null;
+      }
+    }
+
+    let platformRoleIdResolved: string | null = ua?.platform_role_id ?? null;
+    if (!platformRoleIdResolved && ua?.role) {
+      const slug = canonicalPlatformRoleSlug(ua.role);
+      const bySlug = await this.prisma.platformRole.findUnique({
+        where: { slug },
+        select: { id: true },
+      });
+      platformRoleIdResolved = bySlug?.id ?? null;
+    }
+
+    let platform_role_slug: string | null = null;
+    let platform_role_name: string | null = null;
+    let role_permission_codes: string[] = [];
+    if (platformRoleIdResolved) {
+      const pr = await this.prisma.platformRole.findUnique({
+        where: { id: platformRoleIdResolved },
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          permission_links: {
+            select: {
+              permission: { select: { code: true } },
+            },
+          },
+        },
+      });
+      if (pr) {
+        platform_role_slug = pr.slug;
+        platform_role_name = pr.name;
+        role_permission_codes = pr.permission_links
+          .map((l) => l.permission.code)
+          .sort((a, b) => a.localeCompare(b));
       }
     }
 
@@ -488,7 +526,12 @@ export class AdminService {
     const data = {
       ...userRest,
       role: ua?.role ?? null,
-      permissions,
+      /** Deprecated: legacy JSON overrides on user_accounts; clearance on role reassignment via admin APIs. */
+      permissions: legacyPermissionOverrides,
+      platform_role_id: platformRoleIdResolved,
+      platform_role_slug,
+      platform_role_name,
+      role_permission_codes,
       user_accounts,
       mcc_onboarding: mccOnboarding,
       stats,
@@ -499,6 +542,204 @@ export class AdminService {
       status: 'success',
       message: 'User retrieved successfully.',
       data,
+    };
+  }
+
+  /** Active tenant/branch accounts for linking users from admin UI. */
+  async searchAssignableAccounts(user: User, accountId: string, search?: string, limitRaw?: number) {
+    await this.checkAdminPermission(user, accountId);
+    const take = Math.min(Math.max(limitRaw ?? 40, 1), 100);
+    const q = search?.trim();
+    const where: Prisma.AccountWhereInput = {
+      status: 'active',
+      type: { in: ['tenant', 'branch'] },
+      ...(q
+        ? {
+            OR: [{ name: { contains: q, mode: 'insensitive' } }, { code: { contains: q, mode: 'insensitive' } }],
+          }
+        : {}),
+    };
+
+    const accounts = await this.prisma.account.findMany({
+      where,
+      select: { id: true, code: true, name: true, type: true },
+      orderBy: [{ name: 'asc' }],
+      take,
+    });
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Accounts retrieved.',
+      data: { accounts },
+    };
+  }
+
+  async addUserAccountMembership(
+    adminUser: User,
+    adminAccountId: string,
+    targetUserId: string,
+    dto: AssignUserAccountMembershipDto,
+  ) {
+    await this.checkAdminPermission(adminUser, adminAccountId);
+
+    const target = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!target) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'User not found.',
+      });
+    }
+
+    const acc = await this.prisma.account.findFirst({
+      where: {
+        id: dto.link_account_id,
+        status: 'active',
+        type: { in: ['tenant', 'branch'] },
+      },
+      select: { id: true },
+    });
+    if (!acc) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Account not found or not eligible for direct user access.',
+      });
+    }
+
+    await this.rbac.ensureCatalogFromConfig();
+
+    let roleSlug = 'viewer';
+    let platformRoleId: string | null = dto.platform_role_id ?? null;
+    if (platformRoleId) {
+      const pr = await this.prisma.platformRole.findUnique({
+        where: { id: platformRoleId },
+        select: { id: true, slug: true, is_active: true },
+      });
+      if (!pr?.is_active) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Invalid or inactive platform role.',
+        });
+      }
+      roleSlug = canonicalPlatformRoleSlug(pr.slug);
+    } else {
+      platformRoleId = await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug);
+    }
+
+    const existing = await this.prisma.userAccount.findUnique({
+      where: { user_id_account_id: { user_id: targetUserId, account_id: dto.link_account_id } },
+    });
+
+    if (existing?.status === 'active') {
+      throw new ConflictException({
+        code: 409,
+        status: 'error',
+        message: 'User already has access to this account.',
+      });
+    }
+
+    if (existing) {
+      await this.prisma.userAccount.update({
+        where: { id: existing.id },
+        data: {
+          status: 'active',
+          role: roleSlug,
+          platform_role_id: platformRoleId,
+          permissions: null,
+          updated_by: adminUser.id,
+        },
+      });
+    } else {
+      await this.prisma.userAccount.create({
+        data: {
+          user_id: targetUserId,
+          account_id: dto.link_account_id,
+          role: roleSlug,
+          platform_role_id: platformRoleId,
+          permissions: null,
+          status: 'active',
+          created_by: adminUser.id,
+        },
+      });
+    }
+
+    if (!target.default_account_id) {
+      await this.prisma.user.update({
+        where: { id: targetUserId },
+        data: { default_account_id: dto.link_account_id, updated_by: adminUser.id },
+      });
+    }
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Account access granted.',
+      data: null,
+    };
+  }
+
+  async removeUserAccountMembership(adminUser: User, adminAccountId: string, targetUserId: string, membershipAccountId: string) {
+    await this.checkAdminPermission(adminUser, adminAccountId);
+
+    const target = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!target) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'User not found.',
+      });
+    }
+
+    const ua = await this.prisma.userAccount.findUnique({
+      where: {
+        user_id_account_id: { user_id: targetUserId, account_id: membershipAccountId },
+      },
+    });
+
+    if (!ua || ua.status !== 'active') {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'No active membership for this account.',
+      });
+    }
+
+    const activeCount = await this.prisma.userAccount.count({
+      where: { user_id: targetUserId, status: 'active' },
+    });
+    if (activeCount <= 1) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message:
+          "Cannot remove the user's only active account access. Grant access to another account first, or deactivate the user.",
+      });
+    }
+
+    await this.prisma.userAccount.update({
+      where: { id: ua.id },
+      data: { status: 'inactive', updated_by: adminUser.id },
+    });
+
+    if (target.default_account_id === membershipAccountId) {
+      const next = await this.prisma.userAccount.findFirst({
+        where: { user_id: targetUserId, status: 'active' },
+        select: { account_id: true },
+      });
+      await this.prisma.user.update({
+        where: { id: targetUserId },
+        data: { default_account_id: next?.account_id ?? null, updated_by: adminUser.id },
+      });
+    }
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Account access removed.',
+      data: null,
     };
   }
 
@@ -1188,7 +1429,7 @@ export class AdminService {
           account_id: accountId,
           role: roleSlug,
           platform_role_id: platformRoleId,
-          permissions: createDto.permissions ? JSON.stringify(createDto.permissions) : null,
+          permissions: null,
           status: 'active',
           created_by: user.id,
         },
@@ -1249,15 +1490,22 @@ export class AdminService {
       }
     }
 
+    const {
+      role: dtoRole,
+      permissions: _dtoPermissions,
+      platform_role_id: dtoPlatformRoleId,
+      password: dtoPasswordField,
+      ...dtoForUserModel
+    } = updateDto;
+
     // Hash password if provided
     const updateData: any = {
-      ...updateDto,
+      ...dtoForUserModel,
       updated_by: user.id,
     };
 
-    if (updateDto.password) {
-      updateData.password_hash = await bcrypt.hash(updateDto.password, 10);
-      delete updateData.password;
+    if (dtoPasswordField) {
+      updateData.password_hash = await bcrypt.hash(dtoPasswordField, 10);
     }
 
     if (updateDto.email) {
@@ -1269,12 +1517,10 @@ export class AdminService {
       data: updateData,
     });
 
-    // Update user account access if role/permissions/platform_role_id provided
-    if (
-      updateDto.role !== undefined ||
-      updateDto.permissions !== undefined ||
-      updateDto.platform_role_id !== undefined
-    ) {
+    const roleOrPlatformChanging = dtoRole !== undefined || dtoPlatformRoleId !== undefined;
+
+    // Update user account access if role/platform_role_id provided (per-user permission JSON deprecated)
+    if (roleOrPlatformChanging) {
       await this.rbac.ensureCatalogFromConfig();
       const userAccount = await this.prisma.userAccount.findFirst({
         where: {
@@ -1285,20 +1531,20 @@ export class AdminService {
 
       if (userAccount) {
         let roleSlug =
-          updateDto.role !== undefined
-            ? canonicalPlatformRoleSlug(updateDto.role.trim().slice(0, 64))
+          dtoRole !== undefined
+            ? canonicalPlatformRoleSlug(dtoRole.trim().slice(0, 64))
             : userAccount.role.trim().slice(0, 64);
         let platformRoleId =
-          updateDto.platform_role_id !== undefined
-            ? updateDto.platform_role_id
-            : updateDto.role !== undefined
-              ? await this.rbac.resolvePlatformRoleIdFromSlug(updateDto.role)
+          dtoPlatformRoleId !== undefined
+            ? dtoPlatformRoleId
+            : dtoRole !== undefined
+              ? await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug)
               : userAccount.platform_role_id;
-        if (updateDto.platform_role_id !== undefined && updateDto.role === undefined) {
-          const s = await this.rbac.resolveSlugFromPlatformRoleId(updateDto.platform_role_id);
+        if (dtoPlatformRoleId !== undefined && dtoRole === undefined) {
+          const s = await this.rbac.resolveSlugFromPlatformRoleId(dtoPlatformRoleId);
           if (s) roleSlug = s;
         }
-        if (!platformRoleId && updateDto.role !== undefined) {
+        if (!platformRoleId && dtoRole !== undefined) {
           platformRoleId = await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug);
         }
         await this.prisma.userAccount.update({
@@ -1306,19 +1552,16 @@ export class AdminService {
           data: {
             role: roleSlug,
             platform_role_id: platformRoleId ?? undefined,
-            permissions:
-              updateDto.permissions !== undefined
-                ? JSON.stringify(updateDto.permissions)
-                : userAccount.permissions,
+            permissions: null,
             updated_by: user.id,
           },
         });
-      } else if (updateDto.role || updateDto.permissions || updateDto.platform_role_id) {
-        let roleSlug = canonicalPlatformRoleSlug((updateDto.role || 'viewer').trim().slice(0, 64));
+      } else if (dtoRole || dtoPlatformRoleId) {
+        let roleSlug = canonicalPlatformRoleSlug((dtoRole || 'viewer').trim().slice(0, 64));
         let platformRoleId =
-          updateDto.platform_role_id || (await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug));
-        if (updateDto.platform_role_id && !updateDto.role) {
-          const s = await this.rbac.resolveSlugFromPlatformRoleId(updateDto.platform_role_id);
+          dtoPlatformRoleId || (await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug));
+        if (dtoPlatformRoleId && !dtoRole) {
+          const s = await this.rbac.resolveSlugFromPlatformRoleId(dtoPlatformRoleId);
           if (s) roleSlug = s;
         }
         await this.prisma.userAccount.create({
@@ -1327,7 +1570,7 @@ export class AdminService {
             account_id: accountId,
             role: roleSlug,
             platform_role_id: platformRoleId,
-            permissions: updateDto.permissions ? JSON.stringify(updateDto.permissions) : null,
+            permissions: null,
             status: 'active',
             created_by: user.id,
           },
