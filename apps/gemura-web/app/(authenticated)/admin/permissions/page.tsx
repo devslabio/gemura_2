@@ -1,14 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { adminApi, type PermissionItem } from '@/lib/api/admin';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
 import Icon, { faLock } from '@/app/components/Icon';
-import FilterBar, { FilterBarGroup } from '@/app/components/FilterBar';
+import FilterBar, { FilterBarGroup, FilterBarSearch } from '@/app/components/FilterBar';
+import Pagination from '@/app/components/Pagination';
 import { TableSkeleton } from '@/app/components/SkeletonLoader';
+
+const PAGE_SIZES = [10, 20, 50, 100];
 
 export default function AdminPermissionsPage() {
   const router = useRouter();
@@ -18,6 +21,9 @@ export default function AdminPermissionsPage() {
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
   const [error, setError] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [permSearch, setPermSearch] = useState('');
+  const [permPage, setPermPage] = useState(1);
+  const [permPageSize, setPermPageSize] = useState(10);
 
   useEffect(() => {
     if (!canManageUsers() && !isAdmin()) {
@@ -50,9 +56,36 @@ export default function AdminPermissionsPage() {
   }, [currentAccount?.account_id]);
 
   const categories = Array.from(new Set(permissions.map((p) => p.category).filter(Boolean))).sort() as string[];
-  const filtered = categoryFilter
-    ? permissions.filter((p) => p.category === categoryFilter)
-    : permissions;
+
+  const filtered = useMemo(() => {
+    let list = categoryFilter ? permissions.filter((p) => p.category === categoryFilter) : permissions;
+    const q = permSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          p.code.toLowerCase().includes(q) ||
+          (p.description || '').toLowerCase().includes(q) ||
+          (p.category || '').toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [permissions, categoryFilter, permSearch]);
+
+  useEffect(() => {
+    setPermPage(1);
+  }, [categoryFilter, permSearch]);
+
+  const permTotalPages = Math.max(1, Math.ceil(filtered.length / permPageSize) || 1);
+
+  useEffect(() => {
+    setPermPage((p) => Math.min(p, permTotalPages));
+  }, [filtered.length, permPageSize, permTotalPages]);
+
+  const paginatedPermissions = useMemo(() => {
+    const start = (permPage - 1) * permPageSize;
+    return filtered.slice(start, start + permPageSize);
+  }, [filtered, permPage, permPageSize]);
 
   return (
     <div className="space-y-4">
@@ -81,6 +114,7 @@ export default function AdminPermissionsPage() {
 
       {/* Filters */}
       <FilterBar>
+        <FilterBarSearch value={permSearch} onChange={setPermSearch} placeholder="Search by name, code, or description..." />
         <FilterBarGroup label="Category">
           <select
             value={categoryFilter}
@@ -91,6 +125,22 @@ export default function AdminPermissionsPage() {
             {categories.map((cat) => (
               <option key={cat} value={cat}>
                 {cat}
+              </option>
+            ))}
+          </select>
+        </FilterBarGroup>
+        <FilterBarGroup label="Rows per page">
+          <select
+            value={permPageSize}
+            onChange={(e) => {
+              setPermPageSize(Number(e.target.value));
+              setPermPage(1);
+            }}
+            className="input h-9 min-h-[2.25rem] !py-1.5 !px-3 text-sm w-full text-gray-900"
+          >
+            {PAGE_SIZES.map((n) => (
+              <option key={n} value={n}>
+                {n}
               </option>
             ))}
           </select>
@@ -126,7 +176,7 @@ export default function AdminPermissionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((perm) => (
+                {paginatedPermissions.map((perm) => (
                   <tr key={perm.code} className="border-b border-gray-100 hover:bg-gray-50/80 transition-colors">
                     <td className="py-3 px-4">
                       <span className="font-medium text-gray-900">{perm.name}</span>
@@ -164,12 +214,23 @@ export default function AdminPermissionsPage() {
             </table>
             {filtered.length === 0 && !error && (
               <div className="py-12 text-center text-gray-500 text-sm">
-                {categoryFilter ? 'No permissions in this category.' : 'No permissions found.'}
+                {categoryFilter || permSearch.trim() ? 'No permissions match your filters.' : 'No permissions found.'}
               </div>
             )}
           </div>
         )}
       </div>
+
+      {!loading && filtered.length > 0 && (
+        <Pagination
+          currentPage={permPage}
+          totalPages={permTotalPages}
+          totalItems={filtered.length}
+          pageSize={permPageSize}
+          itemLabel="permissions"
+          onPageChange={setPermPage}
+        />
+      )}
     </div>
   );
 }
