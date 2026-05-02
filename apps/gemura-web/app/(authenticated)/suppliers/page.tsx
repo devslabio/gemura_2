@@ -13,7 +13,7 @@ import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
 import Modal from '@/app/components/Modal';
 import BulkImportModal from '@/app/components/BulkImportModal';
 import CreateSupplierForm from './CreateSupplierForm';
-import Icon, { faPlus, faEye, faCheckCircle, faBuilding, faPhone, faEnvelope, faDollarSign, faFile } from '@/app/components/Icon';
+import Icon, { faPlus, faEye, faCheckCircle, faBuilding, faPhone, faDollarSign, faFile } from '@/app/components/Icon';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -21,10 +21,21 @@ const STATUS_OPTIONS = [
   { value: 'inactive', label: 'Inactive' },
 ];
 
+const TYPE_OPTIONS = [
+  { value: '', label: 'All Types' },
+  { value: 'farmer', label: 'farmer' },
+  { value: 'collector', label: 'collector' },
+  { value: 'collector-farmer', label: 'collector-farmer' },
+  { value: 'mcp', label: 'mcp' },
+  { value: 'farmer only', label: 'farmer only' },
+];
+
 export default function SuppliersPage() {
   const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
   const { hasPermission, isAdmin } = usePermission();
+  const role = (currentAccount?.role ?? '').toLowerCase();
+  const isReadOnlyTeamRole = role === 'agent' || role === 'collector' || role === 'veterinary' || role === 'veterinarian' || role === 'veternary' || role === 'milkreceptionist' || role === 'milk_receptionist';
   const [loading, setLoading] = useState(true);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [error, setError] = useState('');
@@ -32,7 +43,13 @@ export default function SuppliersPage() {
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const canCreateSupplier = hasPermission('create_suppliers') || isAdmin();
+  const [typeFilter, setTypeFilter] = useState('');
+  const canCreateSupplier = !isReadOnlyTeamRole && (hasPermission('create_suppliers') || isAdmin());
+
+  const normalizeSupplierType = (supplierType?: string | null): string => {
+    if (!supplierType || supplierType === 'supplier') return 'farmer';
+    return supplierType;
+  };
 
   const loadSuppliers = useCallback(async () => {
     try {
@@ -64,7 +81,7 @@ export default function SuppliersPage() {
           (s.name && s.name.toLowerCase().includes(q)) ||
           (s.code && s.code.toLowerCase().includes(q)) ||
           (s.phone && s.phone.includes(q)) ||
-          (s.email && s.email.toLowerCase().includes(q)) ||
+          normalizeSupplierType(s.type).toLowerCase().includes(q) ||
             (s.bank_name && s.bank_name.toLowerCase().includes(q)) ||
             (s.bank_account_number && s.bank_account_number.toLowerCase().includes(q)) ||
           (s.account?.code && s.account.code.toLowerCase().includes(q)) ||
@@ -74,12 +91,16 @@ export default function SuppliersPage() {
     if (statusFilter) {
       list = list.filter((s) => s.relationship_status === statusFilter);
     }
+    if (typeFilter) {
+      list = list.filter((s) => normalizeSupplierType(s.type) === typeFilter);
+    }
     return list;
-  }, [suppliers, search, statusFilter]);
+  }, [suppliers, search, statusFilter, typeFilter]);
 
   const clearFilters = () => {
     setSearch('');
     setStatusFilter('');
+    setTypeFilter('');
   };
 
   const formatCurrency = (amount: number) => {
@@ -114,16 +135,11 @@ export default function SuppliersPage() {
       ),
     },
     {
-      key: 'email',
-      label: 'Email',
+      key: 'type',
+      label: 'Type',
       sortable: true,
-      render: (value) => value ? (
-        <div className="flex items-center text-gray-900">
-          <Icon icon={faEnvelope} size="sm" className="mr-2 text-gray-400" />
-          <span>{value}</span>
-        </div>
-      ) : (
-        <span className="text-gray-400">N/A</span>
+      render: (value, row) => (
+        <span className="text-gray-900">{normalizeSupplierType((value as string | null | undefined) ?? row.type)}</span>
       ),
     },
     {
@@ -285,7 +301,7 @@ export default function SuppliersPage() {
         <FilterBarSearch
           value={search}
           onChange={setSearch}
-          placeholder="Search by name, code, phone, email..."
+          placeholder="Search by name, code, phone, type..."
         />
         <FilterBarGroup label="Status">
           <select
@@ -300,6 +316,19 @@ export default function SuppliersPage() {
             ))}
           </select>
         </FilterBarGroup>
+        <FilterBarGroup label="Type">
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="input h-9 min-h-[2.25rem] !py-1.5 !px-3 text-sm w-full text-gray-900"
+          >
+            {TYPE_OPTIONS.map((o) => (
+              <option key={o.value || 'all'} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </FilterBarGroup>
         <FilterBarActions onClear={clearFilters} />
         <FilterBarExport<Supplier>
           data={filteredSuppliers}
@@ -308,7 +337,7 @@ export default function SuppliersPage() {
             { key: 'name', label: 'Name' },
             { key: 'code', label: 'Code' },
             { key: 'phone', label: 'Phone' },
-            { key: 'email', label: 'Email', getValue: (r) => r.email ?? '' },
+            { key: 'type', label: 'Type', getValue: (r) => normalizeSupplierType(r.type) },
             { key: 'price_per_liter', label: 'Price/Liter', getValue: (r) => r.price_per_liter != null ? String(r.price_per_liter) : '' },
             { key: 'bank_name', label: 'Bank Name', getValue: (r) => r.bank_name ?? '' },
             { key: 'bank_account_number', label: 'Bank Account Number', getValue: (r) => r.bank_account_number ?? '' },

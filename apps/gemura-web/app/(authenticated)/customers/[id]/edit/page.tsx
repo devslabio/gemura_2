@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { usePermission } from '@/hooks/usePermission';
+import { useAuthStore } from '@/store/auth';
 import { fullNameFromParts, splitFullName } from '@/lib/utils/name';
 import { ENTITY_TYPE_OPTIONS } from '@/lib/constants/entity-types';
 import { customersApi, UpdateCustomerData, CustomerDetails } from '@/lib/api/customers';
@@ -21,6 +22,9 @@ export default function EditCustomerPage() {
   const params = useParams();
   const customerId = params.id as string;
   const { hasPermission, isAdmin } = usePermission();
+  const { currentAccount } = useAuthStore();
+  const role = (currentAccount?.role ?? '').toLowerCase();
+  const isReadOnlyTeamRole = role === 'agent' || role === 'collector' || role === 'veterinary' || role === 'veterinarian' || role === 'veternary' || role === 'milkreceptionist' || role === 'milk_receptionist';
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -39,7 +43,7 @@ export default function EditCustomerPage() {
   });
 
   useEffect(() => {
-    if (!hasPermission('create_customers') && !isAdmin()) {
+    if (isReadOnlyTeamRole || (!hasPermission('create_customers') && !isAdmin())) {
       router.push('/customers');
       return;
     }

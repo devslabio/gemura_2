@@ -31,7 +31,19 @@ import {
 /** Account types that see user/operations menu (filtered by role + permissions) */
 export const BUSINESS_ACCOUNT_TYPES = ['mcc', 'owner', 'agent', 'tenant', 'branch'] as const;
 export const ADMIN_ROLES = ['owner', 'admin'] as const;
-export const OPERATIONS_ROLES = ['manager', 'accountant', 'collector', 'viewer', 'employee', 'agent'] as const;
+export const OPERATIONS_ROLES = [
+  'manager',
+  'accountant',
+  'collector',
+  'viewer',
+  'employee',
+  'agent',
+  'veterinary',
+  'veterinarian',
+  'veternary',
+  'milkreceptionist',
+  'milk_receptionist',
+] as const;
 export const EXTERNAL_ACCOUNT_TYPES = ['supplier', 'customer', 'farmer'] as const;
 
 export type Section = 'admin' | 'operations' | 'external_supplier' | 'external_customer';
@@ -106,7 +118,7 @@ export function isAdminRole(role: string): boolean {
 }
 
 export function isOperationsRole(role: string): boolean {
-  const r = (role || '').toLowerCase();
+  const r = (role || '').trim().toLowerCase().replace(/\s+/g, '_');
   return OPERATIONS_ROLES.some((a) => a === r);
 }
 
