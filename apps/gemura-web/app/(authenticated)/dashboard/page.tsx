@@ -89,7 +89,7 @@ function BusinessDashboard() {
   const { hasPermission } = usePermission();
   const accountType = currentAccount?.account_type ?? '';
   const role = (currentAccount?.role ?? '').toLowerCase();
-  const isVeterinaryRole = ['veterinary', 'veterinarian', 'veternary', 'agent'].includes(role);
+  const isVeterinaryRole = ['veterinary', 'veterinarian', 'veternary', 'agent', 'veterinary_officer'].includes(role);
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<OverviewResponse['data'] | null>(null);
   const [error, setError] = useState('');

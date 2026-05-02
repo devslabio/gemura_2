@@ -1,13 +1,20 @@
 /**
  * Single source of truth for permissions and default permissions per role.
  * ResolveIT-style: list permissions with code/name/description; each role has a set of default permissions.
- * Owner and admin are treated as having all permissions in guards; other roles use this matrix or user-level overrides.
+ * System admin and admin are treated as having all permissions in guards; other roles use this matrix or user-level overrides.
+ * Legacy stored/API slug `owner` is normalized to `system_admin`.
  */
 
 export const ROLES = [
-  'owner',
+  'system_admin',
   'admin',
   'manager',
+  'veterinary_officer',
+  'casual_laborer',
+  'leadership',
+  'regulator',
+  'umucunda_a',
+  'umucunda_b',
   'accountant',
   'collector',
   'viewer',
@@ -17,6 +24,20 @@ export const ROLES = [
 ] as const;
 
 export type RoleCode = (typeof ROLES)[number];
+
+/** Canonical slug for persistence (legacy `owner` → `system_admin`). Empty input returns empty string. */
+export function canonicalPlatformRoleSlug(slug: string | null | undefined): string {
+  const raw = (slug ?? '').trim().toLowerCase();
+  if (!raw) return '';
+  if (raw === 'owner') return 'system_admin';
+  return raw.slice(0, 64);
+}
+
+/** Full platform access tiers (accepts legacy `owner` stored on tokens/rows). */
+export function isPlatformSuperAdminRole(role: string | null | undefined): boolean {
+  const r = (role || '').toLowerCase();
+  return r === 'system_admin' || r === 'admin' || r === 'owner';
+}
 
 export interface PermissionDef {
   code: string;
@@ -43,9 +64,9 @@ export const PERMISSIONS: PermissionDef[] = [
   { code: 'view_analytics', name: 'View analytics', description: 'Access analytics and reports', category: 'Analytics' },
 ];
 
-/** Default permissions per role (owner/admin have all in guards; this is for display and for non-admin roles) */
+/** Default permissions per role (system_admin/admin have all in guards; this is for display and for non-admin roles) */
 export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
-  owner: PERMISSIONS.map((p) => p.code),
+  system_admin: PERMISSIONS.map((p) => p.code),
   admin: PERMISSIONS.map((p) => p.code),
   manager: [
     'dashboard.view',
@@ -62,6 +83,49 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
     'view_inventory',
     'manage_inventory',
     'view_analytics',
+  ],
+  veterinary_officer: [
+    'dashboard.view',
+    'view_collections',
+    'create_collections',
+    'view_suppliers',
+    'view_inventory',
+    'manage_inventory',
+    'view_analytics',
+  ],
+  casual_laborer: [
+    'dashboard.view',
+    'view_collections',
+    'view_inventory',
+  ],
+  leadership: [
+    'dashboard.view',
+    'view_sales',
+    'view_collections',
+    'view_inventory',
+    'view_analytics',
+  ],
+  regulator: [
+    'dashboard.view',
+    'view_collections',
+    'view_inventory',
+    'view_analytics',
+  ],
+  umucunda_a: [
+    'dashboard.view',
+    'view_collections',
+    'create_collections',
+    'view_sales',
+    'create_sales',
+    'view_inventory',
+  ],
+  umucunda_b: [
+    'dashboard.view',
+    'view_collections',
+    'create_collections',
+    'view_sales',
+    'create_sales',
+    'view_inventory',
   ],
   accountant: [
     'dashboard.view',
@@ -100,9 +164,15 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
 };
 
 export const ROLE_LABELS: Record<RoleCode, string> = {
-  owner: 'Owner',
+  system_admin: 'System admin',
   admin: 'Admin',
   manager: 'Manager',
+  veterinary_officer: 'Veterinary officer',
+  casual_laborer: 'Casual laborer',
+  leadership: 'MCC leadership',
+  regulator: 'Regulator',
+  umucunda_a: 'Umucunda Type A',
+  umucunda_b: 'Umucunda Type B',
   accountant: 'Accountant',
   collector: 'Collector',
   viewer: 'Viewer',
@@ -112,9 +182,15 @@ export const ROLE_LABELS: Record<RoleCode, string> = {
 };
 
 export const ROLE_DESCRIPTIONS: Record<RoleCode, string> = {
-  owner: 'Full system access; all permissions',
+  system_admin: 'Full platform access; all permissions',
   admin: 'Administrative access; manage users and settings',
   manager: 'Full operational access; sales, collections, inventory, analytics; can manage team members',
+  veterinary_officer: 'Quality testing and collection intake supervision with inventory visibility',
+  casual_laborer: 'Task-oriented gate and tank operations with limited operational read access',
+  leadership: 'Governance view with aggregate analytics and operational monitoring',
+  regulator: 'Read-only compliance and traceability oversight access',
+  umucunda_a: 'Collector profile managing own milk plus grouped collection operations',
+  umucunda_b: 'Collector profile focused on manifest-first grouped collection operations',
   accountant: 'Finance access only; dashboard, payroll, loans, charges and finance reporting',
   collector: 'Milk receptionist access; sales and collections with supplier/customer views and inventory item management',
   viewer: 'Read-only access to main modules',
