@@ -8,7 +8,9 @@ import {
   AccountingTransaction,
   ReceivablesSummary,
   PayablesSummary,
+  ExpenseCategoryAccount,
 } from '@/lib/api/accounting';
+import { milkProductionApi, type MilkCostPerLitreReport } from '@/lib/api/milk-production';
 import { useToastStore } from '@/store/toast';
 import Icon, {
   faCalendar,
@@ -58,7 +60,15 @@ export default function FinancePage() {
   const [recordAmount, setRecordAmount] = useState('');
   const [recordDescription, setRecordDescription] = useState('');
   const [recordDate, setRecordDate] = useState(() => toYYYYMMDD(new Date()));
+  const [recordCategoryAccountId, setRecordCategoryAccountId] = useState('');
+  const [recordDairySharePct, setRecordDairySharePct] = useState('100');
+  const [recordCostTags, setRecordCostTags] = useState('dairy');
+  const [expenseCategoryAccounts, setExpenseCategoryAccounts] = useState<ExpenseCategoryAccount[]>([]);
   const [recordSubmitting, setRecordSubmitting] = useState(false);
+  const [milkCostReport, setMilkCostReport] = useState<MilkCostPerLitreReport | null>(null);
+  const [includeInventoryFeedCosts, setIncludeInventoryFeedCosts] = useState(true);
+  const [avoidDoubleCounting, setAvoidDoubleCounting] = useState(true);
+  const [allocationBasis, setAllocationBasis] = useState<'producing_cows' | 'total_cows' | 'production_litres'>('producing_cows');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,6 +84,20 @@ export default function FinancePage() {
       setTransactions(txRes);
       setReceivables(recRes);
       setPayables(payRes);
+      try {
+        const costRes = await milkProductionApi.costPerLitre(
+          fromDate,
+          toDate,
+          undefined,
+          includeInventoryFeedCosts,
+          avoidDoubleCounting,
+          allocationBasis,
+        );
+        if (costRes.code === 200 && costRes.data) setMilkCostReport(costRes.data);
+        else setMilkCostReport(null);
+      } catch {
+        setMilkCostReport(null);
+      }
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ?? (e as Error)?.message ?? 'Failed to load finance data';
       setError(msg);
@@ -81,14 +105,22 @@ export default function FinancePage() {
       setTransactions([]);
       setReceivables(null);
       setPayables(null);
+      setMilkCostReport(null);
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate]);
+  }, [fromDate, toDate, includeInventoryFeedCosts, avoidDoubleCounting, allocationBasis]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    accountingApi
+      .getExpenseAccounts(true)
+      .then((accounts) => setExpenseCategoryAccounts(accounts))
+      .catch(() => setExpenseCategoryAccounts([]));
+  }, []);
 
   const handleRecordSubmit = async () => {
     const amount = Number(recordAmount);
@@ -96,6 +128,15 @@ export default function FinancePage() {
       useToastStore.getState().error('Enter a valid amount and description');
       return;
     }
+    const dairySharePct = Number(recordDairySharePct);
+    if (Number.isNaN(dairySharePct) || dairySharePct < 0 || dairySharePct > 100) {
+      useToastStore.getState().error('Dairy share must be between 0 and 100');
+      return;
+    }
+    const tags = recordCostTags
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .filter(Boolean);
     setRecordSubmitting(true);
     try {
       await accountingApi.createTransaction({
@@ -103,11 +144,17 @@ export default function FinancePage() {
         amount,
         description: recordDescription.trim(),
         transaction_date: recordDate,
+        account_id: recordType === 'expense' && recordCategoryAccountId ? recordCategoryAccountId : undefined,
+        dairy_share_pct: dairySharePct,
+        cost_tags: tags,
       });
       useToastStore.getState().success(`${recordType === 'revenue' ? 'Revenue' : 'Expense'} recorded`);
       setShowRecordModal(false);
       setRecordAmount('');
       setRecordDescription('');
+      setRecordCategoryAccountId('');
+      setRecordDairySharePct('100');
+      setRecordCostTags('dairy');
       setRecordDate(toYYYYMMDD(new Date()));
       load();
     } catch (e: unknown) {
@@ -259,6 +306,55 @@ export default function FinancePage() {
           {/* Financial breakdown (only when we have income data) */}
           {income && (
             <div className="space-y-4">
+              <div className="rounded-sm border border-gray-200 bg-white p-4 space-y-2">
+                <div className="flex flex-wrap items-center gap-4">
+                  <h3 className="text-sm font-semibold text-gray-700">Milk costing scenario</h3>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={includeInventoryFeedCosts}
+                      onChange={(e) => setIncludeInventoryFeedCosts(e.target.checked)}
+                    />
+                    Include inventory feed costs
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={avoidDoubleCounting}
+                      onChange={(e) => setAvoidDoubleCounting(e.target.checked)}
+                      disabled={!includeInventoryFeedCosts}
+                    />
+                    Avoid double counting
+                  </label>
+                  <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                    Shared-cost allocation
+                    <select
+                      className="rounded border border-gray-300 px-2 py-1 text-sm"
+                      value={allocationBasis}
+                      onChange={(e) => setAllocationBasis(e.target.value as 'producing_cows' | 'total_cows' | 'production_litres')}
+                    >
+                      <option value="producing_cows">Producing cows</option>
+                      <option value="total_cows">Total cows</option>
+                      <option value="production_litres">Production litres</option>
+                    </select>
+                  </label>
+                </div>
+                <p className="text-sm text-gray-700">
+                  Cost per litre (producing cows):{' '}
+                  <span className="font-semibold">
+                    {milkCostReport
+                      ? formatAmount(milkCostReport.cost_per_litre_producing_cows)
+                      : '—'}
+                  </span>
+                </p>
+                {milkCostReport?.notes?.length ? (
+                  <ul className="text-xs text-gray-500 list-disc pl-4">
+                    {milkCostReport.notes.map((note) => (
+                      <li key={note}>{note}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
               <div className="rounded-sm border border-gray-200 bg-white p-4">
                 <h3 className="text-sm font-semibold text-gray-700">Financial Breakdown</h3>
                 <div className="mt-3 space-y-2 border-t border-gray-100 pt-3">
@@ -400,6 +496,46 @@ export default function FinancePage() {
               onChange={(e) => setRecordDescription(e.target.value)}
               className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
               placeholder="e.g. Milk sales"
+            />
+          </div>
+          {recordType === 'expense' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Expense Category</label>
+              <select
+                value={recordCategoryAccountId}
+                onChange={(e) => setRecordCategoryAccountId(e.target.value)}
+                className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
+              >
+                <option value="">Select category (recommended)</option>
+                {expenseCategoryAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Dairy Cost Share (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              value={recordDairySharePct}
+              onChange={(e) => setRecordDairySharePct(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
+              placeholder="100"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Cost Tags (comma separated)</label>
+            <input
+              type="text"
+              value={recordCostTags}
+              onChange={(e) => setRecordCostTags(e.target.value)}
+              className="mt-1 w-full rounded border border-gray-300 px-3 py-2"
+              placeholder="dairy,feed,labour"
             />
           </div>
           <div>

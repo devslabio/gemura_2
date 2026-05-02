@@ -369,6 +369,7 @@ export class InventoryService {
             product_id: productId,
             movement_type: 'adjustment_in',
             quantity: delta,
+            movement_date: new Date(),
             reference_type: 'stock_adjustment',
             reference_id: null,
             description: 'Stock updated (edit)',
@@ -382,6 +383,7 @@ export class InventoryService {
             product_id: productId,
             movement_type: 'adjustment_out',
             quantity: Math.abs(delta),
+            movement_date: new Date(),
             reference_type: 'stock_adjustment',
             reference_id: null,
             description: 'Stock updated (edit)',
@@ -482,6 +484,7 @@ export class InventoryService {
           product_id: productId,
           movement_type: 'adjustment_in',
           quantity: delta,
+          movement_date: new Date(),
           reference_type: 'stock_adjustment',
           reference_id: null,
           description: notes || 'Stock adjustment (increase)',
@@ -495,6 +498,7 @@ export class InventoryService {
           product_id: productId,
           movement_type: 'adjustment_out',
           quantity: Math.abs(delta),
+          movement_date: new Date(),
           reference_type: 'stock_adjustment',
           reference_id: null,
           description: notes || 'Stock adjustment (decrease)',
@@ -574,19 +578,19 @@ export class InventoryService {
       where.movement_type = options.movement_type;
     }
     if (options?.date_from || options?.date_to) {
-      where.created_at = {};
-      if (options.date_from) where.created_at.gte = new Date(options.date_from);
+      where.movement_date = {};
+      if (options.date_from) where.movement_date.gte = new Date(options.date_from);
       if (options.date_to) {
         const d = new Date(options.date_to);
         d.setHours(23, 59, 59, 999);
-        where.created_at.lte = d;
+        where.movement_date.lte = d;
       }
     }
 
     const [items, total] = await Promise.all([
       this.prisma.inventoryMovement.findMany({
         where,
-        orderBy: { created_at: 'desc' },
+        orderBy: [{ movement_date: 'desc' }, { created_at: 'desc' }],
         skip,
         take: limit,
         include: {
@@ -610,6 +614,7 @@ export class InventoryService {
           reference_id: m.reference_id,
           description: m.description,
           unit_price: m.unit_price != null ? Number(m.unit_price) : null,
+          movement_date: m.movement_date,
           created_at: m.created_at,
           created_by: m.created_by_user ? { id: m.created_by_user.id, name: m.created_by_user.name } : null,
         })),
@@ -666,19 +671,19 @@ export class InventoryService {
     if (options?.product_id) where.product_id = options.product_id;
     if (options?.movement_type) where.movement_type = options.movement_type;
     if (options?.date_from || options?.date_to) {
-      where.created_at = {};
-      if (options.date_from) where.created_at.gte = new Date(options.date_from);
+      where.movement_date = {};
+      if (options.date_from) where.movement_date.gte = new Date(options.date_from);
       if (options.date_to) {
         const d = new Date(options.date_to);
         d.setHours(23, 59, 59, 999);
-        where.created_at.lte = d;
+        where.movement_date.lte = d;
       }
     }
 
     const [items, total] = await Promise.all([
       this.prisma.inventoryMovement.findMany({
         where,
-        orderBy: { created_at: 'desc' },
+        orderBy: [{ movement_date: 'desc' }, { created_at: 'desc' }],
         skip,
         take: limit,
         include: {
@@ -704,6 +709,7 @@ export class InventoryService {
           reference_id: m.reference_id,
           description: m.description,
           unit_price: m.unit_price != null ? Number(m.unit_price) : null,
+          movement_date: m.movement_date,
           created_at: m.created_at,
           created_by: m.created_by_user ? { id: m.created_by_user.id, name: m.created_by_user.name } : null,
         })),
@@ -1301,6 +1307,7 @@ export class InventoryService {
           product_id: productId,
           movement_type: 'sale_out',
           quantity: createSaleDto.quantity,
+          movement_date: saleDate,
           reference_type: 'inventory_sale',
           reference_id: inventorySale.id,
           description: `Sale to ${buyerLabel}`,

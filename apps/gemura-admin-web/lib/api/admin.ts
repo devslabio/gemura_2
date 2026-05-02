@@ -337,7 +337,6 @@ export const adminApi = {
     if (typeof tzOffsetMinutes === 'number') params.tz_offset_minutes = tzOffsetMinutes;
     return apiClient.getBlob('/admin/onboarding-submissions/export-xlsx', { params });
   },
-
   getOnboardingSubmission: async (submissionId: string, accountId?: string): Promise<{ code: number; data: Record<string, unknown> }> => {
     const params = accountId ? { account_id: accountId } : {};
     return apiClient.get(`/admin/onboarding-submissions/${submissionId}`, { params });

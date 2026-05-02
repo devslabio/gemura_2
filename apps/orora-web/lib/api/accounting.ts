@@ -30,6 +30,9 @@ export interface AccountingTransaction {
   description: string;
   transaction_date: string;
   category_account?: string;
+  farm_id?: string | null;
+  dairy_share_pct?: number;
+  cost_tags?: string[];
 }
 
 export interface CreateTransactionData {
@@ -38,6 +41,15 @@ export interface CreateTransactionData {
   description: string;
   transaction_date: string; // YYYY-MM-DD
   account_id?: string;
+  farm_id?: string;
+  dairy_share_pct?: number;
+  cost_tags?: string[];
+}
+
+export interface ExpenseCategoryAccount {
+  id: string;
+  code: string;
+  name: string;
 }
 
 /** Customer/Supplier info in receivables/payables */
@@ -171,6 +183,13 @@ export const accountingApi = {
   createTransaction: async (data: CreateTransactionData): Promise<AccountingTransaction> => {
     const res = await apiClient.post('/accounting/transactions', data);
     return unwrap<AccountingTransaction>(res);
+  },
+
+  getExpenseAccounts: async (ensureDefaults = true): Promise<ExpenseCategoryAccount[]> => {
+    const res = await apiClient.get('/accounting/transactions/expense-accounts/list', {
+      params: { ensure_defaults: ensureDefaults ? 'true' : 'false' },
+    });
+    return unwrap<ExpenseCategoryAccount[]>(res);
   },
 
   getTransactionById: async (id: string): Promise<AccountingTransaction> => {

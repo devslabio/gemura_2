@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsNumber, IsEnum, IsOptional, IsUUID, IsDateString, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsNumber, IsEnum, IsOptional, IsUUID, IsDateString, Min, Max, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 import { IsNotFutureDate } from '../../../../common/validators/not-future-date.validator';
 
@@ -57,4 +57,38 @@ export class CreateTransactionDto {
   @IsOptional()
   @IsUUID()
   account_id?: string; // Optional: specific revenue/expense account from chart of accounts
+
+  @ApiProperty({
+    description: 'Optional farm UUID for direct farm-level cost attribution.',
+    required: false,
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  })
+  @IsOptional()
+  @IsUUID()
+  farm_id?: string;
+
+  @ApiProperty({
+    description: 'Optional percentage of this transaction attributable to dairy costing (0-100). Defaults to 100 when omitted.',
+    required: false,
+    example: 80,
+    minimum: 0,
+    maximum: 100,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  @Min(0)
+  @Max(100)
+  dairy_share_pct?: number;
+
+  @ApiProperty({
+    description: 'Optional cost tags (e.g. dairy, feed, labour).',
+    required: false,
+    type: [String],
+    example: ['dairy', 'feed'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  cost_tags?: string[];
 }

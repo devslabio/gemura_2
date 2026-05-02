@@ -2,8 +2,15 @@
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAuthStore } from '@/store/auth';
-import { milkProductionApi, MilkProductionRecord, MILK_PRODUCTION_SESSIONS, MilkProductionFilters } from '@/lib/api/milk-production';
+import {
+  milkProductionApi,
+  MilkProductionRecord,
+  MILK_PRODUCTION_SESSIONS,
+  MilkProductionFilters,
+  MilkCostPerLitreReport,
+} from '@/lib/api/milk-production';
 import { animalsApi, Animal } from '@/lib/api/animals';
+import { farmsApi, Farm } from '@/lib/api/farms';
 import { useToastStore } from '@/store/toast';
 import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
 import FilterBar, { FilterBarGroup, FilterBarActions } from '@/app/components/FilterBar';
@@ -28,9 +35,14 @@ export default function MilkProductionPage() {
   const [error, setError] = useState('');
   const [records, setRecords] = useState<MilkProductionRecord[]>([]);
   const [report, setReport] = useState<{ total_production_litres: number; total_sold_litres: number } | null>(null);
+  const [costReport, setCostReport] = useState<MilkCostPerLitreReport | null>(null);
+  const [includeInventoryFeedCosts, setIncludeInventoryFeedCosts] = useState(true);
+  const [avoidDoubleCounting, setAvoidDoubleCounting] = useState(true);
+  const [allocationBasis, setAllocationBasis] = useState<'producing_cows' | 'total_cows' | 'production_litres'>('producing_cows');
   const [filters, setFilters] = useState<MilkProductionFilters>({});
   const [recordModalOpen, setRecordModalOpen] = useState(false);
   const [animals, setAnimals] = useState<Animal[]>([]);
+  const [farms, setFarms] = useState<Farm[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [recordForm, setRecordForm] = useState({
     animal_id: '',
@@ -45,23 +57,34 @@ export default function MilkProductionPage() {
     try {
       setLoading(true);
       setError('');
-      const hasFilters = filters.animal_id || filters.session || filters.from || filters.to;
+      const hasFilters = filters.animal_id || filters.farm_id || filters.session || filters.from || filters.to;
       const listFilters = hasFilters ? filters : undefined;
-      const [listRes, reportRes] = await Promise.all([
+      const [listRes, reportRes, costRes] = await Promise.all([
         milkProductionApi.list(accountId, listFilters),
         milkProductionApi.report(accountId, filters.from, filters.to),
+        milkProductionApi.costPerLitre(
+          accountId,
+          filters.from,
+          filters.to,
+          filters.farm_id,
+          includeInventoryFeedCosts,
+          avoidDoubleCounting,
+          allocationBasis,
+        ),
       ]);
       if (listRes.code === 200 && listRes.data) setRecords(listRes.data);
       if (reportRes.code === 200 && reportRes.data) setReport(reportRes.data);
+      if (costRes.code === 200 && costRes.data) setCostReport(costRes.data);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { message?: string } }; message?: string };
       setError(e?.response?.data?.message || e?.message || 'Failed to load production');
       setRecords([]);
       setReport(null);
+      setCostReport(null);
     } finally {
       setLoading(false);
     }
-  }, [accountId, filters]);
+  }, [accountId, filters, includeInventoryFeedCosts, avoidDoubleCounting, allocationBasis]);
 
   useEffect(() => {
     load();
@@ -70,12 +93,17 @@ export default function MilkProductionPage() {
   useEffect(() => {
     if (!accountId) {
       setAnimals([]);
+      setFarms([]);
       return;
     }
     animalsApi.getList(accountId).then((res) => {
       if (res.code === 200 && res.data) setAnimals(res.data);
       else setAnimals([]);
     }).catch(() => setAnimals([]));
+    farmsApi.list(accountId).then((res) => {
+      if (res.code === 200 && res.data) setFarms(res.data);
+      else setFarms([]);
+    }).catch(() => setFarms([]));
   }, [accountId]);
 
   const animalOptions = useMemo(
@@ -209,7 +237,45 @@ export default function MilkProductionPage() {
       )}
 
       {report != null && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-3">
+          <div className="bg-white border border-gray-200 rounded-sm p-3">
+            <div className="flex flex-wrap items-center gap-4">
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={includeInventoryFeedCosts}
+                  onChange={(e) => setIncludeInventoryFeedCosts(e.target.checked)}
+                />
+                Include inventory feed costs
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={avoidDoubleCounting}
+                  onChange={(e) => setAvoidDoubleCounting(e.target.checked)}
+                  disabled={!includeInventoryFeedCosts}
+                />
+                Avoid double counting (inventory-linked tags)
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                Shared-cost allocation
+                <select
+                  className="input py-1 px-2 text-sm"
+                  value={allocationBasis}
+                  onChange={(e) => setAllocationBasis(e.target.value as 'producing_cows' | 'total_cows' | 'production_litres')}
+                >
+                  <option value="producing_cows">Producing cows</option>
+                  <option value="total_cows">Total cows</option>
+                  <option value="production_litres">Production litres</option>
+                </select>
+              </label>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Use these switches for scenario analysis before locking pricing policy.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white border border-gray-200 rounded-sm p-4 flex items-center gap-4">
             <div className="w-12 h-12 rounded-sm bg-[var(--primary)]/10 flex items-center justify-center">
               <Icon icon={faBox} className="text-[var(--primary)]" size="lg" />
@@ -230,6 +296,68 @@ export default function MilkProductionPage() {
               {(filters.from || filters.to) && <p className="text-xs text-gray-400">In selected period</p>}
             </div>
           </div>
+          <div className="bg-white border border-gray-200 rounded-sm p-4 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-sm bg-amber-100 flex items-center justify-center">
+              <Icon icon={faChartLine} className="text-amber-700" size="lg" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Cost per litre (producing cows)</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {costReport
+                  ? new Intl.NumberFormat('en-RW', {
+                      style: 'currency',
+                      currency: 'RWF',
+                      minimumFractionDigits: 0,
+                    }).format(costReport.cost_per_litre_producing_cows)
+                  : '—'}
+              </p>
+              <p className="text-xs text-gray-400">
+                {costReport ? `${costReport.producing_cows} producing / ${costReport.total_cows} cows` : '—'}
+              </p>
+            </div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-sm p-4 flex items-center gap-4">
+            <div className="w-12 h-12 rounded-sm bg-slate-100 flex items-center justify-center">
+              <Icon icon={faBox} className="text-slate-600" size="lg" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-500">Allocated non-producing cost</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {costReport
+                  ? new Intl.NumberFormat('en-RW', {
+                      style: 'currency',
+                      currency: 'RWF',
+                      minimumFractionDigits: 0,
+                    }).format(costReport.non_producing_cost_estimate)
+                  : '—'}
+              </p>
+              <p className="text-xs text-gray-400">
+                {costReport ? `${costReport.non_producing_cows} non-producing cows` : '—'}
+              </p>
+            </div>
+          </div>
+          </div>
+
+          {costReport && (
+            <div className="bg-white border border-gray-200 rounded-sm p-4 space-y-2">
+              <h3 className="text-sm font-semibold text-gray-900">Costing assumptions</h3>
+              <p className="text-sm text-gray-700">
+                Accounting expense: {new Intl.NumberFormat('en-RW', { style: 'currency', currency: 'RWF', minimumFractionDigits: 0 }).format(costReport.total_expense_accounting)}
+                {' · '}
+                Inventory feed expense: {new Intl.NumberFormat('en-RW', { style: 'currency', currency: 'RWF', minimumFractionDigits: 0 }).format(costReport.total_expense_inventory_feed)}
+              </p>
+              {costReport.farm_id && (
+                <p className="text-xs text-amber-700">
+                  Farm filter is applied to production/cow counts, but some costs can remain account-level unless farm-tagged.
+                </p>
+              )}
+              <ul className="text-xs text-gray-500 list-disc pl-4">
+                {costReport.notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
@@ -249,6 +377,15 @@ export default function MilkProductionPage() {
             onChange={(v) => handleFilterChange('session', v)}
             options={SESSION_OPTIONS}
             placeholder="All sessions"
+            className="w-full"
+          />
+        </FilterBarGroup>
+        <FilterBarGroup label="Farm">
+          <Select
+            value={filters.farm_id || ''}
+            onChange={(v) => handleFilterChange('farm_id', v)}
+            options={[{ value: '', label: 'All farms' }, ...farms.map((f) => ({ value: f.id, label: f.name }))]}
+            placeholder="All farms"
             className="w-full"
           />
         </FilterBarGroup>

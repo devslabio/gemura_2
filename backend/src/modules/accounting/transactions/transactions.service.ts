@@ -7,6 +7,20 @@ import { CreateTransactionDto, TransactionType } from './dto/create-transaction.
 export class TransactionsService {
   constructor(private prisma: PrismaService) {}
 
+  private readonly dairyExpenseCategorySeeds = [
+    { codeSuffix: 'FEED', name: 'Feed & Fodder' },
+    { codeSuffix: 'LABOUR', name: 'Labour' },
+    { codeSuffix: 'VET', name: 'Veterinary & Drugs' },
+    { codeSuffix: 'BREEDING', name: 'Breeding / AI' },
+    { codeSuffix: 'UTILITIES', name: 'Utilities' },
+    { codeSuffix: 'WATER', name: 'Water' },
+    { codeSuffix: 'ELECTRICITY', name: 'Electricity' },
+    { codeSuffix: 'MAINTENANCE', name: 'Maintenance & Tools' },
+    { codeSuffix: 'INSURANCE', name: 'Livestock Insurance' },
+    { codeSuffix: 'TRANSPORT', name: 'Transport' },
+    { codeSuffix: 'OVERHEAD', name: 'General Overheads' },
+  ] as const;
+
   /**
    * Chart of account IDs that scope P&L and the finance transaction list to one farm/tenant ledger
    * (same rules as ReportsService income statement).
@@ -31,7 +45,7 @@ export class TransactionsService {
     return accountCharts.map((c) => c.id);
   }
 
-  async createTransaction(user: User, createDto: CreateTransactionDto) {
+  private async getDefaultAccount(user: User) {
     if (!user.default_account_id) {
       throw new BadRequestException({
         code: 400,
@@ -39,18 +53,85 @@ export class TransactionsService {
         message: 'No valid default account found. Please set a default account first.',
       });
     }
-
-    // Get user's default account
     const defaultAccount = await this.prisma.account.findUnique({
       where: { id: user.default_account_id },
     });
-
     if (!defaultAccount) {
       throw new BadRequestException({
         code: 400,
         status: 'error',
         message: 'Default account not found.',
       });
+    }
+    return defaultAccount;
+  }
+
+  async ensureDairyExpenseAccounts(user: User) {
+    const defaultAccount = await this.getDefaultAccount(user);
+    const prefix = defaultAccount.code || defaultAccount.id.substring(0, 8).toUpperCase();
+    const createdOrExisting = await Promise.all(
+      this.dairyExpenseCategorySeeds.map(async (seed) => {
+        const code = `EXP-${prefix}-${seed.codeSuffix}`;
+        let account = await this.prisma.chartOfAccount.findFirst({
+          where: { code, account_type: 'Expense', is_active: true },
+        });
+        if (!account) {
+          account = await this.prisma.chartOfAccount.create({
+            data: {
+              code,
+              name: `${seed.name} - ${defaultAccount.name}`,
+              account_type: 'Expense',
+              is_active: true,
+            },
+          });
+        }
+        return account;
+      }),
+    );
+    return createdOrExisting;
+  }
+
+  async getExpenseAccounts(user: User, ensureDefaults = false) {
+    const defaultAccount = await this.getDefaultAccount(user);
+    const prefix = defaultAccount.code || defaultAccount.id.substring(0, 8).toUpperCase();
+    if (ensureDefaults) {
+      await this.ensureDairyExpenseAccounts(user);
+    }
+    const accounts = await this.prisma.chartOfAccount.findMany({
+      where: {
+        account_type: 'Expense',
+        is_active: true,
+        code: { startsWith: `EXP-${prefix}` },
+      },
+      orderBy: [{ code: 'asc' }],
+      select: {
+        id: true,
+        code: true,
+        name: true,
+      },
+    });
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Expense accounts fetched successfully.',
+      data: accounts,
+    };
+  }
+
+  async createTransaction(user: User, createDto: CreateTransactionDto) {
+    const defaultAccount = await this.getDefaultAccount(user);
+    if (createDto.farm_id) {
+      const farm = await this.prisma.farm.findFirst({
+        where: { id: createDto.farm_id, account_id: defaultAccount.id },
+        select: { id: true },
+      });
+      if (!farm) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Farm not found or does not belong to this account.',
+        });
+      }
     }
 
     // Find or create Cash/Asset account for this account
@@ -132,12 +213,20 @@ export class TransactionsService {
     // For Expense: Debit Expense account, Credit Cash account
     const transactionDate = new Date(createDto.transaction_date);
     const amount = Number(createDto.amount);
+    const dairySharePct =
+      createDto.dairy_share_pct == null ? 100 : Math.min(100, Math.max(0, Number(createDto.dairy_share_pct)));
+    const costTags = Array.isArray(createDto.cost_tags)
+      ? createDto.cost_tags.map((t) => String(t).trim().toLowerCase()).filter(Boolean)
+      : [];
 
     const transaction = await this.prisma.accountingTransaction.create({
       data: {
         transaction_date: transactionDate,
         description: createDto.description,
         total_amount: amount,
+        farm_id: createDto.farm_id || null,
+        dairy_share_pct: dairySharePct,
+        cost_tags: costTags,
         created_by: user.id,
         entries: {
           create: [
@@ -197,11 +286,14 @@ export class TransactionsService {
         account: defaultAccount.name,
         category_account: categoryAccount.name,
         cash_account: cashAccount.name,
+        farm_id: (transaction as any).farm_id ?? null,
+        dairy_share_pct: Number((transaction as any).dairy_share_pct ?? 100),
+        cost_tags: Array.isArray((transaction as any).cost_tags) ? (transaction as any).cost_tags : [],
       },
     };
   }
 
-  async getTransactions(user: User, filters?: { type?: TransactionType; date_from?: string; date_to?: string; limit?: number }) {
+  async getTransactions(user: User, filters?: { type?: TransactionType; date_from?: string; date_to?: string; limit?: number; farm_id?: string }) {
     if (!user.default_account_id) {
       throw new BadRequestException({
         code: 400,
@@ -236,8 +328,15 @@ export class TransactionsService {
             account_id: { in: accountScopedChartIds },
           },
         },
-        ...(from && { transaction_date: { gte: from } }),
-        ...(to && { transaction_date: { lte: to } }),
+        ...((from || to)
+          ? {
+              transaction_date: {
+                ...(from ? { gte: from } : {}),
+                ...(to ? { lte: to } : {}),
+              },
+            }
+          : {}),
+        ...(filters?.farm_id ? { farm_id: filters.farm_id } : {}),
       },
       include: {
         entries: {
@@ -306,6 +405,9 @@ export class TransactionsService {
           description: t.description,
           transaction_date: t.transaction_date,
           category_account: categoryAccount,
+          farm_id: (t as any).farm_id ?? null,
+          dairy_share_pct: Number((t as any).dairy_share_pct ?? 100),
+          cost_tags: Array.isArray((t as any).cost_tags) ? (t as any).cost_tags : [],
         };
       })
       .filter((t) => t !== null);
@@ -419,6 +521,9 @@ export class TransactionsService {
         transaction_date: transaction.transaction_date,
         category_account: categoryAccount,
         cash_account: transaction.entries.find((e) => e.account.account_type === 'Asset')?.account.name,
+        farm_id: (transaction as any).farm_id ?? null,
+        dairy_share_pct: Number((transaction as any).dairy_share_pct ?? 100),
+        cost_tags: Array.isArray((transaction as any).cost_tags) ? (transaction as any).cost_tags : [],
         entries: transaction.entries.map((e) => ({
           account_name: e.account.name,
           account_type: e.account.account_type,

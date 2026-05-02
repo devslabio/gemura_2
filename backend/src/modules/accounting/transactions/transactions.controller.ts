@@ -152,6 +152,11 @@ export class TransactionsController {
     type: Number,
     example: 50,
   })
+  @ApiQuery({
+    name: 'farm_id',
+    required: false,
+    description: 'Optional farm UUID for farm-attributed transactions',
+  })
   @ApiResponse({
     status: 200,
     description: 'Transactions fetched successfully',
@@ -200,13 +205,38 @@ export class TransactionsController {
     @Query('date_from') dateFrom?: string,
     @Query('date_to') dateTo?: string,
     @Query('limit') limit?: string,
+    @Query('farm_id') farmId?: string,
   ) {
     return this.transactionsService.getTransactions(user, {
       type,
       date_from: dateFrom,
       date_to: dateTo,
       limit: limit ? parseInt(limit, 10) : undefined,
+      farm_id: farmId,
     });
+  }
+
+  @Get('expense-accounts/list')
+  @ApiOperation({
+    summary: 'List expense category accounts',
+    description:
+      'Returns account-scoped Expense chart accounts (EXP-*). Optional ensure_defaults=true seeds dairy-specific categories if missing.',
+  })
+  @ApiQuery({
+    name: 'ensure_defaults',
+    required: false,
+    description: 'Create default dairy expense categories before listing',
+    example: 'true',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Expense accounts fetched successfully',
+  })
+  async getExpenseAccounts(
+    @CurrentUser() user: User,
+    @Query('ensure_defaults') ensureDefaults?: string,
+  ) {
+    return this.transactionsService.getExpenseAccounts(user, ensureDefaults === 'true');
   }
 
   @Get(':id')

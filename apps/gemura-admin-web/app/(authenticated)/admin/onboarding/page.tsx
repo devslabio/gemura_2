@@ -56,7 +56,7 @@ export default function OnboardingSubmissionsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
   const [pendingCount, setPendingCount] = useState(0);
-  const [statusFilter, setStatusFilter] = useState('approved');
+  const [statusFilter, setStatusFilter] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [query, setQuery] = useState('');
   const [datePreset, setDatePreset] = useState('all');
@@ -222,8 +222,9 @@ export default function OnboardingSubmissionsPage() {
             MCC onboarding
           </h1>
           <p className="text-sm text-gray-600 mt-1">
-            Superadmin view for MCCs coming from the public onboarding wizard. Default filter is onboarded (approved), and you
-            can switch status to inspect pending/rejected records.
+            Superadmin view for MCCs from the public onboarding wizard. Approve to create an account and link the applicant.
+            Rows come from the API database (<span className="font-mono text-xs">mcc_onboarding_submissions</span>
+            ); use <span className="font-medium">Status</span> to filter — default is <span className="font-medium">all</span>.
           </p>
         </div>
         <div className="flex items-center gap-2">

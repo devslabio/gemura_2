@@ -1048,6 +1048,9 @@ model AccountingTransaction {
   reference_number String?  @unique @map("reference_number")
   description      String?
   total_amount     Decimal  @map("total_amount") @db.Decimal(15, 2)
+  farm_id          String?  @map("farm_id") @db.Uuid
+  dairy_share_pct  Decimal? @map("dairy_share_pct") @db.Decimal(5, 2)
+  cost_tags        String[] @default([]) @map("cost_tags")
   created_at       DateTime @default(now()) @map("created_at")
   created_by       String?  @map("created_by") @db.Uuid
 
@@ -1055,6 +1058,7 @@ model AccountingTransaction {
   entries         AccountingTransactionEntry[]
 
   @@index([transaction_date])
+  @@index([farm_id])
   @@index([reference_number])
   @@index([created_at])
   @@map("accounting_transactions")
@@ -1402,6 +1406,7 @@ model InventoryMovement {
   product_id       String                         @map("product_id") @db.Uuid
   movement_type    InventoryMovementType          @map("movement_type")
   quantity         Int                            // Always positive; direction from movement_type
+  movement_date    DateTime                       @default(now()) @map("movement_date")
   reference_type   InventoryMovementReferenceType @map("reference_type")
   reference_id     String?                        @map("reference_id") @db.Uuid // e.g. inventory_sale.id
   description      String?                        @db.Text // e.g. "Sale to John (A_ABC)", "New shipment"
@@ -1415,6 +1420,7 @@ model InventoryMovement {
 
   @@index([product_id])
   @@index([movement_type])
+  @@index([movement_date])
   @@index([reference_type])
   @@index([created_at])
   @@map("inventory_movements")
