@@ -74,6 +74,36 @@ enum MilkSaleStatus {
   deleted
 }
 
+/// Gate arrival classification (§12.2).
+enum MccDeliverySourceType {
+  direct
+  umucunda_a
+  umucunda_b
+}
+
+enum MccMilkManifestStatus {
+  draft
+  submitted
+  accepted
+  rejected
+  superseded
+}
+
+enum MccMilkTestOutcome {
+  pending
+  accepted
+  rejected
+}
+
+/// Post-rejection disposition for traceability (§12.2).
+enum MccSourceResolutionStatus {
+  unresolved
+  resolved
+  secondary_test
+  frozen
+  auto_zero
+}
+
 enum RelationshipStatus {
   active
   inactive
@@ -310,6 +340,13 @@ model Account {
   pig_batches           PigBatch[]
   pig_farrowings        PigFarrowing[]
   mcc_onboarding_linked MccOnboardingSubmission[] @relation("MccOnboardingLinkedAccount")
+  mcc_gate_deliveries_as_mcc         MccGateDelivery[]               @relation("MccGateDeliveryMccAccount")
+  mcc_gate_deliveries_as_source      MccGateDelivery[]               @relation("MccGateDeliverySourceAccount")
+  mcc_milk_manifests_as_mcc          MccMilkManifest[]               @relation("MccManifestMccAccount")
+  mcc_milk_manifests_as_umucunda     MccMilkManifest[]               @relation("MccManifestUmucundaSupplier")
+  mcc_manifest_lines_as_farmer       MccManifestLine[]               @relation("MccManifestLineFarmerSupplier")
+  mcc_credit_events_farmer           MccCreditEvent[]               @relation("MccCreditEventFarmer")
+  mcc_credit_events_as_mcc           MccCreditEvent[]               @relation("MccCreditEventMccAccount")
 
   @@index([code])
   @@index([type])
@@ -368,6 +405,8 @@ model User {
   default_account              Account?           @relation("UserDefaultAccount", fields: [default_account_id], references: [id], onDelete: SetNull)
   user_accounts                UserAccount[]
   milk_sales_recorded          MilkSale[]         @relation("MilkSaleRecordedBy")
+  mcc_gate_deliveries_recorded MccGateDelivery[] @relation("MccGateDeliveryRecordedBy")
+  mcc_milk_tests_recorded      MccMilkTestResult[] @relation("MccMilkTestTester")
   created_accounts             Account[]          @relation("AccountCreatedBy")
   updated_accounts             Account[]          @relation("AccountUpdatedBy")
   created_users                User[]             @relation("UserCreatedBy")
@@ -522,6 +561,7 @@ model MilkSale {
   payment_status      String?        @default("unpaid") @map("payment_status")
   payment_history     Json?          @map("payment_history")
   recorded_by         String         @map("recorded_by") @db.Uuid
+  mcc_gate_delivery_id String?      @unique @map("mcc_gate_delivery_id") @db.Uuid
   created_at          DateTime       @default(now()) @map("created_at")
   updated_at          DateTime       @updatedAt @map("updated_at")
   created_by          String?        @map("created_by") @db.Uuid
@@ -531,6 +571,7 @@ model MilkSale {
   supplier_account    Account             @relation("MilkSaleSupplier", fields: [supplier_account_id], references: [id], onDelete: Restrict)
   customer_account    Account             @relation("MilkSaleCustomer", fields: [customer_account_id], references: [id], onDelete: Restrict)
   recorded_by_user    User                @relation("MilkSaleRecordedBy", fields: [recorded_by], references: [id], onDelete: Restrict)
+  mcc_gate_delivery   MccGateDelivery?    @relation("MilkSaleGateDelivery", fields: [mcc_gate_delivery_id], references: [id], onDelete: SetNull)
   animal              Animal?              @relation(fields: [animal_id], references: [id], onDelete: SetNull)
   milk_production     MilkProduction?      @relation(fields: [milk_production_id], references: [id], onDelete: SetNull)
 
@@ -543,7 +584,119 @@ model MilkSale {
   @@index([recorded_by])
   @@index([created_at])
   @@index([payment_status])
+  @@index([mcc_gate_delivery_id])
   @@map("milk_sales")
+}
+
+/// Gate-scale milk arrival at an MCC (direct farmer or Umucunda batch); optional manifest per §12.2.
+model MccGateDelivery {
+  id                    String               @id @default(uuid()) @db.Uuid
+  mcc_account_id        String               @map("mcc_account_id") @db.Uuid
+  source_type           MccDeliverySourceType @map("source_type")
+  source_account_id    String               @map("source_account_id") @db.Uuid // Direct farmer supplier or Umucunda supplier account at gate
+  gate_volume_litres   Decimal               @map("gate_volume_litres") @db.Decimal(12, 3)
+  arrived_at            DateTime              @default(now()) @map("arrived_at")
+  recorded_by_user_id   String                @map("recorded_by_user_id") @db.Uuid
+  notes                 String?               @db.Text
+  created_at            DateTime              @default(now()) @map("created_at")
+  updated_at            DateTime              @updatedAt @map("updated_at")
+
+  mcc_account    Account               @relation("MccGateDeliveryMccAccount", fields: [mcc_account_id], references: [id], onDelete: Restrict)
+  source_account Account               @relation("MccGateDeliverySourceAccount", fields: [source_account_id], references: [id], onDelete: Restrict)
+  recorded_by    User                  @relation("MccGateDeliveryRecordedBy", fields: [recorded_by_user_id], references: [id], onDelete: Restrict)
+  manifest       MccMilkManifest?
+  linked_milk_sale MilkSale?           @relation("MilkSaleGateDelivery")
+  milk_test_results MccMilkTestResult[]
+  credit_events       MccCreditEvent[]
+
+  @@index([mcc_account_id, arrived_at(sort: Desc)])
+  @@index([source_account_id, arrived_at(sort: Desc)])
+  @@map("mcc_gate_deliveries")
+}
+
+/// Umucunda manifest with constituent farmer lines (1:1 with gate delivery when used).
+model MccMilkManifest {
+  id                            String               @id @default(uuid()) @db.Uuid
+  gate_delivery_id              String               @unique @map("gate_delivery_id") @db.Uuid
+  mcc_account_id                String               @map("mcc_account_id") @db.Uuid
+  umucunda_supplier_account_id  String               @map("umucunda_supplier_account_id") @db.Uuid
+  manifest_ref                  String               @unique @map("manifest_ref") @db.VarChar(40)
+  status                        MccMilkManifestStatus @default(draft) @map("status")
+  route_metadata                Json?                @map("route_metadata")
+  gps_metadata                   Json?                @map("gps_metadata")
+  submitted_at                   DateTime?            @map("submitted_at")
+  accepted_at                    DateTime?            @map("accepted_at")
+  rejected_at                    DateTime?            @map("rejected_at")
+  rejection_reason               String?               @map("rejection_reason") @db.Text
+  created_at                     DateTime              @default(now()) @map("created_at")
+  updated_at                     DateTime              @updatedAt @map("updated_at")
+
+  gate_delivery       MccGateDelivery   @relation(fields: [gate_delivery_id], references: [id], onDelete: Restrict)
+  mcc_account         Account          @relation("MccManifestMccAccount", fields: [mcc_account_id], references: [id], onDelete: Restrict)
+  umucunda_supplier   Account          @relation("MccManifestUmucundaSupplier", fields: [umucunda_supplier_account_id], references: [id], onDelete: Restrict)
+  lines               MccManifestLine[]
+  credit_events       MccCreditEvent[]
+
+  @@index([mcc_account_id, status])
+  @@index([umucunda_supplier_account_id])
+  @@map("mcc_milk_manifests")
+}
+
+model MccManifestLine {
+  id                         String    @id @default(uuid()) @db.Uuid
+  manifest_id                String    @map("manifest_id") @db.Uuid
+  farmer_supplier_account_id String    @map("farmer_supplier_account_id") @db.Uuid
+  declared_litres            Decimal    @map("declared_litres") @db.Decimal(12, 3)
+  container_id               String?    @map("container_id") @db.VarChar(64)
+
+  manifest         MccMilkManifest     @relation(fields: [manifest_id], references: [id], onDelete: Cascade)
+  farmer_supplier  Account             @relation("MccManifestLineFarmerSupplier", fields: [farmer_supplier_account_id], references: [id], onDelete: Restrict)
+  milk_test_results MccMilkTestResult[]
+
+  @@index([manifest_id])
+  @@index([farmer_supplier_account_id])
+  @@map("mcc_manifest_lines")
+}
+
+model MccMilkTestResult {
+  id                          String                       @id @default(uuid()) @db.Uuid
+  mcc_gate_delivery_id        String                       @map("mcc_gate_delivery_id") @db.Uuid
+  manifest_line_id            String?                      @map("manifest_line_id") @db.Uuid
+  outcome                     MccMilkTestOutcome            @default(pending)
+  rejection_cause             String?                       @map("rejection_cause") @db.Text
+  source_resolution_status    MccSourceResolutionStatus?    @map("source_resolution_status")
+  detail                      Json?
+  tested_by_user_id           String?                      @map("tested_by_user_id") @db.Uuid
+  tested_at                   DateTime                     @default(now()) @map("tested_at")
+
+  gate_delivery MccGateDelivery   @relation(fields: [mcc_gate_delivery_id], references: [id], onDelete: Restrict)
+  manifest_line MccManifestLine? @relation(fields: [manifest_line_id], references: [id], onDelete: SetNull)
+  tester       User?            @relation("MccMilkTestTester", fields: [tested_by_user_id], references: [id], onDelete: SetNull)
+  credit_events MccCreditEvent[]
+
+  @@index([mcc_gate_delivery_id, tested_at(sort: Desc)])
+  @@map("mcc_milk_test_results")
+}
+
+model MccCreditEvent {
+  id                        String              @id @default(uuid()) @db.Uuid
+  farmer_account_id         String               @map("farmer_account_id") @db.Uuid
+  mcc_account_id            String               @map("mcc_account_id") @db.Uuid
+  mcc_gate_delivery_id       String               @map("mcc_gate_delivery_id") @db.Uuid
+  mcc_milk_manifest_id      String?               @map("mcc_milk_manifest_id") @db.Uuid
+  mcc_milk_test_result_id    String?              @map("mcc_milk_test_result_id") @db.Uuid
+  volume_credited_litres    Decimal              @map("volume_credited_litres") @db.Decimal(12, 3)
+  created_at                DateTime             @default(now()) @map("created_at")
+
+  farmer      Account               @relation("MccCreditEventFarmer", fields: [farmer_account_id], references: [id], onDelete: Restrict)
+  mcc_account Account               @relation("MccCreditEventMccAccount", fields: [mcc_account_id], references: [id], onDelete: Restrict)
+  gate_delivery MccGateDelivery      @relation(fields: [mcc_gate_delivery_id], references: [id], onDelete: Restrict)
+  manifest      MccMilkManifest?     @relation(fields: [mcc_milk_manifest_id], references: [id], onDelete: SetNull)
+  test_result   MccMilkTestResult?  @relation(fields: [mcc_milk_test_result_id], references: [id], onDelete: SetNull)
+
+  @@index([farmer_account_id, created_at(sort: Desc)])
+  @@index([mcc_gate_delivery_id])
+  @@map("mcc_credit_events")
 }
 
 // Milk production (per animal or farm per day) – can be linked to sales later via milk_production_id on MilkSale
