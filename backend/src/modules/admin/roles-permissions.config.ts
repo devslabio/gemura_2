@@ -25,11 +25,14 @@ export const ROLES = [
 
 export type RoleCode = (typeof ROLES)[number];
 
-/** Canonical slug for persistence (legacy `owner` → `system_admin`). Empty input returns empty string. */
+/** Canonical slug for persistence (aliases + legacy spellings → platform `ROLES` slugs). */
 export function canonicalPlatformRoleSlug(slug: string | null | undefined): string {
-  const raw = (slug ?? '').trim().toLowerCase();
+  let raw = (slug ?? '').trim().toLowerCase().replace(/\s+/g, '_');
+  raw = raw.replace(/-/g, '_');
   if (!raw) return '';
   if (raw === 'owner') return 'system_admin';
+  if (raw === 'veterinary' || raw === 'veterinarian' || raw === 'veternary') return 'veterinary_officer';
+  if (raw === 'milkreceptionist' || raw === 'milk_receptionist') return 'collector';
   return raw.slice(0, 64);
 }
 
