@@ -7,7 +7,8 @@ import { adminApi, type RoleItem, type PermissionItem } from '@/lib/api/admin';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
 import Icon, { faLock, faChevronDown, faChevronUp, faPlus, faEdit, faTrash } from '@/app/components/Icon';
-import FilterBar, { FilterBarSearch } from '@/app/components/FilterBar';
+import FilterBar, { FilterBarSearch, FilterBarGroup } from '@/app/components/FilterBar';
+import Pagination from '@/app/components/Pagination';
 import { TableSkeleton } from '@/app/components/SkeletonLoader';
 import Modal from '@/app/components/Modal';
 
@@ -19,6 +20,8 @@ type RoleFormState = {
   is_active: boolean;
   is_assignable: boolean;
 };
+
+const PAGE_SIZES = [10, 20, 50, 100];
 
 const emptyForm = (): RoleFormState => ({
   name: '',
@@ -40,6 +43,8 @@ export default function AdminRolesPage() {
   const [permCatalog, setPermCatalog] = useState<PermissionItem[]>([]);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  const [rolesPage, setRolesPage] = useState(1);
+  const [rolesPageSize, setRolesPageSize] = useState(10);
   const [expandedCode, setExpandedCode] = useState<string | null>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -95,6 +100,21 @@ export default function AdminRolesPage() {
         (r.description || '').toLowerCase().includes(q),
     );
   }, [roles, search]);
+
+  useEffect(() => {
+    setRolesPage(1);
+  }, [search]);
+
+  const rolesTotalPages = Math.max(1, Math.ceil(filteredRoles.length / rolesPageSize) || 1);
+
+  useEffect(() => {
+    setRolesPage((p) => Math.min(p, rolesTotalPages));
+  }, [filteredRoles.length, rolesPageSize, rolesTotalPages]);
+
+  const paginatedRoles = useMemo(() => {
+    const start = (rolesPage - 1) * rolesPageSize;
+    return filteredRoles.slice(start, start + rolesPageSize);
+  }, [filteredRoles, rolesPage, rolesPageSize]);
 
   const formatPermissionCode = (code: string) => code.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -261,6 +281,23 @@ export default function AdminRolesPage() {
 
       <FilterBar>
         <FilterBarSearch value={search} onChange={setSearch} placeholder="Search roles by name or description..." />
+        <FilterBarGroup label="Rows per page">
+          <select
+            value={rolesPageSize}
+            onChange={(e) => {
+              const val = Number(e.target.value);
+              setRolesPageSize(val);
+              setRolesPage(1);
+            }}
+            className="input h-9 !py-1.5 !px-3 text-sm w-full text-gray-900"
+          >
+            {PAGE_SIZES.map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </FilterBarGroup>
       </FilterBar>
 
       {error && <div className="bg-red-50 border border-red-200 rounded-sm p-4 text-sm text-red-600">{error}</div>}
@@ -287,7 +324,7 @@ export default function AdminRolesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRoles.map((role) => {
+                {paginatedRoles.map((role) => {
                   const rk = rowKey(role);
                   const isExpanded = expandedCode === rk;
                   return (
@@ -380,6 +417,17 @@ export default function AdminRolesPage() {
           </div>
         )}
       </div>
+
+      {!loading && filteredRoles.length > 0 && (
+        <Pagination
+          currentPage={rolesPage}
+          totalPages={rolesTotalPages}
+          totalItems={filteredRoles.length}
+          pageSize={rolesPageSize}
+          itemLabel="roles"
+          onPageChange={setRolesPage}
+        />
+      )}
 
       <Modal
         open={modalOpen}
