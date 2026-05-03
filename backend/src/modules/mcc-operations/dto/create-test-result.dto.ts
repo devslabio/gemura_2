@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsEnum, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
 
+/** Optional structured quality readings (temperature, fat %, strips, etc.) stored as JSON on `MccMilkTestResult.detail`. */
 export class CreateTestResultDto {
   @ApiProperty({ required: false })
   @IsOptional()
@@ -24,4 +25,14 @@ export class CreateTestResultDto {
   @IsOptional()
   @IsString()
   rejection_cause?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Structured quality fields (e.g. temperature_c, fat_percent, alcohol_pass, lactometer_reading, antibiotic_strip, visual_ok, notes).',
+    additionalProperties: true,
+  })
+  @IsOptional()
+  @IsObject()
+  detail?: Record<string, unknown>;
 }

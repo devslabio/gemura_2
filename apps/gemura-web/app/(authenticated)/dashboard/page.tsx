@@ -36,6 +36,7 @@ import CreateSupplierForm from '../suppliers/CreateSupplierForm';
 import CreateInventoryForm from '../inventory/CreateInventoryForm';
 import dynamic from 'next/dynamic';
 import MccManagerDashboardSection from '@/app/components/manager/MccManagerDashboardSection';
+import VeterinaryQualityStrip from '@/app/components/VeterinaryQualityStrip';
 import { MCC_OPERATIONS_SUB_PANELS } from '@/lib/config/nav.config';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
@@ -162,7 +163,8 @@ function BusinessDashboard() {
   const canCreateSuppliers = hasPermission('create_suppliers');
   const canCreateCustomers = hasPermission('create_customers');
   const canManageInventory = hasPermission('manage_inventory');
-  const quickActionsDisabled = isVeterinaryRole;
+  const showVetQualityStrip =
+    isVeterinaryRole && showMccOpsDashboard && Boolean(currentAccount?.account_id);
 
   const tabs: { id: DashboardTab; label: string }[] = useMemo(() => {
     if (isVeterinaryRole) {
@@ -523,6 +525,13 @@ function BusinessDashboard() {
       {/* Overview — business snapshot: totals, trends, quick actions (all accounts including MCC) */}
       {dashboardTab === 'overview' && (
         <>
+      {showVetQualityStrip && currentAccount?.account_id ? (
+        <VeterinaryQualityStrip
+          accountId={currentAccount.account_id}
+          dateFrom={dateRange.date_from}
+          dateTo={dateRange.date_to}
+        />
+      ) : null}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total Sales"
@@ -747,20 +756,14 @@ function BusinessDashboard() {
               <Icon icon={faPlus} className="text-[var(--primary)]" size="sm" />
               Quick Actions
             </h3>
-            {quickActionsDisabled && (
-              <p className="mt-2 text-xs text-gray-500">
-                Quick actions are disabled for veterinary users.
-              </p>
-            )}
           </div>
           <div className="p-4">
-            <div className={`grid grid-cols-2 sm:grid-cols-3 gap-3 ${quickActionsDisabled ? 'opacity-60' : ''}`}>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {canCreateSales && (
                 <button
                   type="button"
-                  disabled={quickActionsDisabled}
                   onClick={() => setQuickActionModal('sale')}
-                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-[var(--primary)] bg-[var(--primary)]/5 p-5 text-center transition-colors hover:bg-[var(--primary)] hover:text-white disabled:cursor-not-allowed disabled:hover:bg-[var(--primary)]/5 disabled:hover:text-inherit"
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-[var(--primary)] bg-[var(--primary)]/5 p-5 text-center transition-colors hover:bg-[var(--primary)] hover:text-white"
                 >
                   <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-[var(--primary)] text-white group-hover:bg-white group-hover:text-[var(--primary)] transition-colors">
                     <Icon icon={faReceipt} size="lg" />
@@ -771,9 +774,8 @@ function BusinessDashboard() {
               {canCreateCollections && (
                 <button
                   type="button"
-                  disabled={quickActionsDisabled}
                   onClick={() => setQuickActionModal('collection')}
-                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 disabled:cursor-not-allowed"
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
                 >
                   <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
                     <Icon icon={faBox} size="lg" />
@@ -784,9 +786,8 @@ function BusinessDashboard() {
               {canCreateSuppliers && (
                 <button
                   type="button"
-                  disabled={quickActionsDisabled}
                   onClick={() => setQuickActionModal('supplier')}
-                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 disabled:cursor-not-allowed"
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
                 >
                   <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
                     <Icon icon={faBuilding} size="lg" />
@@ -797,9 +798,8 @@ function BusinessDashboard() {
               {canCreateCustomers && (
                 <button
                   type="button"
-                  disabled={quickActionsDisabled}
                   onClick={() => setQuickActionModal('customer')}
-                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 disabled:cursor-not-allowed"
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
                 >
                   <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
                     <Icon icon={faStore} size="lg" />
@@ -810,9 +810,8 @@ function BusinessDashboard() {
               {canManageInventory && (
                 <button
                   type="button"
-                  disabled={quickActionsDisabled}
                   onClick={() => setQuickActionModal('inventory')}
-                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 disabled:cursor-not-allowed"
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
                 >
                   <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
                     <Icon icon={faWarehouse} size="lg" />
@@ -823,9 +822,8 @@ function BusinessDashboard() {
               {canViewAnalytics && (
                 <button
                   type="button"
-                  disabled={quickActionsDisabled}
                   onClick={() => setQuickActionModal('transaction')}
-                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 disabled:cursor-not-allowed"
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
                 >
                   <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
                     <Icon icon={faChartLine} size="lg" />
@@ -834,64 +832,37 @@ function BusinessDashboard() {
                 </button>
               )}
               {canViewAnalytics && (
-                quickActionsDisabled ? (
-                  <div className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center opacity-60 cursor-not-allowed">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600">
-                      <Icon icon={faClipboardList} size="lg" />
-                    </span>
-                    <span className="text-sm font-semibold text-gray-900">Payroll</span>
-                  </div>
-                ) : (
-                  <Link
-                    href="/payroll"
-                    className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
-                  >
-                    <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
-                      <Icon icon={faClipboardList} size="lg" />
-                    </span>
-                    <span className="text-sm font-semibold text-gray-900">Payroll</span>
-                  </Link>
-                )
+                <Link
+                  href="/payroll"
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
+                    <Icon icon={faClipboardList} size="lg" />
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900">Payroll</span>
+                </Link>
               )}
               {canViewAnalytics && (
-                quickActionsDisabled ? (
-                  <div className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center opacity-60 cursor-not-allowed">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600">
-                      <Icon icon={faChartLine} size="lg" />
-                    </span>
-                    <span className="text-sm font-semibold text-gray-900">Finance</span>
-                  </div>
-                ) : (
-                  <Link
-                    href="/finance"
-                    className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
-                  >
-                    <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
-                      <Icon icon={faChartLine} size="lg" />
-                    </span>
-                    <span className="text-sm font-semibold text-gray-900">Finance</span>
-                  </Link>
-                )
+                <Link
+                  href="/finance"
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
+                    <Icon icon={faChartLine} size="lg" />
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900">Finance</span>
+                </Link>
               )}
               {canViewAnalytics && role !== 'accountant' && (
-                quickActionsDisabled ? (
-                  <div className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center opacity-60 cursor-not-allowed">
-                    <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600">
-                      <Icon icon={faDollarSign} size="lg" />
-                    </span>
-                    <span className="text-sm font-semibold text-gray-900">Accounts</span>
-                  </div>
-                ) : (
-                  <Link
-                    href="/accounts"
-                    className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
-                  >
-                    <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
-                      <Icon icon={faDollarSign} size="lg" />
-                    </span>
-                    <span className="text-sm font-semibold text-gray-900">Accounts</span>
-                  </Link>
-                )
+                <Link
+                  href="/accounts"
+                  className="group flex flex-col items-center justify-center gap-2.5 rounded-sm border border-gray-200 bg-white p-5 text-center transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-sm bg-gray-100 text-gray-600 group-hover:bg-[var(--primary)] group-hover:text-white transition-colors">
+                    <Icon icon={faDollarSign} size="lg" />
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900">Accounts</span>
+                </Link>
               )}
             </div>
           </div>
