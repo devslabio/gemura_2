@@ -30,6 +30,7 @@ import {
   faClock,
   faArrowsRotate,
   faRightFromBracket,
+  faChartBar,
 } from '@/app/components/Icon';
 
 /** Account types that see user/operations menu (filtered by role + permissions) */
@@ -70,6 +71,8 @@ export interface NavItem {
   requiresPermission?: string;
   /** User needs at least one of these (for operations section). Takes precedence over `requiresPermission` when set. */
   requiresAnyPermission?: string[];
+  /** When true, sidebar shows this link only for veterinary-style roles that see the dashboard Quality desk. */
+  vetQualityDeskOnly?: boolean;
 }
 
 /** Sub-views for the dashboard “Operations” tab (also used at `/operations/*` via sidebar). */
@@ -97,10 +100,10 @@ export const MCC_OPERATIONS_SUB_PANELS: {
   },
   {
     id: 'traceability',
-    label: 'Traceability',
+    label: 'Milk tests',
     href: '/operations/traceability',
-    description: 'Milk tests and resolution workflow.',
-    requiresAnyPermission: ['mcc_view_operations'],
+    description: 'Milk tests, manifest lines, and rejection resolution.',
+    requiresAnyPermission: ['mcc_view_operations', 'mcc_manage_operations'],
   },
   {
     id: 'staff',
@@ -192,11 +195,20 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
   },
   {
     icon: faEye,
-    label: 'Traceability',
+    label: 'Milk tests',
     href: '/operations/traceability',
     section: 'operations',
     navGroup: 'MCC operations',
-    requiresPermission: 'mcc_view_operations',
+    requiresAnyPermission: ['mcc_view_operations', 'mcc_manage_operations'],
+  },
+  {
+    icon: faChartBar,
+    label: 'Quality desk',
+    href: '/dashboard?tab=quality',
+    section: 'operations',
+    navGroup: 'MCC operations',
+    requiresAnyPermission: ['mcc_view_operations', 'mcc_manage_operations'],
+    vetQualityDeskOnly: true,
   },
   {
     icon: faUsers,

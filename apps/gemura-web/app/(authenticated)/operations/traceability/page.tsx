@@ -39,11 +39,11 @@ function isUmucundaSource(sourceType: string) {
   return sourceType === 'umucunda_a' || sourceType === 'umucunda_b';
 }
 
-/** Umucunda batches need a submitted manifest before recording a test (aligned with MCC spec). */
+/** Umucunda batches need a submitted manifest before recording a test (aligned with API validation). */
 function gateTestBlockedReason(g: MccGateDeliveryRow): string | null {
   if (!isUmucundaSource(g.source_type)) return null;
-  if (!g.manifest) return 'Manifest required';
-  if (g.manifest.status === 'draft') return 'Submit manifest first';
+  if (!g.manifest) return 'Create and submit the Umucunda manifest before recording a milk test.';
+  if (g.manifest.status === 'draft') return 'Submit the manifest before recording a milk test.';
   return null;
 }
 
@@ -111,6 +111,8 @@ function TraceabilityPageInner() {
   const [qualityNotes, setQualityNotes] = useState('');
   const [manifestLineId, setManifestLineId] = useState('');
   const testNextHandledRef = useRef(false);
+  const outcomeDeepLinkConsumedRef = useRef(false);
+  const [resolvingTestId, setResolvingTestId] = useState<string | null>(null);
 
   const sortedTestRows = useMemo(() => {
     return [...rows].sort((a, b) => {
@@ -137,15 +139,24 @@ function TraceabilityPageInner() {
     [gatesFifo],
   );
 
-  const linesForSelectedGate = useMemo(() => {
-    if (!gateId) return [];
-    const m = manifests.find((x) => x.gate_delivery?.id === gateId);
+  const umucundaNeedsManifestBanner = useMemo(() => {
+    if (loading || gates.length === 0 || gatesEligibleForTest.length > 0) return false;
+    return gatesFifo.some((g) => isUmucundaSource(g.source_type));
+  }, [loading, gates.length, gatesEligibleForTest.length, gatesFifo]);
+
+  const manifestLinesGateId =
+    modalMode === 'edit' && editingRow ? editingRow.mcc_gate_delivery_id : gateId;
+
+  const linesForActiveGate = useMemo(() => {
+    if (!manifestLinesGateId) return [];
+    const m = manifests.find((x) => x.gate_delivery?.id === manifestLinesGateId);
     return m?.lines ?? [];
-  }, [manifests, gateId]);
+  }, [manifests, manifestLinesGateId]);
 
   useEffect(() => {
+    if (modalMode !== 'create') return;
     setManifestLineId('');
-  }, [gateId]);
+  }, [gateId, modalMode]);
 
   const {
     page: testPage,
@@ -273,7 +284,12 @@ function TraceabilityPageInner() {
   }, []);
 
   useEffect(() => {
-    if (searchParams.get('outcome') !== 'pending') return;
+    if (searchParams.get('outcome') !== 'pending') {
+      outcomeDeepLinkConsumedRef.current = false;
+      return;
+    }
+    if (outcomeDeepLinkConsumedRef.current) return;
+    outcomeDeepLinkConsumedRef.current = true;
     setOutcome('pending');
     router.replace('/operations/traceability', { scroll: false });
   }, [searchParams, router]);
@@ -300,6 +316,7 @@ function TraceabilityPageInner() {
     setModalMode('edit');
     setEditingRow(row);
     setGateId(row.mcc_gate_delivery_id);
+    setManifestLineId(row.manifest_line_id ?? '');
     setTestOutcome(row.outcome as 'pending' | 'accepted' | 'rejected');
     setRejectionCause(row.rejection_cause ?? '');
     hydrateQualityFromDetail(row.detail ?? undefined);
@@ -343,11 +360,17 @@ function TraceabilityPageInner() {
     setSaving(true);
     try {
       const detail = applyQualityFormToDetail(editingRow.detail ?? undefined);
+      const curLine = manifestLineId.trim();
+      const prevLine = editingRow.manifest_line_id ?? '';
+      const manifestPatch: { manifest_line_id?: string | null } =
+        curLine === prevLine ? {} : curLine === '' ? { manifest_line_id: null } : { manifest_line_id: curLine };
+
       await mccOperationsApi.updateTestResult(editingRow.id, {
         account_id: accountId,
         outcome: testOutcome,
         rejection_cause: testOutcome === 'rejected' ? rejectionCause || undefined : undefined,
         detail,
+        ...manifestPatch,
       });
       toast.success('Test result updated.');
       closeModal();
@@ -360,12 +383,19 @@ function TraceabilityPageInner() {
   };
 
   const setResolution = async (testId: string, status: 'resolved' | 'secondary_test' | 'frozen') => {
+    if (!accountId) {
+      toast.error('No account selected.');
+      return;
+    }
+    setResolvingTestId(testId);
     try {
       await mccManagerApi.updateTestResolution(testId, { source_resolution_status: status, account_id: accountId });
       toast.success('Resolution updated.');
       await load();
     } catch (e: unknown) {
       toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Update failed');
+    } finally {
+      setResolvingTestId(null);
     }
   };
 
@@ -381,11 +411,8 @@ function TraceabilityPageInner() {
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold text-gray-900">Milk tests & traceability</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Queue shows pending and unresolved rejections first. Umucunda arrivals need a{' '}
-            <Link href="/operations/manifests" className="text-[var(--primary)] hover:underline">
-              submitted manifest
-            </Link>{' '}
-            before recording a test.
+            Queue shows pending and unresolved rejections first. Umucunda arrivals need an Umucunda manifest created,
+            then submitted (not draft), before you can record a milk test — matching gate intake validation.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end">
@@ -396,8 +423,10 @@ function TraceabilityPageInner() {
               disabled={gatesEligibleForTest.length === 0}
               title={
                 gates.length > 0 && gatesEligibleForTest.length === 0
-                  ? 'Umucunda arrivals need a submitted manifest before recording a test.'
-                  : undefined
+                  ? 'No gate is ready: Umucunda batches need a manifest on file and submitted (not draft) before recording a milk test.'
+                  : gatesEligibleForTest.length === 0
+                    ? 'No gate deliveries in this date range.'
+                    : undefined
               }
               className="btn btn-primary"
             >
@@ -407,6 +436,17 @@ function TraceabilityPageInner() {
           )}
         </div>
       </div>
+
+      {!loading && umucundaNeedsManifestBanner && (
+        <div className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          <strong className="font-semibold">Umucunda milk tests blocked:</strong> every Umucunda gate arrival in this date
+          range needs a manifest before tests can be recorded. Create lines under{' '}
+          <Link href="/operations/manifests" className="font-medium text-[var(--primary)] hover:underline">
+            Manifests
+          </Link>
+          , then submit — drafts cannot receive milk tests until submitted (same rules as the API).
+        </div>
+      )}
 
       <FilterBar>
         <FilterBarGroup label="Outcome">
@@ -576,16 +616,26 @@ function TraceabilityPageInner() {
                       <button
                         type="button"
                         onClick={() => setResolution(r.id, 'resolved')}
+                        disabled={resolvingTestId === r.id}
+                        title="Mark supplier/source traceability as resolved (requires mcc_manage_operations)."
                         className="btn btn-success btn-sm"
                       >
-                        Resolved
+                        {resolvingTestId === r.id ? '…' : 'Resolved'}
                       </button>
-                      <button type="button" onClick={() => setResolution(r.id, 'secondary_test')} className="btn btn-secondary btn-sm">
+                      <button
+                        type="button"
+                        onClick={() => setResolution(r.id, 'secondary_test')}
+                        disabled={resolvingTestId === r.id}
+                        title="Flag for a secondary test workflow."
+                        className="btn btn-secondary btn-sm"
+                      >
                         Secondary test
                       </button>
                       <button
                         type="button"
                         onClick={() => setResolution(r.id, 'frozen')}
+                        disabled={resolvingTestId === r.id}
+                        title="Hold as frozen pending further review."
                         className="btn btn-outline btn-sm border-amber-300 text-amber-900 hover:bg-amber-50"
                       >
                         Frozen
@@ -620,12 +670,33 @@ function TraceabilityPageInner() {
       >
         <div className="space-y-4">
           {modalMode === 'edit' && editingRow ? (
-            <div className="rounded-sm bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700">
-              <span className="font-medium text-gray-900">Gate:</span>{' '}
-              {editingRow.gate_delivery?.source_account?.name || editingRow.gate_delivery?.source_account?.code || '—'}
-              <span className="mx-2 text-gray-300">·</span>
-              <span className="font-medium text-gray-900">Tested:</span> {new Date(editingRow.tested_at).toLocaleString()}
-            </div>
+            <>
+              <div className="rounded-sm bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700">
+                <span className="font-medium text-gray-900">Gate:</span>{' '}
+                {editingRow.gate_delivery?.source_account?.name || editingRow.gate_delivery?.source_account?.code || '—'}
+                <span className="mx-2 text-gray-300">·</span>
+                <span className="font-medium text-gray-900">Tested:</span>{' '}
+                {new Date(editingRow.tested_at).toLocaleString()}
+              </div>
+              {linesForActiveGate.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Manifest line (optional)</label>
+                  <select
+                    value={manifestLineId}
+                    onChange={(e) => setManifestLineId(e.target.value)}
+                    className={`${FILTER_INPUT} max-w-none w-full`}
+                  >
+                    <option value="">Whole gate / unspecified</option>
+                    {linesForActiveGate.map((ln) => (
+                      <option key={ln.id} value={ln.id}>
+                        {(ln.farmer_supplier?.name || ln.farmer_supplier?.code || 'Farmer')} · {ln.declared_litres} L
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">Change which farmer line this test applies to, or clear to gate-level only.</p>
+                </div>
+              )}
+            </>
           ) : (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Gate delivery (oldest first)</label>
@@ -646,7 +717,11 @@ function TraceabilityPageInner() {
                   );
                 })}
               </select>
-              {linesForSelectedGate.length > 0 && (
+              <p className="text-xs text-gray-600 mt-2">
+                Umucunda routes: options stay disabled until a manifest exists and is submitted (API blocks saves before
+                then).
+              </p>
+              {linesForActiveGate.length > 0 && (
                 <div className="mt-3">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Manifest line (optional)</label>
                   <select
@@ -655,7 +730,7 @@ function TraceabilityPageInner() {
                     className={`${FILTER_INPUT} max-w-none w-full`}
                   >
                     <option value="">Whole gate / unspecified</option>
-                    {linesForSelectedGate.map((ln) => (
+                    {linesForActiveGate.map((ln) => (
                       <option key={ln.id} value={ln.id}>
                         {(ln.farmer_supplier?.name || ln.farmer_supplier?.code || 'Farmer')} · {ln.declared_litres} L
                       </option>

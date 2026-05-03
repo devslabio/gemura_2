@@ -81,6 +81,27 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     [hasPermission, hasAnyPermission],
   );
 
+  /** Matches dashboard Quality desk tab visibility (veterinary-style roles + MCC dashboard slice). */
+  const vetQualityDeskNavEligible =
+    isBusinessAccount(accountType) &&
+    ['veterinary_officer', 'veterinary', 'veterinarian', 'veternary', 'agent'].includes(role) &&
+    hasAnyPermission(['mcc_view_operations', 'mcc_view_own_operations', 'view_collections']);
+
+  const includeOperationsNavItem = useCallback(
+    (item: NavItem) => {
+      if (item.vetQualityDeskOnly && !vetQualityDeskNavEligible) return false;
+      return true;
+    },
+    [vetQualityDeskNavEligible],
+  );
+
+  /** Limited-operation roles: allow same-route links with query (e.g. `/dashboard?tab=quality`). */
+  const limitedOpsHrefAllowed = useCallback((href: string, prefix: string) => {
+    if (href === prefix || href.startsWith(`${prefix}/`)) return true;
+    if (href.startsWith(`${prefix}?`)) return true;
+    return false;
+  }, []);
+
   useEffect(() => {
     if (user) {
       setUserName(`${user.firstName} ${user.lastName}`);
@@ -138,6 +159,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     if (isOperationsRole(role) && isBusinessAccount(accountType)) {
       if (role === 'manager') {
         OPERATIONS_NAV_ITEMS.forEach((item) => {
+          if (!includeOperationsNavItem(item)) return;
           if (!navItemAllowed(item)) return;
           items.push(item);
         });
@@ -146,6 +168,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
 
       if (role === 'accountant') {
         OPERATIONS_NAV_ITEMS.forEach((item) => {
+          if (!includeOperationsNavItem(item)) return;
           if (item.href === '/accounts' || item.href === '/settings') return;
           if (!navItemAllowed(item)) return;
           items.push(item);
@@ -155,9 +178,8 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
 
       if (isLimitedOpsRole) {
         OPERATIONS_NAV_ITEMS.forEach((item) => {
-          const isAllowed = limitedOpsAllowedPrefixes.some(
-            (prefix) => item.href === prefix || item.href.startsWith(prefix + '/')
-          );
+          if (!includeOperationsNavItem(item)) return;
+          const isAllowed = limitedOpsAllowedPrefixes.some((prefix) => limitedOpsHrefAllowed(item.href, prefix));
           if (!isAllowed) return;
           if (!navItemAllowed(item)) return;
           items.push(item);
@@ -166,6 +188,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
       }
 
       OPERATIONS_NAV_ITEMS.forEach((item) => {
+        if (!includeOperationsNavItem(item)) return;
         if (!navItemAllowed(item)) return;
         items.push(item);
       });
@@ -175,6 +198,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     // Owner/admin role on non-admin account (tenant/branch etc.) → operations menu by permissions
     if (isAdminRole(role) && isBusinessAccount(accountType)) {
       OPERATIONS_NAV_ITEMS.forEach((item) => {
+        if (!includeOperationsNavItem(item)) return;
         if (item.href === '/settings' && (role === 'collector' || role === 'agent' || role === 'veterinary_officer' || role === 'casual_laborer' || role === 'accountant')) return;
         if (item.href === '/accounts' && role === 'accountant') return;
         if (!navItemAllowed(item)) return;
@@ -186,6 +210,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     // Fallback: business account type, unknown role — show operations by permissions
     if (isBusinessAccount(accountType)) {
       OPERATIONS_NAV_ITEMS.forEach((item) => {
+        if (!includeOperationsNavItem(item)) return;
         if (item.href === '/settings' && (role === 'collector' || role === 'agent' || role === 'veterinary_officer' || role === 'casual_laborer' || role === 'accountant')) return;
         if (item.href === '/accounts' && role === 'accountant') return;
         if (!isAdmin() && !navItemAllowed(item)) return;
@@ -200,15 +225,34 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
       { icon: ADMIN_NAV_ITEMS[2].icon, label: 'Settings', href: '/settings', section: 'admin', navGroup: 'General' },
     );
     return buildNavSidebarGroups(items, ['General']);
-  }, [role, accountType, canManageUsers, isAdmin, canViewDashboard, navItemAllowed]);
+  }, [
+    role,
+    accountType,
+    canManageUsers,
+    isAdmin,
+    canViewDashboard,
+    navItemAllowed,
+    includeOperationsNavItem,
+    limitedOpsHrefAllowed,
+  ]);
 
   const isActive = (href?: string) => {
     if (!href || !pathname) return false;
     let navPath: string;
+    let navSearch = '';
     try {
-      navPath = new URL(href, typeof window !== 'undefined' ? window.location.origin : 'http://localhost').pathname;
+      const parsed = new URL(href, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+      navPath = parsed.pathname;
+      navSearch = parsed.search;
     } catch {
       return false;
+    }
+
+    if (href.includes('tab=quality') && navPath === '/dashboard') {
+      if (pathname !== '/dashboard' || typeof window === 'undefined') return false;
+      const wantTab = new URLSearchParams(navSearch).get('tab');
+      const curTab = new URLSearchParams(window.location.search).get('tab');
+      return wantTab === 'quality' && curTab === 'quality';
     }
 
     if (navPath === '/collections') {

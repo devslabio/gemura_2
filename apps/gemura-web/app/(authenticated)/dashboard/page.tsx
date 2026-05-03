@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth';
 import { isBusinessAccount } from '@/lib/config/nav.config';
@@ -174,6 +174,37 @@ function BusinessDashboard() {
   const canManageInventory = hasPermission('manage_inventory');
   const showVetQualityStrip =
     isVeterinaryRole && showMccOpsDashboard && Boolean(currentAccount?.account_id);
+
+  const vetQualityUrlHydratedRef = useRef(false);
+  useEffect(() => {
+    if (!showVetQualityStrip) {
+      vetQualityUrlHydratedRef.current = false;
+    }
+  }, [showVetQualityStrip]);
+
+  useEffect(() => {
+    if (!showVetQualityStrip || typeof window === 'undefined') return;
+
+    if (!vetQualityUrlHydratedRef.current) {
+      vetQualityUrlHydratedRef.current = true;
+      if (new URLSearchParams(window.location.search).get('tab') === 'quality') {
+        setDashboardTab('quality');
+        return;
+      }
+    }
+
+    const url = new URL(window.location.href);
+    if (dashboardTab === 'quality') {
+      url.searchParams.set('tab', 'quality');
+    } else {
+      url.searchParams.delete('tab');
+    }
+    const next = `${url.pathname}${url.search}`;
+    const cur = `${window.location.pathname}${window.location.search}`;
+    if (next !== cur) {
+      window.history.replaceState({}, '', next);
+    }
+  }, [dashboardTab, showVetQualityStrip]);
 
   const tabs: { id: DashboardTab; label: string }[] = useMemo(() => {
     if (isVeterinaryRole) {
