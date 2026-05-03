@@ -14,7 +14,6 @@ import {
   faHome,
   faUsers,
   faCog,
-  faUserShield,
   faReceipt,
   faBox,
   faBuilding,
@@ -26,6 +25,11 @@ import {
   faHandHoldingDollar,
   faTag,
   faIdCard,
+  faList,
+  faTruck,
+  faEye,
+  faClock,
+  faArrowsRotate,
 } from '@/app/components/Icon';
 
 /** Account types that see user/operations menu (filtered by role + permissions) */
@@ -60,58 +64,178 @@ export interface NavItem {
   label: string;
   href: string;
   section: Section;
+  /** Sidebar section heading (items with the same title render under one heading). */
+  navGroup?: string;
   /** Permission key required (for operations section). Owner/admin bypass. */
   requiresPermission?: string;
-  /** Optional submenu items (e.g. Inventory → Items, Movements). */
-  children?: { label: string; href: string }[];
+  /** User needs at least one of these (for operations section). Takes precedence over `requiresPermission` when set. */
+  requiresAnyPermission?: string[];
 }
+
+/** Sub-views for the dashboard “Operations” tab (also used at `/operations/*` via sidebar). */
+export type MccOperationsSubPanel = 'gate' | 'manifests' | 'traceability' | 'staff' | 'shifts';
+
+export const MCC_OPERATIONS_SUB_PANELS: {
+  id: MccOperationsSubPanel;
+  label: string;
+  href: string;
+  description: string;
+}[] = [
+  {
+    id: 'gate',
+    label: 'Gate arrivals',
+    href: '/collections#gate-arrivals',
+    description: 'Gate intake log on the Milk collection page. Link arrivals when posting a collection.',
+  },
+  {
+    id: 'manifests',
+    label: 'Manifests',
+    href: '/operations/manifests',
+    description: 'Umucunda manifests and per-farmer lines.',
+  },
+  {
+    id: 'traceability',
+    label: 'Traceability',
+    href: '/operations/traceability',
+    description: 'Milk tests and resolution workflow.',
+  },
+  {
+    id: 'staff',
+    label: 'Staff',
+    href: '/operations/staff',
+    description: 'Roster, roles on duty, and shift actions.',
+  },
+  {
+    id: 'shifts',
+    label: 'Shifts',
+    href: '/operations/shifts',
+    description: 'Shift history and handovers.',
+  },
+];
+
+/** Display order for operations sidebar group titles. */
+export const OPERATIONS_NAV_GROUP_ORDER = [
+  'Overview',
+  'Sales & milk',
+  'MCC operations',
+  'Contacts',
+  'Inventory',
+  'Finance & payroll',
+  'System',
+] as const;
 
 /**
  * Admin section navigation items.
  * Visibility is enforced in the sidebar/layout using `role + permissions`.
  */
 export const ADMIN_NAV_ITEMS: NavItem[] = [
-  { icon: faHome, label: 'Dashboard', href: '/admin/dashboard', section: 'admin' },
-  { icon: faUsers, label: 'Users', href: '/admin/users', section: 'admin' },
-  { icon: faCog, label: 'Settings', href: '/settings', section: 'admin' },
+  { icon: faHome, label: 'Dashboard', href: '/admin/dashboard', section: 'admin', navGroup: 'Administration' },
+  { icon: faUsers, label: 'Users', href: '/admin/users', section: 'admin', navGroup: 'Administration' },
+  { icon: faCog, label: 'Settings', href: '/settings', section: 'admin', navGroup: 'Administration' },
 ];
+
+export const ADMIN_NAV_GROUP_ORDER = ['Administration'] as const;
 
 /**
  * Operations section: for role in [manager, collector, viewer, employee] (and optionally system_admin/admin).
  * account_type in [mcc, owner, agent]. Permission checks apply.
  */
 export const OPERATIONS_NAV_ITEMS: NavItem[] = [
-  { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'operations', requiresPermission: 'dashboard.view' },
-  { icon: faReceipt, label: 'Sales', href: '/sales', section: 'operations', requiresPermission: 'view_sales' },
-  { icon: faBox, label: 'Collections', href: '/collections', section: 'operations', requiresPermission: 'view_collections' },
-  { icon: faBuilding, label: 'Suppliers', href: '/suppliers', section: 'operations', requiresPermission: 'view_suppliers' },
-  { icon: faStore, label: 'Customers', href: '/customers', section: 'operations', requiresPermission: 'view_customers' },
-  { icon: faWarehouse, label: 'Inventory', href: '/inventory/items', section: 'operations', requiresPermission: 'view_inventory', children: [{ label: 'Items', href: '/inventory/items' }, { label: 'Movements', href: '/inventory/movements' }] },
-  { icon: faClipboardList, label: 'Payroll', href: '/payroll', section: 'operations', requiresPermission: 'view_analytics' },
-  { icon: faTag, label: 'Charges', href: '/charges', section: 'operations', requiresPermission: 'view_analytics' },
-  { icon: faHandHoldingDollar, label: 'Loans', href: '/loans', section: 'operations', requiresPermission: 'view_analytics' },
-  { icon: faChartLine, label: 'Finance', href: '/finance', section: 'operations', requiresPermission: 'view_analytics' },
-  { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'operations', requiresPermission: 'view_analytics' },
-  { icon: faIdCard, label: 'IMMIS', href: '/immis', section: 'operations' },
-  { icon: faCog, label: 'Settings', href: '/settings', section: 'operations' },
+  { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'operations', navGroup: 'Overview', requiresPermission: 'dashboard.view' },
+  { icon: faReceipt, label: 'Sales', href: '/sales', section: 'operations', navGroup: 'Sales & milk', requiresPermission: 'view_sales' },
+  {
+    icon: faBox,
+    label: 'Milk collection',
+    href: '/collections',
+    section: 'operations',
+    navGroup: 'Sales & milk',
+    requiresAnyPermission: ['view_collections', 'mcc_view_operations'],
+  },
+  {
+    icon: faTruck,
+    label: 'Gate deliveries',
+    href: '/collections#gate-arrivals',
+    section: 'operations',
+    navGroup: 'Sales & milk',
+    requiresAnyPermission: ['mcc_view_operations', 'view_collections'],
+  },
+  {
+    icon: faList,
+    label: 'Manifests',
+    href: '/operations/manifests',
+    section: 'operations',
+    navGroup: 'MCC operations',
+    requiresAnyPermission: ['mcc_view_operations', 'view_collections'],
+  },
+  {
+    icon: faEye,
+    label: 'Traceability',
+    href: '/operations/traceability',
+    section: 'operations',
+    navGroup: 'MCC operations',
+    requiresAnyPermission: ['mcc_view_operations', 'view_collections'],
+  },
+  {
+    icon: faUsers,
+    label: 'Staff',
+    href: '/operations/staff',
+    section: 'operations',
+    navGroup: 'MCC operations',
+    requiresAnyPermission: ['mcc_view_operations', 'view_collections'],
+  },
+  {
+    icon: faClock,
+    label: 'Shifts',
+    href: '/operations/shifts',
+    section: 'operations',
+    navGroup: 'MCC operations',
+    requiresAnyPermission: ['mcc_view_operations', 'view_collections'],
+  },
+  { icon: faBuilding, label: 'Suppliers', href: '/suppliers', section: 'operations', navGroup: 'Contacts', requiresPermission: 'view_suppliers' },
+  { icon: faStore, label: 'Customers', href: '/customers', section: 'operations', navGroup: 'Contacts', requiresPermission: 'view_customers' },
+  {
+    icon: faWarehouse,
+    label: 'Inventory items',
+    href: '/inventory/items',
+    section: 'operations',
+    navGroup: 'Inventory',
+    requiresPermission: 'view_inventory',
+  },
+  {
+    icon: faArrowsRotate,
+    label: 'Stock movements',
+    href: '/inventory/movements',
+    section: 'operations',
+    navGroup: 'Inventory',
+    requiresPermission: 'view_inventory',
+  },
+  { icon: faClipboardList, label: 'Payroll', href: '/payroll', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
+  { icon: faTag, label: 'Charges', href: '/charges', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
+  { icon: faHandHoldingDollar, label: 'Loans', href: '/loans', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
+  { icon: faChartLine, label: 'Finance', href: '/finance', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
+  { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
+  { icon: faIdCard, label: 'IMMIS', href: '/immis', section: 'operations', navGroup: 'System' },
+  { icon: faCog, label: 'Settings', href: '/settings', section: 'operations', navGroup: 'System' },
 ];
 
 /**
  * External (supplier account): Dashboard, Accounts, Settings.
  */
 export const EXTERNAL_SUPPLIER_NAV_ITEMS: NavItem[] = [
-  { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'external_supplier' },
-  { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'external_supplier' },
-  { icon: faCog, label: 'Settings', href: '/settings', section: 'external_supplier' },
+  { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'external_supplier', navGroup: 'Account' },
+  { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'external_supplier', navGroup: 'Account' },
+  { icon: faCog, label: 'Settings', href: '/settings', section: 'external_supplier', navGroup: 'Account' },
 ];
+
+export const EXTERNAL_NAV_GROUP_ORDER = ['Account'] as const;
 
 /**
  * External (customer / farmer): Dashboard, Accounts, Settings.
  */
 export const EXTERNAL_CUSTOMER_NAV_ITEMS: NavItem[] = [
-  { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'external_customer' },
-  { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'external_customer' },
-  { icon: faCog, label: 'Settings', href: '/settings', section: 'external_customer' },
+  { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'external_customer', navGroup: 'Account' },
+  { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'external_customer', navGroup: 'Account' },
+  { icon: faCog, label: 'Settings', href: '/settings', section: 'external_customer', navGroup: 'Account' },
 ];
 
 export function isBusinessAccount(accountType: string): boolean {
@@ -136,4 +260,35 @@ export function isExternalSupplier(accountType: string): boolean {
 export function isExternalCustomer(accountType: string): boolean {
   const t = (accountType || '').toLowerCase();
   return t === 'customer' || t === 'farmer';
+}
+
+export interface NavSidebarGroup {
+  title: string;
+  items: NavItem[];
+}
+
+/** Group flat nav items under headings; respects `groupOrder`, then any remaining groups. */
+export function buildNavSidebarGroups(
+  items: NavItem[],
+  groupOrder: readonly string[],
+): NavSidebarGroup[] {
+  const map = new Map<string, NavItem[]>();
+  for (const item of items) {
+    const g = item.navGroup ?? 'Other';
+    if (!map.has(g)) map.set(g, []);
+    map.get(g)!.push(item);
+  }
+  const seen = new Set<string>();
+  const out: NavSidebarGroup[] = [];
+  for (const title of groupOrder) {
+    const list = map.get(title);
+    if (list?.length) {
+      out.push({ title, items: list });
+      seen.add(title);
+    }
+  }
+  for (const [title, list] of map) {
+    if (!seen.has(title) && list.length) out.push({ title, items: list });
+  }
+  return out;
 }
