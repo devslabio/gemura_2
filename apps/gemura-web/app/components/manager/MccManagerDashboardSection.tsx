@@ -1,9 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import dynamic from 'next/dynamic';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ApexOptions } from 'apexcharts';
 import type { OverviewResponse, OverviewRecentTransaction } from '@/lib/api/stats';
 import type { MccManagerOverviewData } from '@/lib/api/mcc-manager';
 import { mccManagerApi } from '@/lib/api/mcc-manager';
@@ -13,30 +10,30 @@ import { usePermission } from '@/hooks/usePermission';
 import Icon, {
   faBell,
   faBox,
-  faArrowRight,
-  faChartLine,
-  faCheck,
   faClipboardList,
-  faClock,
   faTriangleExclamation,
   faUserFriends,
-  faWallet,
 } from '@/app/components/Icon';
+import StatCard from '@/app/components/StatCard';
 
 type OverviewData = OverviewResponse['data'];
-const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
+
+const BLUE = { iconBgColor: '#eff6ff', iconColor: 'var(--primary)' };
+const GREEN = { iconBgColor: '#dcfce7', iconColor: '#059669' };
+const AMBER = { iconBgColor: '#fef3c7', iconColor: '#b45309' };
+const RED = { iconBgColor: '#fee2e2', iconColor: '#b91c1c' };
 
 /** Matches dashboard chart / donut: sales-style green, collections-style blue */
 const SPLIT_DIRECT = '#059669';
 const SPLIT_UMUCUNDA = '#004AAD';
 
 const PANEL =
-  'bg-white border border-gray-200 rounded-sm p-6 sm:p-7 min-h-0 h-full flex flex-col';
+  'bg-white border border-gray-200 rounded-sm p-6 min-h-0 h-full flex flex-col';
 const PANEL_TITLE = 'text-base font-semibold text-gray-900';
-const PANEL_DESC = 'text-sm text-gray-500 mt-1.5 mb-5';
-const TH = 'text-left py-2 px-3 text-[11px] font-medium text-gray-700 border-b border-gray-200 whitespace-nowrap';
-const TD = 'py-2.5 px-3 text-[13px] text-gray-900 border-b border-gray-100 align-middle whitespace-nowrap';
-const TD_MUTED = 'py-2.5 px-3 text-[13px] text-gray-600 border-b border-gray-100 align-middle whitespace-nowrap';
+const PANEL_DESC = 'text-sm text-gray-500 mt-1 mb-4';
+const TH = 'text-left py-2.5 px-3 text-xs font-medium text-gray-700 border-b border-gray-200';
+const TD = 'py-2.5 px-3 text-sm text-gray-900 border-b border-gray-100 align-middle';
+const TD_MUTED = 'py-2.5 px-3 text-sm text-gray-600 border-b border-gray-100 align-middle';
 const EMPTY = 'text-sm text-gray-500 py-10 text-center';
 
 const GATE_ROLE_OPTIONS = [
@@ -87,6 +84,25 @@ function collectionsStatLabel(pk: OpsPeriodKey): string {
   }
 }
 
+function splitStatLabel(pk: OpsPeriodKey): string {
+  switch (pk) {
+    case 'day':
+      return 'Direct vs Umucunda (today)';
+    case 'week':
+      return 'Direct vs Umucunda (week)';
+    case 'month':
+      return 'Direct vs Umucunda (month)';
+    case 'quarter':
+      return 'Direct vs Umucunda (quarter)';
+    case 'year':
+      return 'Direct vs Umucunda (year)';
+    case 'custom':
+      return 'Direct vs Umucunda (range)';
+    default:
+      return 'Direct vs Umucunda';
+  }
+}
+
 function rejectionsStatLabel(pk: OpsPeriodKey): string {
   switch (pk) {
     case 'day':
@@ -116,14 +132,6 @@ function formatL(n: number): string {
   return `${n.toFixed(1)} L`;
 }
 
-function formatMoney(amount: number, currency: string): string {
-  return new Intl.NumberFormat('en-RW', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
-
 function resolutionLabel(status: string): string {
   const s = (status || '').toLowerCase();
   if (s === 'resolved') return 'Resolved';
@@ -131,15 +139,6 @@ function resolutionLabel(status: string): string {
   if (s === 'frozen') return 'Frozen';
   if (s === 'auto_zero') return 'Auto zero';
   return 'Unresolved';
-}
-
-function staffRoleLabel(role: string): string {
-  const match = GATE_ROLE_OPTIONS.find((opt) => opt.value === role);
-  if (match) return match.label;
-  return role
-    .split('_')
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
 }
 
 function badgeSubmitted(on: boolean) {
@@ -150,76 +149,6 @@ function badgeSubmitted(on: boolean) {
 
 function badgeNeutral() {
   return 'inline-flex rounded-sm bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800';
-}
-
-function KpiTile({
-  label,
-  value,
-  sub,
-  icon,
-  accent,
-  href,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  icon: Parameters<typeof Icon>[0]['icon'];
-  accent: 'blue' | 'green' | 'amber' | 'red' | 'slate';
-  href?: string;
-}) {
-  const iconAccents = {
-    blue: { bg: '#eff6ff', fg: '#004AAD' },
-    green: { bg: '#dcfce7', fg: '#059669' },
-    amber: { bg: '#fef3c7', fg: '#b45309' },
-    red: { bg: '#fee2e2', fg: '#b91c1c' },
-    slate: { bg: '#f3f4f6', fg: '#4b5563' },
-  };
-
-  const content = (
-    <>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="mb-1 text-xs font-semibold text-gray-500 truncate">{label}</p>
-          <p className="font-black leading-none text-slate-950 tracking-tight whitespace-nowrap text-[clamp(2.2rem,3.8vw,3.6rem)]">
-            {value}
-          </p>
-          <p className="mt-2 text-[11px] font-normal leading-snug text-gray-500 line-clamp-2">{sub}</p>
-        </div>
-        <div
-          className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-xl border border-black/5"
-          style={{ backgroundColor: iconAccents[accent].bg, color: iconAccents[accent].fg }}
-        >
-          <Icon icon={icon} size="lg" />
-        </div>
-      </div>
-    </>
-  );
-  if (href) {
-    return (
-      <Link
-        href={href}
-        className="block rounded-sm border border-gray-200 bg-white p-5 sm:p-6 min-h-[120px] min-w-0 transition-colors hover:border-gray-300"
-      >
-        {content}
-      </Link>
-    );
-  }
-  return (
-    <div className="rounded-sm border border-gray-200 bg-white p-5 sm:p-6 min-h-[120px] min-w-0 transition-colors hover:border-gray-300">
-      {content}
-    </div>
-  );
-}
-
-function SectionHeader({ number, title }: { number: number; title: string }) {
-  return (
-    <div className="flex items-center gap-2 mb-3">
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm bg-[var(--primary)] text-[10px] font-bold text-white">
-        {number}
-      </span>
-      <h3 className="text-[13px] font-semibold text-gray-900">{title}</h3>
-    </div>
-  );
 }
 
 export interface MccManagerDashboardSectionProps {
@@ -334,7 +263,81 @@ export default function MccManagerDashboardSection({
     return 'bad' as const;
   }, [periodAvgDaily, litres7Avg]);
 
-  const alerts = mcc?.alerts ?? [];
+  const rejectionAlertCount = gateRejections.length + rejectedMilkInPeriod.length;
+
+  const alerts = useMemo(() => {
+    const list: { id: string; priority: number; title: string; detail: string; tone: 'critical' | 'warn' | 'info' }[] =
+      [];
+    if (periodKey === 'day' && litresPeriod > 8000) {
+      list.push({
+        id: 'tank',
+        priority: 1,
+        title: 'Tank capacity',
+        detail: 'Cold storage trending high versus typical evening fill — confirm sensor or dip reading.',
+        tone: 'warn',
+      });
+    }
+    const pendingManifests = manifestRows.filter((m) => !m.submitted).length;
+    if (pendingManifests > 0) {
+      list.push({
+        id: 'manifest',
+        priority: 2,
+        title: 'Umucunda manifest window',
+        detail: `${pendingManifests} route(s) still pending submission or acceptance.`,
+        tone: 'warn',
+      });
+    } else {
+      list.push({
+        id: 'manifest',
+        priority: 4,
+        title: 'Umucunda manifest window',
+        detail:
+          periodKey === 'day'
+            ? 'No manifest flags on today’s gate data.'
+            : `No manifest flags on gate snapshot (${rangeDateTo}).`,
+        tone: 'info',
+      });
+    }
+    if (rejectionAlertCount > 0) {
+      list.push({
+        id: 'reject',
+        priority: 0,
+        title: 'Rejection follow-up',
+        detail: `${gateRejections.length} gate test(s), ${rejectedMilkInPeriod.length} milk sale record(s) — review within 48h.`,
+        tone: 'critical',
+      });
+    }
+    list.push({
+      id: 'gen',
+      priority: 3,
+      title: 'Generator fuel check',
+      detail: 'Weekly walk-down due when maintenance scheduling is enabled.',
+      tone: 'info',
+    });
+    list.push({
+      id: 'credit',
+      priority: 5,
+      title: 'Farmer credit tier',
+      detail: 'No automatic tier changes pending.',
+      tone: 'info',
+    });
+    list.push({
+      id: 'ops',
+      priority: 6,
+      title: 'Gemura Ops',
+      detail: 'No inbound escalations.',
+      tone: 'info',
+    });
+    return list.sort((a, b) => a.priority - b.priority);
+  }, [
+    litresPeriod,
+    periodKey,
+    rangeDateTo,
+    rejectionAlertCount,
+    gateRejections.length,
+    rejectedMilkInPeriod.length,
+    manifestRows,
+  ]);
 
   const reassignRole = useCallback(
     async (userAccountId: string, newRole: string) => {
@@ -411,123 +414,6 @@ export default function MccManagerDashboardSection({
   const pctUmu = splitTotal > 0 ? 100 - pctDirect : 0;
   const submittedCount = manifestRows.filter((m) => m.submitted).length;
   const staffRows = mcc?.staff ?? [];
-  const onDutyCount = staffRows.filter((s) => s.on_duty).length;
-  const unresolvedGateRejections = gateRejections.filter((r) => (r.resolution_status || '').toLowerCase() !== 'resolved');
-  const gateRejectionLitres = gateRejections.reduce((sum, r) => sum + (Number(r.volume_litres) || 0), 0);
-  const rejectedSaleLitres = rejectedMilkInPeriod.reduce((sum, t) => sum + (Number(t.quantity) || 0), 0);
-  const rejectedLitres = gateRejectionLitres + rejectedSaleLitres;
-  const deliveryLogged = gate?.delivery_count ?? 0;
-  const profileExpectedDeliveries = mcc?.profile?.expected_daily_deliveries ?? null;
-  const deliveryExpected =
-    profileExpectedDeliveries && profileExpectedDeliveries > 0
-      ? profileExpectedDeliveries
-      : Math.max(manifestRows.length, deliveryLogged);
-  const deliveryPct = deliveryExpected > 0 ? Math.round((deliveryLogged / deliveryExpected) * 100) : 0;
-  const manifestPct = manifestRows.length > 0 ? Math.round((submittedCount / manifestRows.length) * 100) : 100;
-  const profileTankCapacity = mcc?.profile?.cooling_tank_total_capacity_litres ?? null;
-  const tankCapacityLitres = profileTankCapacity && profileTankCapacity > 0 ? profileTankCapacity : 0;
-  const snapshotTankLitres = mcc?.facility_snapshot?.tank_used_litres;
-  const tankLitres = snapshotTankLitres ?? gate?.total_litres ?? litresPeriod;
-  const snapshotTankPct = mcc?.facility_snapshot?.tank_used_pct;
-  const tankPct: number | null =
-    snapshotTankPct != null
-      ? Math.max(0, Math.min(100, Math.round(snapshotTankPct)))
-      : tankCapacityLitres > 0
-        ? Math.max(0, Math.min(100, Math.round((tankLitres / tankCapacityLitres) * 100)))
-        : null;
-  const tankTone: 'green' | 'amber' | 'red' | 'slate' =
-    tankPct == null ? 'slate' : tankPct >= 85 ? 'red' : tankPct >= 70 ? 'amber' : 'green';
-  const litresTrend = (today?.breakdown?.length ? today.breakdown : last7?.breakdown ?? [])
-    .slice(-14)
-    .map((d) => ({
-      label: d.label || d.date.slice(5),
-      litres: Number(d.collection.liters) || 0,
-    }));
-  const maxTrend = Math.max(1, ...litresTrend.map((d) => d.litres));
-  const walletValue = mcc?.wallet ? formatMoney(mcc.wallet.balance, mcc.wallet.currency) : 'RWF —';
-  const snapshotTemperature = mcc?.facility_snapshot?.cooling_temperature_c;
-  const temperatureValue = snapshotTemperature != null ? `${snapshotTemperature.toFixed(1)}°C` : '—';
-  const powerStatusRaw = (mcc?.facility_snapshot?.power_status ?? '').toLowerCase();
-  const generatorStatusRaw = (mcc?.facility_snapshot?.generator_status ?? '').toLowerCase();
-  const powerStatusLabel = powerStatusRaw
-    ? powerStatusRaw
-        .split('_')
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(' ')
-    : mcc?.profile?.power_supply_sources?.[0] ?? 'Unknown';
-  const generatorLabel = generatorStatusRaw
-    ? generatorStatusRaw
-        .split('_')
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(' ')
-    : 'Unknown';
-  const tankTitle =
-    tankCapacityLitres > 0
-      ? `Bulk milk tank (${Math.round(tankCapacityLitres).toLocaleString()} L)`
-      : 'Bulk milk tank';
-  const donutSeries = splitTotal > 0 ? [directL, umucundaL] : [0, 0];
-  const deliveryShareOptions: ApexOptions = {
-    chart: { type: 'donut', toolbar: { show: false }, fontFamily: 'inherit' },
-    labels: ['Direct farmer deliveries', 'Umucunda (via collector)'],
-    colors: [SPLIT_DIRECT, SPLIT_UMUCUNDA],
-    legend: { position: 'right', fontSize: '11px', offsetY: 8 },
-    stroke: { width: 0 },
-    dataLabels: { enabled: true, formatter: (v: number) => `${Math.round(v)}%` },
-    plotOptions: {
-      pie: {
-        donut: {
-          size: '70%',
-          labels: {
-            show: true,
-            value: { show: true, formatter: (v: string) => `${Math.round(Number(v)).toLocaleString()} L` },
-            total: {
-              show: true,
-              label: 'Total',
-              formatter: () => formatL(splitTotal),
-            },
-          },
-        },
-      },
-    },
-  };
-  const trendCategories = litresTrend.map((t) => t.label);
-  const trendExpected = litresTrend.map(() => Math.round(litres7Avg || 0));
-  const dailyTrendOptions: ApexOptions = {
-    chart: { type: 'line', toolbar: { show: false }, fontFamily: 'inherit' },
-    colors: ['#2563eb', '#9ca3af'],
-    stroke: { width: [0, 2], curve: 'smooth' },
-    plotOptions: { bar: { borderRadius: 4, columnWidth: '52%' } },
-    dataLabels: { enabled: false },
-    legend: { position: 'top', fontSize: '11px' },
-    xaxis: { categories: trendCategories, labels: { rotate: -30, style: { fontSize: '10px', colors: '#6b7280' } } },
-    yaxis: {
-      labels: {
-        formatter: (v: number) => `${Math.round(v / 100) / 10}k`,
-      },
-    },
-    grid: { borderColor: '#f3f4f6', strokeDashArray: 4 },
-    tooltip: { y: { formatter: (v: number) => `${Math.round(v).toLocaleString()} L` } },
-  };
-  const dailyTrendSeries = [
-    { name: 'Actual (L)', type: 'column', data: litresTrend.map((t) => Math.round(t.litres)) },
-    { name: 'Expected (L)', type: 'line', data: trendExpected },
-  ];
-  const buildOpsHref = (path: string, extra?: Record<string, string>) => {
-    const params = new URLSearchParams({
-      from: rangeDateFrom,
-      to: rangeDateTo,
-      ...(extra ?? {}),
-    });
-    return `${path}?${params.toString()}`;
-  };
-  const buildCollectionsHref = (extra?: Record<string, string>) => {
-    const params = new URLSearchParams({
-      date_from: rangeDateFrom,
-      date_to: rangeDateTo,
-      ...(extra ?? {}),
-    });
-    return `/collections?${params.toString()}`;
-  };
 
   return (
     <div className="space-y-4 mb-4">
@@ -537,275 +423,141 @@ export default function MccManagerDashboardSection({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-        <KpiTile
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-stretch">
+        <StatCard
           label={collectionsStatLabel(periodKey)}
           value={formatL(litresPeriod)}
-          sub={
+          subtitle={[
             litres7Avg > 0.01
-              ? `7d avg ${formatL(litres7Avg)}/d`
-              : 'No history yet'
-          }
+              ? `Trailing 7-day avg ${formatL(litres7Avg)}/day · ${intakeVsAvg === 'good' ? 'On track' : intakeVsAvg === 'amber' ? 'Watch' : 'Below trend'}`
+              : 'Compare after more history',
+            gate && gate.total_litres > 0
+              ? `Gate (${rangeDateTo}): ${formatL(gate.total_litres)} · ${gate.delivery_count} load${gate.delivery_count === 1 ? '' : 's'}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' · ')}
           icon={faBox}
-          accent={intakeVsAvg === 'good' ? 'green' : intakeVsAvg === 'amber' ? 'amber' : intakeVsAvg === 'bad' ? 'red' : 'blue'}
-          href={buildCollectionsHref()}
+          href="/collections"
+          {...(intakeVsAvg === 'good' ? GREEN : intakeVsAvg === 'amber' ? AMBER : intakeVsAvg === 'bad' ? RED : BLUE)}
         />
-        <KpiTile
-          label="Deliveries logged / expected"
-          value={deliveryExpected > 0 ? `${deliveryLogged}/${deliveryExpected}` : '0/0'}
-          sub={
-            deliveryExpected > 0
-              ? `${deliveryPct}% of expected`
-              : profileExpectedDeliveries == null
-                ? 'Set expected deliveries'
-                : 'No expected routes'
+        <StatCard
+          label={splitStatLabel(periodKey)}
+          value={splitTotal > 0 ? `${pctDirect}% / ${pctUmu}%` : '—'}
+          subtitle={
+            splitTotal > 0
+              ? `${formatL(directL)} direct · ${formatL(umucundaL)} Umucunda${useGateSplit ? ' · gate' : ' · estimate'}`
+              : mccLoading
+                ? 'Loading…'
+                : periodKey === 'day'
+                  ? 'No gate or same-day collections'
+                  : `No gate on ${rangeDateTo} · sample from recent txn list only`
           }
           icon={faClipboardList}
-          accent={deliveryPct >= 95 ? 'green' : deliveryPct >= 80 ? 'amber' : 'red'}
-          href={buildOpsHref('/operations/gate')}
+          href="/collections#gate-arrivals"
+          {...BLUE}
         />
-        <KpiTile
-          label="Via Umucunda"
-          value={formatL(umucundaL)}
-          sub={splitTotal > 0 ? `${pctUmu}% of intake` : 'No split yet'}
-          icon={faChartLine}
-          accent="blue"
-          href={buildOpsHref('/operations/gate', { source_type: 'umucunda' })}
-        />
-        <KpiTile
-          label="Direct Farmer"
-          value={formatL(directL)}
-          sub={splitTotal > 0 ? `${pctDirect}% of intake` : 'No split yet'}
-          icon={faCheck}
-          accent="green"
-          href={buildCollectionsHref()}
-        />
-        <KpiTile
+        <StatCard
           label={rejectionsStatLabel(periodKey)}
-          value={formatL(rejectedLitres)}
-          sub={`${gateRejections.length} gate • ${rejectedMilkInPeriod.length} sale`}
-          icon={faTriangleExclamation}
-          accent={rejectedLitres > 0 ? 'amber' : 'green'}
-          href={buildOpsHref('/operations/traceability', { outcome: 'rejected' })}
-        />
-        <KpiTile
-          label="Unresolved Sources"
-          value={String(unresolvedGateRejections.length)}
-          sub={unresolvedGateRejections.length > 0 ? 'Needs follow-up' : 'No pending approvals'}
-          icon={faTriangleExclamation}
-          accent={unresolvedGateRejections.length > 0 ? 'red' : 'green'}
-          href={buildOpsHref('/operations/traceability', { outcome: 'rejected' })}
-        />
-        <KpiTile
-          label="Tank Capacity Used"
-          value={tankPct == null ? '—' : `${tankPct}%`}
-          sub={
-            tankCapacityLitres > 0
-              ? `${Math.round(tankLitres).toLocaleString()} / ${tankCapacityLitres.toLocaleString()} L`
-              : 'Set tank capacity'
+          value={String(gateRejections.length + rejectedMilkInPeriod.length)}
+          subtitle={
+            gateRejections.length || rejectedMilkInPeriod.length
+              ? `${gateRejections.length} gate test · ${rejectedMilkInPeriod.length} milk sale`
+              : 'None'
           }
-          icon={faClock}
-          accent={tankTone}
-          href={buildOpsHref('/operations/gate')}
+          icon={faTriangleExclamation}
+          href="/collections"
+          {...(gateRejections.length + rejectedMilkInPeriod.length ? AMBER : GREEN)}
         />
-        <KpiTile
-          label="Manifest Compliance"
-          value={manifestRows.length ? `${manifestPct}%` : mccLoading ? '…' : '100%'}
-          sub={manifestRows.length ? `${submittedCount}/${manifestRows.length} submitted` : 'No manifests'}
+        <StatCard
+          label="Manifest compliance"
+          value={manifestRows.length ? `${submittedCount}/${manifestRows.length}` : mccLoading ? '…' : '0/0'}
+          subtitle={
+            manifestRows.length
+              ? `Submitted / scheduled · gate ${rangeDateTo} (UTC)`
+              : `No manifest rows for gate ${rangeDateTo}`
+          }
           icon={faClipboardList}
-          accent={manifestPct >= 90 ? 'green' : manifestPct >= 80 ? 'amber' : 'red'}
-          href={buildOpsHref('/operations/manifests')}
-        />
-        <KpiTile
-          label="Wallet balance"
-          value={walletValue}
-          sub="Available"
-          icon={faWallet}
-          accent="slate"
-          href={buildOpsHref('/finance/transactions')}
-        />
-        <KpiTile
-          label="Staff on shift"
-          value={String(onDutyCount)}
-          sub={`${staffRows.length} scheduled`}
-          icon={faUserFriends}
-          accent={onDutyCount > 0 ? 'green' : 'amber'}
-          href={buildOpsHref('/operations/staff')}
+          href="/operations/manifests"
+          {...BLUE}
         />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-stretch">
         <section className={PANEL}>
-          <SectionHeader number={1} title="Delivery source breakdown (litres)" />
-          <p className={PANEL_DESC}>Direct vs Umucunda (gate day).</p>
+          <h3 className={PANEL_TITLE}>Delivery source</h3>
+          <p className={PANEL_DESC}>Direct farmer vs Umucunda volume from gate deliveries.</p>
           {splitTotal <= 0 ? (
             <p className={EMPTY}>
               {mccLoading
                 ? 'Loading…'
-                : `No gate intake (${rangeDateTo}).`}
+                : `No gate intake for ${rangeDateTo}. Collections can still exist without gate records.`}
             </p>
           ) : (
-            <div>
-              <Chart options={deliveryShareOptions} series={donutSeries} type="donut" height={240} />
-              <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                <span>{formatL(directL)} direct</span>
-                <span>{formatL(umucundaL)} Umucunda</span>
+            <div className="space-y-4">
+              <div className="flex h-3 overflow-hidden rounded-sm bg-gray-100">
+                <div className="min-w-0 transition-all" style={{ width: `${pctDirect}%`, backgroundColor: SPLIT_DIRECT }} title="Direct" />
+                <div className="min-w-0 transition-all" style={{ width: `${pctUmu}%`, backgroundColor: SPLIT_UMUCUNDA }} title="Umucunda" />
+              </div>
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>
+                  <span className="inline-block h-2 w-2 rounded-sm mr-1.5 align-middle" style={{ backgroundColor: SPLIT_DIRECT }} />
+                  Direct {pctDirect}%
+                </span>
+                <span>
+                  <span className="inline-block h-2 w-2 rounded-sm mr-1.5 align-middle" style={{ backgroundColor: SPLIT_UMUCUNDA }} />
+                  Umucunda {pctUmu}%
+                </span>
               </div>
             </div>
           )}
-        </section>
 
-        <section className={PANEL}>
-          <SectionHeader number={2} title="Manifest compliance tracker" />
-          <p className={PANEL_DESC}>Expected, submitted, payment hold.</p>
-          {manifestRows.length === 0 ? (
-            <p className={EMPTY}>No manifests ({rangeDateTo}).</p>
-          ) : (
-            <div className="overflow-x-auto -mx-1">
-              <table className="w-full min-w-[420px]">
-                <thead>
-                  <tr>
-                    <th className={TH}>Collector / route</th>
-                    <th className={`${TH} text-right`}>Expected (L)</th>
-                    <th className={TH}>Submitted</th>
-                    <th className={TH}>Payment hold</th>
-                    <th className={TH}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {manifestRows.map((row) => (
-                    <tr key={row.id} className="hover:bg-gray-50/80">
-                      <td className={TD}>
-                        <div className="font-medium text-gray-900">{row.route_label}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">{row.manifest_ref}</div>
-                      </td>
-                      <td className={`${TD} text-right tabular-nums`}>{Math.round(row.expected_litres).toLocaleString()}</td>
-                      <td className={TD}>
-                        <span className={badgeSubmitted(row.submitted)}>
-                          {row.submitted ? 'On time' : 'Not submitted'}
-                        </span>
-                      </td>
-                      <td className={TD_MUTED}>
-                        {row.payment_hold ? <span className="text-amber-700 font-medium">On hold</span> : 'No'}
-                      </td>
-                      <td className={TD_MUTED}>
-                        {row.status}
-                      </td>
+          <div className="mt-6 border-t border-gray-200 pt-6">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Manifest compliance</h4>
+            {manifestRows.length === 0 ? (
+              <p className="text-sm text-gray-500 py-2">No manifest rows for gate {rangeDateTo}.</p>
+            ) : (
+              <div className="overflow-x-auto -mx-1">
+                <table className="w-full min-w-[320px]">
+                  <thead>
+                    <tr>
+                      <th className={TH}>Route / reference</th>
+                      <th className={`${TH} text-right`}>Expected (L)</th>
+                      <th className={TH}>Submitted</th>
+                      <th className={TH}>Payment</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="mt-auto pt-3 flex justify-center">
-            <Link href={buildOpsHref('/operations/manifests')} className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
-              All manifests
-              <Icon icon={faArrowRight} size="xs" />
-            </Link>
+                  </thead>
+                  <tbody>
+                    {manifestRows.map((row) => (
+                      <tr key={row.id} className="hover:bg-gray-50/80">
+                        <td className={TD}>
+                          <div className="font-medium text-gray-900">{row.route_label}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">{row.manifest_ref}</div>
+                        </td>
+                        <td className={`${TD} text-right tabular-nums`}>{row.expected_litres}</td>
+                        <td className={TD}>
+                          <span className={badgeSubmitted(row.submitted)}>{row.submitted ? 'Yes' : 'Pending'}</span>
+                          <div className="text-xs text-gray-500 mt-1 capitalize">{row.status}</div>
+                        </td>
+                        <td className={TD}>
+                          <span className={row.payment_hold ? 'text-amber-700 font-medium text-sm' : 'text-gray-600 text-sm'}>
+                            {row.payment_hold ? 'On hold' : 'Clear'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </section>
 
         <section className={PANEL}>
-          <SectionHeader number={3} title="Rejection events & traceability status" />
-          <p className={PANEL_DESC}>Rejected gate tests ({rangeDateTo}).</p>
-          {gateRejections.length === 0 ? (
-            <p className={EMPTY}>No gate rejections.</p>
-          ) : (
-            <div className="overflow-x-auto -mx-1">
-              <table className="w-full min-w-[460px]">
-                <thead>
-                  <tr>
-                    <th className={TH}>Source</th>
-                    <th className={`${TH} text-right`}>Vol (L)</th>
-                    <th className={TH}>Cause</th>
-                    <th className={TH}>Farms</th>
-                    <th className={TH}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {gateRejections.slice(0, 6).map((r) => (
-                    <tr key={r.test_result_id} className="hover:bg-gray-50/80">
-                      <td className={TD}>{r.source_label}</td>
-                      <td className={`${TD} text-right tabular-nums`}>{r.volume_litres}</td>
-                      <td className={TD}>
-                        <span title={r.rejection_cause}>
-                          {r.rejection_cause}
-                        </span>
-                      </td>
-                      <td className={TD}>
-                        <span className="text-gray-600" title={r.farms_summary}>
-                          {r.farms_summary}
-                        </span>
-                      </td>
-                      <td className={TD}>
-                        <span className={badgeNeutral()}>{resolutionLabel(r.resolution_status)}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="mt-auto pt-3 flex justify-center">
-            <Link href={buildOpsHref('/operations/traceability', { outcome: 'rejected' })} className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
-              Rejection log
-              <Icon icon={faArrowRight} size="xs" />
-            </Link>
-          </div>
-        </section>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
-        <section className={PANEL}>
-          <SectionHeader number={4} title="Tank capacity & cooling status" />
-          <div className="space-y-4">
-            <div className="rounded-sm border border-gray-200 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">{tankTitle}</span>
-                <span className="text-sm font-semibold text-gray-900">{tankPct == null ? '—' : `${tankPct}%`}</span>
-              </div>
-              <div className="mt-2 h-2.5 overflow-hidden rounded-sm bg-gray-100">
-                <div
-                  className={`h-full rounded-sm ${tankTone === 'red' ? 'bg-red-500' : tankTone === 'amber' ? 'bg-amber-500' : tankTone === 'green' ? 'bg-emerald-500' : 'bg-gray-300'}`}
-                  style={{ width: `${tankPct ?? 0}%` }}
-                />
-              </div>
-              <p className="mt-2 text-xs text-gray-500">
-                {tankCapacityLitres > 0
-                  ? `${Math.round(tankLitres).toLocaleString()} / ${tankCapacityLitres.toLocaleString()} L`
-                  : 'Tank capacity not set'}
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-sm border border-gray-200 p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Temperature</p>
-                <p className="mt-1 text-sm font-semibold text-emerald-700">{temperatureValue}</p>
-              </div>
-              <div className="rounded-sm border border-gray-200 p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Power status</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">{powerStatusLabel}</p>
-              </div>
-              <div className="rounded-sm border border-gray-200 p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Generator</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">{generatorLabel}</p>
-              </div>
-              <div className="rounded-sm border border-gray-200 p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Capacity status</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">
-                  {tankPct == null ? 'Not set' : tankTone === 'red' ? 'Critical' : tankTone === 'amber' ? 'Watch' : 'Safe'}
-                </p>
-              </div>
-            </div>
-            <p className="text-xs text-gray-500">
-              {tankCapacityLitres > 0
-                ? 'Target: keep below 85% by evening intake close.'
-                : 'Set tank capacity in operational profile to enable utilization targets.'}
-            </p>
-          </div>
-        </section>
-
-        <section className={PANEL}>
-          <SectionHeader number={5} title="Staff on shift" />
+          <h3 className={`${PANEL_TITLE} flex items-center gap-2`}>
+            <Icon icon={faUserFriends} className="text-[var(--primary)]" size="sm" />
+            Staff on shift
+          </h3>
           <p className={PANEL_DESC}>Gate-facing roles. Changes sync to employee access.</p>
           {mccLoading && staffRows.length === 0 ? (
             <p className={EMPTY}>Loading roster…</p>
@@ -818,9 +570,9 @@ export default function MccManagerDashboardSection({
                   <tr>
                     <th className={TH}>Name</th>
                     <th className={TH}>Role</th>
-                    <th className={`${TH} text-right`}>Task completion</th>
-                    <th className={TH}>Hours</th>
-                    <th className={`${TH} text-right`}>Reassign</th>
+                    <th className={`${TH} text-right`}>Tasks</th>
+                    <th className={TH}>Duty</th>
+                    <th className={TH}>Shift</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -828,36 +580,46 @@ export default function MccManagerDashboardSection({
                     <tr key={row.user_account_id} className="hover:bg-gray-50/80">
                       <td className={`${TD} font-medium`}>{row.name}</td>
                       <td className={TD}>
-                        <span className="inline-flex rounded-sm border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-semibold text-gray-700">
-                          {staffRoleLabel(row.role)}
+                        {canReassignGateStaff ? (
+                          <select
+                            value={row.role}
+                            onChange={(e) => reassignRole(row.user_account_id, e.target.value)}
+                            className="w-full min-w-0 max-w-[200px] rounded-sm border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                            aria-label={`Role for ${row.name}`}
+                          >
+                            {!GATE_ROLE_OPTIONS.some((o) => o.value === row.role) ? (
+                              <option value={row.role}>{row.role}</option>
+                            ) : null}
+                            {GATE_ROLE_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-sm text-gray-800">{row.role}</span>
+                        )}
+                      </td>
+                      <td className={`${TD} text-right tabular-nums`}>{row.tasks_done}</td>
+                      <td className={TD}>
+                        <span className={row.on_duty ? 'text-sm font-medium text-emerald-700' : 'text-sm text-gray-400'}>
+                          {row.on_duty ? 'On duty' : 'Off'}
                         </span>
                       </td>
-                      <td className={`${TD} text-right`}>
-                        <div className="inline-flex items-center gap-2 min-w-[78px]">
-                          <div className="h-1.5 w-14 rounded-sm bg-gray-100 overflow-hidden">
-                            <div
-                              className="h-full rounded-sm bg-emerald-500"
-                              style={{ width: `${Math.max(6, Math.min(100, row.tasks_done))}%` }}
-                            />
-                          </div>
-                          <span className="text-xs tabular-nums text-gray-700">{row.tasks_done}%</span>
-                        </div>
-                      </td>
                       <td className={TD_MUTED}>
-                        {row.shift_started_at
-                          ? `${((Date.now() - new Date(row.shift_started_at).getTime()) / 3600000).toFixed(1)}h`
-                          : '—'}
-                      </td>
-                      <td className={`${TD} text-right`}>
-                        {canReassignGateStaff ? (
-                          <button
-                            type="button"
-                            className="rounded-sm border border-gray-300 bg-white px-2.5 py-1 text-xs text-[var(--primary)] hover:bg-[var(--primary)]/5"
-                          >
-                            Reassign
-                          </button>
+                        {row.shift_started_at ? (
+                          (() => {
+                            const hrs = (Date.now() - new Date(row.shift_started_at!).getTime()) / 3600000;
+                            return hrs > 8 ? (
+                              <span className="rounded-sm bg-red-50 px-2 py-0.5 text-xs font-medium text-red-800">
+                                &gt; 8h
+                              </span>
+                            ) : (
+                              <span className="tabular-nums">{hrs.toFixed(1)}h</span>
+                            );
+                          })()
                         ) : (
-                          <span className="text-xs text-gray-400">—</span>
+                          '—'
                         )}
                       </td>
                     </tr>
@@ -866,21 +628,78 @@ export default function MccManagerDashboardSection({
               </table>
             </div>
           )}
-          <div className="mt-auto pt-3 flex justify-start">
-            <Link href={buildOpsHref('/operations/staff')} className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
-              View full staff schedule
-              <Icon icon={faArrowRight} size="xs" />
-            </Link>
-          </div>
         </section>
 
         <section className={PANEL}>
-          <SectionHeader number={6} title="Alerts queue" />
+          <h3 className={PANEL_TITLE}>Rejection traceability</h3>
+          <p className={PANEL_DESC}>Rejected gate tests for gate day {rangeDateTo} (UTC).</p>
+          {gateRejections.length === 0 ? (
+            <p className={EMPTY}>No gate rejection tests for {rangeDateTo}.</p>
+          ) : (
+            <div className="overflow-x-auto -mx-1">
+              <table className="w-full min-w-[520px]">
+                <thead>
+                  <tr>
+                    <th className={TH}>Source</th>
+                    <th className={`${TH} text-right`}>Vol (L)</th>
+                    <th className={TH}>Cause</th>
+                    <th className={TH}>Farms</th>
+                    <th className={TH}>Status</th>
+                    <th className={`${TH} text-right`}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gateRejections.map((r) => (
+                    <tr key={r.test_result_id} className="hover:bg-gray-50/80">
+                      <td className={TD}>{r.source_label}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{r.volume_litres}</td>
+                      <td className={`${TD} max-w-[180px]`}>
+                        <span className="line-clamp-2" title={r.rejection_cause}>
+                          {r.rejection_cause}
+                        </span>
+                      </td>
+                      <td className={`${TD} max-w-[120px]`}>
+                        <span className="line-clamp-2 text-gray-600" title={r.farms_summary}>
+                          {r.farms_summary}
+                        </span>
+                      </td>
+                      <td className={TD}>
+                        <span className={badgeNeutral()}>{resolutionLabel(r.resolution_status)}</span>
+                      </td>
+                      <td className={`${TD} text-right`}>
+                        {r.resolution_status === 'resolved' ? (
+                          <span className="text-sm text-gray-400">Done</span>
+                        ) : canApproveTraceability ? (
+                          <button
+                            type="button"
+                            onClick={() => approveResolution(r.test_result_id)}
+                            className="rounded-sm border border-[var(--primary)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--primary)] hover:bg-[var(--primary)]/5 transition-colors"
+                          >
+                            Approve
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-400">View only</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className={PANEL}>
+          <h3 className={`${PANEL_TITLE} flex items-center gap-2`}>
+            <Icon icon={faBell} className="text-[var(--primary)]" size="sm" />
+            Alerts
+          </h3>
+          <p className={PANEL_DESC}>Highest priority first.</p>
           <ul className="space-y-2 flex-1">
             {alerts.map((a) => (
               <li
                 key={a.id}
-                className={`flex gap-3 rounded-sm border px-3 py-2.5 text-sm ${
+                className={`flex gap-3 rounded-sm border px-3 py-3 text-sm ${
                   a.tone === 'critical'
                     ? 'border-red-200 bg-red-50/90'
                     : a.tone === 'warn'
@@ -898,76 +717,8 @@ export default function MccManagerDashboardSection({
               </li>
             ))}
           </ul>
-          <Link href="/alerts" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
-            View all alerts
-            <Icon icon={faArrowRight} size="xs" />
-          </Link>
         </section>
       </div>
-
-      <section className={PANEL}>
-        <SectionHeader number={7} title="Daily litres trend (last 14 days)" />
-        {litresTrend.length === 0 ? (
-          <p className={EMPTY}>No trend data available for current period.</p>
-        ) : (
-          <div className="h-64">
-            <Chart options={dailyTrendOptions} series={dailyTrendSeries} type="line" height="100%" />
-          </div>
-        )}
-      </section>
-
-      <section className={PANEL}>
-        <SectionHeader number={8} title="Rejection source resolution actions" />
-        <p className={PANEL_DESC}>Manager action queue for unresolved gate test sources.</p>
-        {gateRejections.length === 0 ? (
-          <p className={EMPTY}>No actionable gate rejections for {rangeDateTo}.</p>
-        ) : (
-          <div className="overflow-x-auto -mx-1">
-            <table className="w-full min-w-[560px]">
-              <thead>
-                <tr>
-                  <th className={TH}>Source</th>
-                  <th className={`${TH} text-right`}>Vol (L)</th>
-                  <th className={TH}>Cause</th>
-                  <th className={TH}>Status</th>
-                  <th className={`${TH} text-right`}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gateRejections.map((r) => (
-                  <tr key={r.test_result_id} className="hover:bg-gray-50/80">
-                    <td className={TD}>{r.source_label}</td>
-                    <td className={`${TD} text-right tabular-nums`}>{r.volume_litres}</td>
-                    <td className={TD}>
-                      <span title={r.rejection_cause}>
-                        {r.rejection_cause}
-                      </span>
-                    </td>
-                    <td className={TD}>
-                      <span className={badgeNeutral()}>{resolutionLabel(r.resolution_status)}</span>
-                    </td>
-                    <td className={`${TD} text-right`}>
-                      {r.resolution_status === 'resolved' ? (
-                        <span className="text-sm text-gray-400">Done</span>
-                      ) : canApproveTraceability ? (
-                        <button
-                          type="button"
-                          onClick={() => approveResolution(r.test_result_id)}
-                          className="rounded-sm border border-[var(--primary)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--primary)] hover:bg-[var(--primary)]/5 transition-colors"
-                        >
-                          Approve
-                        </button>
-                      ) : (
-                        <span className="text-xs text-gray-400">View only</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
     </div>
   );
 }

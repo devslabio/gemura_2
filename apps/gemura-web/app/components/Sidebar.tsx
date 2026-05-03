@@ -7,14 +7,18 @@ import Image from 'next/image';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
 import { getRoleLabel } from '@/lib/utils/role';
-import Icon, { faBars, faChevronRight, faChevronDown, faUser } from './Icon';
-import type { NavItem } from '@/lib/config/nav.config';
+import Icon, { faBars, faChevronRight, faUser } from './Icon';
+import type { NavItem, NavSidebarGroup } from '@/lib/config/nav.config';
 import {
   ADMIN_NAV_ITEMS,
+  ADMIN_NAV_GROUP_ORDER,
   OPERATIONS_NAV_ITEMS,
+  OPERATIONS_NAV_GROUP_ORDER,
   EXTERNAL_SUPPLIER_NAV_ITEMS,
   EXTERNAL_CUSTOMER_NAV_ITEMS,
   EXTERNAL_FARMER_NAV_ITEMS,
+  EXTERNAL_NAV_GROUP_ORDER,
+  buildNavSidebarGroups,
   isBusinessAccount,
   isAdminRole,
   isOperationsRole,
@@ -35,12 +39,10 @@ const FORCE_OPERATIONS_DASHBOARD =
 export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange }: SidebarProps) {
   const pathname = usePathname();
   const { user, currentAccount } = useAuthStore();
-  const { canManageUsers, isAdmin, canViewDashboard, hasPermission } = usePermission();
+  const { canManageUsers, isAdmin, canViewDashboard, hasPermission, hasAnyPermission } = usePermission();
   const [userName, setUserName] = useState('User');
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState('User');
-  // Collapsible sections: set of parent hrefs that are expanded (only when they have children)
-  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() => new Set());
 
   const role = (currentAccount?.role ?? '').trim().toLowerCase().replace(/\s+/g, '_');
   const accountType = currentAccount?.account_type ?? '';
@@ -54,7 +56,28 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     role === 'veternary' ||
     role === 'milkreceptionist' ||
     role === 'milk_receptionist';
-  const limitedOpsAllowedPrefixes = ['/dashboard', '/sales', '/collections', '/inventory', '/suppliers', '/customers'];
+  const limitedOpsAllowedPrefixes = [
+    '/dashboard',
+    '/sales',
+    '/collections',
+    '/inventory',
+    '/suppliers',
+    '/customers',
+    '/operations',
+  ];
+
+  const navItemAllowed = useCallback(
+    (item: NavItem) => {
+      if (item.requiresAnyPermission?.length) {
+        return hasAnyPermission(item.requiresAnyPermission);
+      }
+      if (item.requiresPermission) {
+        return hasPermission(item.requiresPermission);
+      }
+      return true;
+    },
+    [hasPermission, hasAnyPermission],
+  );
 
   useEffect(() => {
     if (user) {
@@ -64,9 +87,8 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     }
   }, [user, currentAccount]);
 
-  // Build menu.
-  // Admin portal is shown based on role/permissions (manage_users + dashboard.view), matching backend.
-  const menuItems = useMemo(() => {
+  // Build grouped sidebar nav (section titles + flat links; no collapsible submenus).
+  const navGroups = useMemo((): NavSidebarGroup[] => {
     const items: NavItem[] = [];
 
     // Milk farmer / supplier / customer: never MCC admin UI (UserAccount.role may still be "owner" on their tenant).
@@ -78,7 +100,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
       } else {
         EXTERNAL_CUSTOMER_NAV_ITEMS.forEach((item) => items.push(item));
       }
-      return items;
+      return buildNavSidebarGroups(items, EXTERNAL_NAV_GROUP_ORDER);
     }
 
     const showAdminDashboard = canViewDashboard() || isAdmin();
@@ -106,23 +128,27 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
         items.push(item);
       });
 
-      return items;
+      return buildNavSidebarGroups(items, ADMIN_NAV_GROUP_ORDER);
     }
 
     // User accounts: menu by role and permissions (active/default account)
     // Operations: business account types, filter by role/permissions
     if (isOperationsRole(role) && isBusinessAccount(accountType)) {
       if (role === 'manager') {
-        OPERATIONS_NAV_ITEMS.forEach((item) => items.push(item));
-        return items;
+        OPERATIONS_NAV_ITEMS.forEach((item) => {
+          if (!navItemAllowed(item)) return;
+          items.push(item);
+        });
+        return buildNavSidebarGroups(items, OPERATIONS_NAV_GROUP_ORDER);
       }
 
       if (role === 'accountant') {
         OPERATIONS_NAV_ITEMS.forEach((item) => {
           if (item.href === '/accounts' || item.href === '/settings') return;
+          if (!navItemAllowed(item)) return;
           items.push(item);
         });
-        return items;
+        return buildNavSidebarGroups(items, OPERATIONS_NAV_GROUP_ORDER);
       }
 
       if (isLimitedOpsRole) {
@@ -131,16 +157,17 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
             (prefix) => item.href === prefix || item.href.startsWith(prefix + '/')
           );
           if (!isAllowed) return;
+          if (!navItemAllowed(item)) return;
           items.push(item);
         });
-        return items;
+        return buildNavSidebarGroups(items, OPERATIONS_NAV_GROUP_ORDER);
       }
 
       OPERATIONS_NAV_ITEMS.forEach((item) => {
-        if (item.requiresPermission && !hasPermission(item.requiresPermission)) return;
+        if (!navItemAllowed(item)) return;
         items.push(item);
       });
-      return items;
+      return buildNavSidebarGroups(items, OPERATIONS_NAV_GROUP_ORDER);
     }
 
     // Owner/admin role on non-admin account (tenant/branch etc.) → operations menu by permissions
@@ -148,10 +175,10 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
       OPERATIONS_NAV_ITEMS.forEach((item) => {
         if (item.href === '/settings' && (role === 'collector' || role === 'agent' || role === 'veterinary_officer' || role === 'casual_laborer' || role === 'accountant')) return;
         if (item.href === '/accounts' && role === 'accountant') return;
-        if (item.requiresPermission && !hasPermission(item.requiresPermission)) return;
+        if (!navItemAllowed(item)) return;
         items.push(item);
       });
-      return items;
+      return buildNavSidebarGroups(items, OPERATIONS_NAV_GROUP_ORDER);
     }
 
     // Fallback: business account type, unknown role — show operations by permissions
@@ -159,39 +186,48 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
       OPERATIONS_NAV_ITEMS.forEach((item) => {
         if (item.href === '/settings' && (role === 'collector' || role === 'agent' || role === 'veterinary_officer' || role === 'casual_laborer' || role === 'accountant')) return;
         if (item.href === '/accounts' && role === 'accountant') return;
-        if (item.requiresPermission && !hasPermission(item.requiresPermission) && !isAdmin()) return;
+        if (!isAdmin() && !navItemAllowed(item)) return;
         items.push(item);
       });
-      if (items.length > 0) return items;
+      if (items.length > 0) return buildNavSidebarGroups(items, OPERATIONS_NAV_GROUP_ORDER);
     }
 
     // Last resort: minimal menu
     items.push(
-      { icon: ADMIN_NAV_ITEMS[0].icon, label: 'Dashboard', href: '/dashboard', section: 'admin' },
-      { icon: ADMIN_NAV_ITEMS[4].icon, label: 'Settings', href: '/settings', section: 'admin' },
+      { icon: ADMIN_NAV_ITEMS[0].icon, label: 'Dashboard', href: '/dashboard', section: 'admin', navGroup: 'General' },
+      { icon: ADMIN_NAV_ITEMS[2].icon, label: 'Settings', href: '/settings', section: 'admin', navGroup: 'General' },
     );
-    return items;
-  }, [role, accountType, canManageUsers, isAdmin, canViewDashboard, hasPermission]);
+    return buildNavSidebarGroups(items, ['General']);
+  }, [role, accountType, canManageUsers, isAdmin, canViewDashboard, navItemAllowed]);
 
-  // Keep the section that contains the current route expanded (only add, never remove, to avoid loop)
+  const [locHash, setLocHash] = useState('');
   useEffect(() => {
-    if (!pathname || collapsed) return;
-    const key = menuItems.find(
-      (item) => item.href === pathname || item.children?.some((c) => pathname.startsWith(c.href))
-    )?.href;
-    if (key) {
-      setExpandedKeys((prev) => {
-        if (prev.has(key)) return prev;
-        const next = new Set(prev);
-        next.add(key);
-        return next;
-      });
-    }
-  }, [pathname, collapsed, menuItems]);
+    const sync = () => setLocHash(typeof window !== 'undefined' ? window.location.hash : '');
+    sync();
+    window.addEventListener('hashchange', sync);
+    return () => window.removeEventListener('hashchange', sync);
+  }, [pathname]);
 
   const isActive = (href?: string) => {
-    if (!href) return false;
-    return pathname?.startsWith(href);
+    if (!href || !pathname) return false;
+    let navUrl: URL;
+    try {
+      navUrl = new URL(href, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+    } catch {
+      return false;
+    }
+    const navPath = navUrl.pathname;
+    const navHash = navUrl.hash;
+
+    if (navPath === '/collections') {
+      if (pathname === '/collections') {
+        if (navHash) return locHash === navHash;
+        return !locHash;
+      }
+      return pathname.startsWith(`${navPath}/`);
+    }
+
+    return pathname.startsWith(navPath);
   };
 
   const handleCollapseToggle = useCallback(() => {
@@ -206,15 +242,6 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     if (window.innerWidth < 1024) {
       onClose();
     }
-  };
-
-  const toggleExpanded = (key: string) => {
-    setExpandedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
   };
 
   return (
@@ -265,7 +292,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
               {!collapsed && (
                 <div className="flex flex-col min-w-0">
                   <span className="text-lg sm:text-xl font-semibold text-white leading-tight truncate">Gemura</span>
-                  <span className="text-xs text-white/80 leading-tight hidden sm:block">Milk collection services platform</span>
+                  <span className="text-xs text-white/80 leading-tight hidden sm:block whitespace-nowrap">Milk operations platform</span>
                 </div>
               )}
             </Link>
@@ -323,98 +350,55 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
         {/* Navigation */}
         <nav className="flex-1 py-0 overflow-y-auto min-h-0">
           <ul className="list-none p-0 m-0 flex flex-col gap-0">
-            {menuItems.map((item, index) => {
-              const hasChildren = !collapsed && item.children && item.children.length > 0;
-              const parentActive = isActive(item.href) || (item.children?.some((c) => isActive(c.href)) ?? false);
-              const isExpanded = hasChildren && expandedKeys.has(item.href);
-              const rowClass = `
-                flex items-center gap-3 min-h-[44px] px-4 sm:px-5 md:px-7 py-3 sm:py-4 w-full text-left
-                transition-all duration-200
-                ${collapsed ? 'justify-center px-3' : ''}
-                ${parentActive && !hasChildren
-                  ? 'bg-[#031a3a] text-white border-l-4 border-white/30'
-                  : parentActive && hasChildren
-                    ? 'text-white border-l-4 border-white/30'
-                    : 'text-gray-300 hover:bg-[#031a3a] hover:text-white active:bg-[#031a3a]'
-                }
-              `;
-              return (
-                <li key={index} className="my-0.5">
-                  {hasChildren ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => toggleExpanded(item.href)}
-                        className={rowClass}
-                        title={collapsed ? item.label : undefined}
-                        aria-expanded={isExpanded}
-                      >
-                        <Icon
-                          icon={item.icon}
-                          className={parentActive ? 'text-white' : 'text-gray-300'}
-                          size="sm"
-                        />
-                        {!collapsed && (
-                          <>
+            {navGroups.map((group) => (
+              <li key={group.title} className="list-none">
+                {!collapsed && (
+                  <div
+                    className="px-4 sm:px-5 md:px-7 pt-3 pb-1.5 first:pt-1 mt-0.5 border-t border-white/[0.06] first:border-t-0 first:mt-0"
+                    role="presentation"
+                  >
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
+                      {group.title}
+                    </span>
+                  </div>
+                )}
+                <ul className="list-none p-0 m-0 flex flex-col">
+                  {group.items.map((item) => {
+                    const parentActive = isActive(item.href);
+                    const rowClass = `
+                      flex items-center gap-3 min-h-[44px] px-4 sm:px-5 md:px-7 py-3 sm:py-4 w-full text-left
+                      transition-all duration-200
+                      ${collapsed ? 'justify-center px-3' : ''}
+                      ${parentActive
+                        ? 'bg-[#031a3a] text-white border-l-4 border-white/30'
+                        : 'text-gray-300 hover:bg-[#031a3a] hover:text-white active:bg-[#031a3a]'
+                      }
+                    `;
+                    return (
+                      <li key={`${group.title}-${item.href}`} className="my-0.5">
+                        <Link
+                          href={item.href || '#'}
+                          onClick={handleLinkClick}
+                          className={rowClass}
+                          title={collapsed ? item.label : undefined}
+                        >
+                          <Icon
+                            icon={item.icon}
+                            className={parentActive ? 'text-white' : 'text-gray-300'}
+                            size="sm"
+                          />
+                          {!collapsed && (
                             <span className="text-sm font-medium flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
                               {item.label}
                             </span>
-                            <Icon
-                              icon={faChevronDown}
-                              size="sm"
-                              className={`text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
-                            />
-                          </>
-                        )}
-                      </button>
-                      {isExpanded && (
-                        <ul className="list-none pl-0 mt-0 mb-1">
-                          {item.children!.map((child, childIndex) => {
-                            const childActive = isActive(child.href);
-                            return (
-                              <li key={childIndex} className="my-0">
-                                <Link
-                                  href={child.href}
-                                  onClick={handleLinkClick}
-                                  className={`
-                                    flex items-center gap-2 min-h-11 py-2.5 pl-10 sm:pl-12 pr-3 sm:pr-4 text-sm
-                                    transition-all duration-200
-                                    ${childActive
-                                      ? 'bg-[#031a3a] text-white border-l-4 border-white/30 -ml-0.5 pl-13'
-                                      : 'text-gray-400 hover:bg-[#031a3a] hover:text-white active:bg-[#031a3a]'
-                                    }
-                                  `}
-                                >
-                                  <span className="whitespace-nowrap overflow-hidden text-ellipsis">{child.label}</span>
-                                </Link>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                    </>
-                  ) : (
-                    <Link
-                      href={item.href || '#'}
-                      onClick={handleLinkClick}
-                      className={rowClass}
-                      title={collapsed ? item.label : undefined}
-                    >
-                      <Icon
-                        icon={item.icon}
-                        className={parentActive ? 'text-white' : 'text-gray-300'}
-                        size="sm"
-                      />
-                      {!collapsed && (
-                        <span className="text-sm font-medium flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
-                          {item.label}
-                        </span>
-                      )}
-                    </Link>
-                  )}
-                </li>
-              );
-            })}
+                          )}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </li>
+            ))}
           </ul>
         </nav>
       </aside>
