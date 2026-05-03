@@ -84,8 +84,8 @@ export const MCC_OPERATIONS_SUB_PANELS: {
   {
     id: 'gate',
     label: 'Gate arrivals',
-    href: '/collections#gate-arrivals',
-    description: 'Gate intake log on the Milk collection page. Link arrivals when posting a collection.',
+    href: '/operations/gate',
+    description: 'Gate intake log. Link arrivals when posting a collection.',
   },
   {
     id: 'manifests',
@@ -154,7 +154,7 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
   {
     icon: faTruck,
     label: 'Gate deliveries',
-    href: '/collections#gate-arrivals',
+    href: '/operations/gate',
     section: 'operations',
     navGroup: 'Sales & milk',
     requiresAnyPermission: ['mcc_view_operations', 'view_collections'],

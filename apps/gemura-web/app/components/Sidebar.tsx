@@ -199,31 +199,18 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     return buildNavSidebarGroups(items, ['General']);
   }, [role, accountType, canManageUsers, isAdmin, canViewDashboard, navItemAllowed]);
 
-  const [locHash, setLocHash] = useState('');
-  useEffect(() => {
-    const sync = () => setLocHash(typeof window !== 'undefined' ? window.location.hash : '');
-    sync();
-    window.addEventListener('hashchange', sync);
-    return () => window.removeEventListener('hashchange', sync);
-  }, [pathname]);
-
   const isActive = (href?: string) => {
     if (!href || !pathname) return false;
-    let navUrl: URL;
+    let navPath: string;
     try {
-      navUrl = new URL(href, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+      navPath = new URL(href, typeof window !== 'undefined' ? window.location.origin : 'http://localhost').pathname;
     } catch {
       return false;
     }
-    const navPath = navUrl.pathname;
-    const navHash = navUrl.hash;
 
     if (navPath === '/collections') {
-      if (pathname === '/collections') {
-        if (navHash) return locHash === navHash;
-        return !locHash;
-      }
-      return pathname.startsWith(`${navPath}/`);
+      if (pathname === '/collections') return true;
+      return pathname.startsWith('/collections/');
     }
 
     return pathname.startsWith(navPath);
