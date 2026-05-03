@@ -30,7 +30,7 @@ const OPERATIONS_PATH_PERMISSION: Record<string, string> = {
 const OPERATIONS_PATH_ANY_PERMISSION: Record<string, string[]> = {
   /** Matches OPERATIONS_NAV_ITEMS for Milk collection / Gate deliveries (gate tab vs records tab handled in-page). */
   '/collections': ['mcc_view_operations', 'mcc_view_own_operations', 'view_collections'],
-  '/operations/traceability': ['mcc_view_operations'],
+  '/operations/traceability': ['mcc_view_operations', 'mcc_manage_operations'],
   '/operations/staff': ['mcc_view_operations'],
   '/operations/shifts': ['mcc_view_operations'],
   '/operations': [

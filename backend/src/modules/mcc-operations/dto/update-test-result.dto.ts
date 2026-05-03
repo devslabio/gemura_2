@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsEnum, IsObject, IsOptional, IsString, IsUUID, ValidateIf } from 'class-validator';
 
 export class UpdateTestResultDto {
   @ApiProperty({ required: false })
@@ -24,4 +24,15 @@ export class UpdateTestResultDto {
   @IsOptional()
   @IsObject()
   detail?: Record<string, unknown>;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    description:
+      'Optional manifest line for this gate delivery; send null to clear. Line must belong to the same gate as the test.',
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsUUID('4')
+  manifest_line_id?: string | null;
 }

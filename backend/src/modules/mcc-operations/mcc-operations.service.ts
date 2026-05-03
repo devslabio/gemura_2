@@ -684,13 +684,39 @@ export class MccOperationsService {
       throw new ForbiddenException({ code: 403, status: 'error', message: 'Not allowed for this account.' });
     }
 
+    const updateData: {
+      outcome: typeof dto.outcome;
+      rejection_cause: string | null;
+      detail?: object;
+      manifest_line_id?: string | null;
+    } = {
+      outcome: dto.outcome,
+      rejection_cause: dto.rejection_cause ?? null,
+      ...(dto.detail !== undefined ? { detail: dto.detail as object } : {}),
+    };
+
+    if (dto.manifest_line_id !== undefined) {
+      if (dto.manifest_line_id === null) {
+        updateData.manifest_line_id = null;
+      } else {
+        const line = await this.prisma.mccManifestLine.findFirst({
+          where: { id: dto.manifest_line_id },
+          include: { manifest: true },
+        });
+        if (!line || line.manifest.gate_delivery_id !== row.mcc_gate_delivery_id) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'Manifest line does not belong to this gate delivery.',
+          });
+        }
+        updateData.manifest_line_id = dto.manifest_line_id;
+      }
+    }
+
     await this.prisma.mccMilkTestResult.update({
       where: { id: testResultId },
-      data: {
-        outcome: dto.outcome,
-        rejection_cause: dto.rejection_cause ?? null,
-        ...(dto.detail !== undefined ? { detail: dto.detail as object } : {}),
-      },
+      data: updateData,
     });
 
     return { code: 200, status: 'success', message: 'Test result updated.', data: { id: testResultId } };

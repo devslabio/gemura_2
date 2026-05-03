@@ -183,6 +183,8 @@ export const mccOperationsApi = {
       outcome: 'pending' | 'accepted' | 'rejected';
       rejection_cause?: string;
       detail?: Record<string, unknown>;
+      /** Set UUID to link a line; send `null` to clear (PATCH only). */
+      manifest_line_id?: string | null;
     },
   ) {
     return apiClient.patch<{ code: number }>(`/mcc/operations/test-results/${testResultId}`, body);
