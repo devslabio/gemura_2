@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { collectionsApi, Collection, CollectionsFilters } from '@/lib/api/collections';
@@ -43,21 +43,26 @@ export default function CollectionsPage() {
     supplier_name: searchParams.get('supplier_name') || undefined,
   });
 
-  /** Legacy milk-collection gate URLs → dedicated gate page */
-  useEffect(() => {
-    if (searchParams.get('tab') === 'gate') {
-      router.replace('/operations/gate');
-      return;
-    }
-    if (typeof window !== 'undefined' && window.location.hash === '#gate-arrivals') {
-      router.replace('/operations/gate');
-    }
-  }, [searchParams, router]);
+  /**
+   * One-shot redirect to /operations/gate:
+   * - Legacy URLs (?tab=gate, #gate-arrivals) — strip hash first so Next/router doesn’t fight the fragment.
+   * - Users who only have MCC ops permission (no collection records).
+   * Guarded so unstable searchParams re-renders don’t spam router.replace (that caused URL flicker).
+   */
+  const gateRedirectStartedRef = useRef(false);
+  useLayoutEffect(() => {
+    if (gateRedirectStartedRef.current) return;
+    const tabGate = searchParams.get('tab') === 'gate';
+    const hashGate = typeof window !== 'undefined' && window.location.hash === '#gate-arrivals';
+    const legacyToGate = tabGate || hashGate;
+    if (!legacyToGate && !canViewGateOnlyFallback) return;
 
-  useEffect(() => {
-    if (!canViewGateOnlyFallback) return;
-    router.replace('/operations/gate');
-  }, [canViewGateOnlyFallback, router]);
+    gateRedirectStartedRef.current = true;
+    if (hashGate) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    }
+    router.replace('/operations/gate', { scroll: false });
+  }, [searchParams, router, canViewGateOnlyFallback]);
 
   const loadCollections = useCallback(async () => {
     try {
