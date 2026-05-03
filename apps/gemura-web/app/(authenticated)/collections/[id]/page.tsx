@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { usePermission } from '@/hooks/usePermission';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import { collectionsApi, Collection } from '@/lib/api/collections';
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
@@ -28,6 +29,7 @@ export default function CollectionDetailsPage() {
   const collectionId = params.id as string;
   const { currentAccount } = useAuthStore();
   const { hasPermission, isAdmin } = usePermission();
+  const { collections: collectionCrud } = useCrudPermissions();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [collection, setCollection] = useState<Collection | null>(null);
@@ -124,7 +126,7 @@ export default function CollectionDetailsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Collection Details</h1>
         </div>
         <div className="flex items-center gap-2">
-          {collection && collection.status !== 'cancelled' && collection.status !== 'deleted' && (
+          {collection && collection.status !== 'cancelled' && collection.status !== 'deleted' && collectionCrud.update && (
             <>
               <Link href={`/collections/${collectionId}/edit`} className="btn btn-primary">
                 <Icon icon={faEdit} size="sm" className="mr-2" />

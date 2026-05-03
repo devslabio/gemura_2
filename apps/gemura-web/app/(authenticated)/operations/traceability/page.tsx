@@ -5,7 +5,7 @@ import { mccOperationsApi, type MccGateDeliveryRow, type MccTestResultRow } from
 import { mccManagerApi } from '@/lib/api/mcc-manager';
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
-import { usePermission } from '@/hooks/usePermission';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import { useClientPagination } from '@/hooks/useClientPagination';
 import Modal from '@/app/components/Modal';
 import Pagination from '@/app/components/Pagination';
@@ -30,8 +30,7 @@ function defaultTraceabilityFrom() {
 
 export default function OperationsTraceabilityPage() {
   const { currentAccount } = useAuthStore();
-  const { hasAnyPermission } = usePermission();
-  const canManage = hasAnyPermission(['mcc_manage_operations', 'update_collections']);
+  const { mccTraceabilityMutations: canManage } = useCrudPermissions();
   const toast = useToastStore();
   const accountId = currentAccount?.account_id ?? '';
   const [rows, setRows] = useState<MccTestResultRow[]>([]);

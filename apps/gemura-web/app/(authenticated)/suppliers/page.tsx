@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { suppliersApi, Supplier } from '@/lib/api/suppliers';
 import { useAuthStore } from '@/store/auth';
-import { usePermission } from '@/hooks/usePermission';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import DataTableWithPagination from '@/app/components/DataTableWithPagination';
 import FilterBar, { FilterBarGroup, FilterBarSearch, FilterBarActions, FilterBarExport } from '@/app/components/FilterBar';
 import type { TableColumn } from '@/app/components/DataTable';
@@ -33,9 +33,7 @@ const TYPE_OPTIONS = [
 export default function SuppliersPage() {
   const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
-  const { hasPermission, isAdmin } = usePermission();
-  const role = (currentAccount?.role ?? '').toLowerCase();
-  const isReadOnlyTeamRole = role === 'agent' || role === 'collector' || role === 'veterinary' || role === 'veterinarian' || role === 'veternary' || role === 'milkreceptionist' || role === 'milk_receptionist';
+  const { suppliers: supplierCrud } = useCrudPermissions();
   const [loading, setLoading] = useState(true);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [error, setError] = useState('');
@@ -44,8 +42,6 @@ export default function SuppliersPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
-  const canCreateSupplier = !isReadOnlyTeamRole && (hasPermission('create_suppliers') || isAdmin());
-
   const normalizeSupplierType = (supplierType?: string | null): string => {
     if (!supplierType || supplierType === 'supplier') return 'farmer';
     return supplierType;
@@ -227,23 +223,25 @@ export default function SuppliersPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Suppliers</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => canCreateSupplier && setBulkImportOpen(true)} className="btn btn-secondary" disabled={!canCreateSupplier}>
-            <Icon icon={faFile} size="sm" className="mr-2" />
-            Bulk import
-          </button>
-          <a
-            href="#"
-            onClick={(e) => { e.preventDefault(); suppliersApi.downloadTemplate().catch(() => {}); }}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors"
-          >
-            Download template
-          </a>
-          <button type="button" onClick={() => canCreateSupplier && setCreateModalOpen(true)} className="btn btn-primary" disabled={!canCreateSupplier}>
-            <Icon icon={faPlus} size="sm" className="mr-2" />
-            Add Supplier
-          </button>
-        </div>
+        {supplierCrud.create ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setBulkImportOpen(true)} className="btn btn-secondary">
+              <Icon icon={faFile} size="sm" className="mr-2" />
+              Bulk import
+            </button>
+            <a
+              href="#"
+              onClick={(e) => { e.preventDefault(); suppliersApi.downloadTemplate().catch(() => {}); }}
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors"
+            >
+              Download template
+            </a>
+            <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
+              <Icon icon={faPlus} size="sm" className="mr-2" />
+              Add Supplier
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <BulkImportModal

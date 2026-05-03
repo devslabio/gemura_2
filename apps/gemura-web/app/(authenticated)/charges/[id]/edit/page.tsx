@@ -7,6 +7,7 @@ import { chargesApi, Charge, UpdateChargeData } from '@/lib/api/charges';
 import { suppliersApi, Supplier } from '@/lib/api/suppliers';
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import Icon, { faArrowLeft, faSpinner, faTag } from '@/app/components/Icon';
 
 export default function EditChargePage() {
@@ -14,6 +15,11 @@ export default function EditChargePage() {
   const params = useParams();
   const id = typeof params?.id === 'string' ? params.id : '';
   const { currentAccount } = useAuthStore();
+  const { financeMutations } = useCrudPermissions();
+
+  useEffect(() => {
+    if (!financeMutations) router.replace('/charges');
+  }, [financeMutations, router]);
   const [charge, setCharge] = useState<Charge | null>(null);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
@@ -248,15 +254,20 @@ export default function EditChargePage() {
                   <p className="text-sm text-gray-500">No suppliers found.</p>
                 ) : (
                   suppliers.map((s) => (
-                    <label key={s.account.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                    <label
+                      key={s.account.id}
+                      className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                    >
                       <input
                         type="checkbox"
                         checked={(form.supplier_account_ids || []).includes(s.account.id)}
                         onChange={() => toggleSupplier(s.account.id)}
-                        className="rounded border-gray-300"
+                        className="mt-0.5 shrink-0 rounded border-gray-300"
                       />
-                      <span className="text-sm text-gray-900">{s.name}</span>
-                      <span className="text-xs text-gray-500">{s.account.code}</span>
+                      <div className="min-w-0 flex-1 text-sm text-gray-900">
+                        <span className="font-medium">{s.name}</span>
+                        <span className="text-xs text-gray-500 ml-2">({s.account.code})</span>
+                      </div>
                     </label>
                   ))
                 )}

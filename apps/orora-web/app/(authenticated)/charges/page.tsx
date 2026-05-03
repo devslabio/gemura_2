@@ -366,15 +366,20 @@ export default function ChargesPage() {
                     <p className="text-sm text-gray-500">No suppliers found.</p>
                   ) : (
                     suppliers.map((s) => (
-                      <label key={s.account.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                      <label
+                        key={s.account.id}
+                        className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                      >
                         <input
                           type="checkbox"
                           checked={(form.supplier_account_ids || []).includes(s.account.id)}
                           onChange={() => toggleSupplier(s.account.id)}
-                          className="rounded border-gray-300"
+                          className="mt-0.5 shrink-0 rounded border-gray-300"
                         />
-                        <span className="text-sm text-gray-900">{s.name}</span>
-                        <span className="text-xs text-gray-500">{s.account.code}</span>
+                        <div className="min-w-0 flex-1 text-sm text-gray-900">
+                          <span className="font-medium">{s.name}</span>
+                          <span className="text-xs text-gray-500 ml-2">({s.account.code})</span>
+                        </div>
                       </label>
                     ))
                   )}

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, MaxLength, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsEnum, MaxLength, IsUUID, ValidateIf } from 'class-validator';
 
 export class UpdateEmployeeDto {
   @ApiPropertyOptional({
@@ -43,5 +43,15 @@ export class UpdateEmployeeDto {
   @IsOptional()
   @IsEnum(['active', 'inactive'], { message: 'Status must be active or inactive' })
   status?: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Umucunda hub/route supplier account id for scoped MCC gate & manifest APIs (must be an active supplier of this MCC). Set null to clear.',
+  })
+  @IsOptional()
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsUUID('4')
+  linked_umucunda_supplier_account_id?: string | null;
 }
 

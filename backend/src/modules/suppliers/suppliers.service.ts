@@ -1,5 +1,7 @@
-import { Injectable, BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RbacService } from '../rbac/rbac.service';
+import { isPlatformSuperAdminRole } from '../admin/roles-permissions.config';
 import { User } from '@prisma/client';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
@@ -8,7 +10,10 @@ import { randomBytes } from 'crypto';
 
 @Injectable()
 export class SuppliersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private rbac: RbacService,
+  ) {}
 
   async createOrUpdateSupplier(user: User, createDto: CreateSupplierDto) {
     const { name, phone, price_per_liter, email, nid, address, bank_name, bank_account_number } = createDto;
@@ -306,11 +311,55 @@ export class SuppliersService {
       customerAccountId = user.default_account_id;
     }
 
-    // Get all supplier relationships for this customer
+    const ua = await this.prisma.userAccount.findFirst({
+      where: { user_id: user.id, account_id: customerAccountId, status: 'active' },
+    });
+    if (!ua) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'No active membership on this account.',
+      });
+    }
+
+    const roleLc = (ua.role || '').toLowerCase();
+    const codes = await this.rbac.getEffectivePermissionCodes(ua);
+    const seesFullSupplierList =
+      isPlatformSuperAdminRole(roleLc) ||
+      codes.includes('view_suppliers') ||
+      codes.includes('mcc_view_operations') ||
+      codes.includes('mcc_floor_operations');
+
+    const scopedGateSupplierOnly =
+      !seesFullSupplierList &&
+      (codes.includes('mcc_view_own_operations') || codes.includes('mcc_manage_own_operations'));
+
+    let supplierAccountFilter: string | undefined;
+    if (scopedGateSupplierOnly) {
+      const sid = ua.linked_umucunda_supplier_account_id;
+      if (!sid) {
+        return {
+          code: 200,
+          status: 'success',
+          message:
+            'No Umucunda route supplier linked for this user. Ask an admin to set linked Umucunda supplier on your team membership.',
+          data: [],
+        };
+      }
+      supplierAccountFilter = sid;
+    } else if (!seesFullSupplierList) {
+      throw new ForbiddenException({
+        code: 403,
+        status: 'error',
+        message: 'Insufficient permissions to list suppliers.',
+      });
+    }
+
     const relationships = await this.prisma.supplierCustomer.findMany({
       where: {
         customer_account_id: customerAccountId,
         relationship_status: 'active',
+        ...(supplierAccountFilter ? { supplier_account_id: supplierAccountFilter } : {}),
       },
       include: {
         supplier_account: {

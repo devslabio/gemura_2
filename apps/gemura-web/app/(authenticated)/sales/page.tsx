@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { salesApi, Sale, SalesFilters } from '@/lib/api/sales';
 import { useToastStore } from '@/store/toast';
 import { useAuthStore } from '@/store/auth';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import DataTableWithPagination from '@/app/components/DataTableWithPagination';
 import type { TableColumn } from '@/app/components/DataTable';
 import FilterBar, { FilterBarGroup, FilterBarActions, FilterBarApply, FilterBarExport } from '@/app/components/FilterBar';
@@ -26,6 +27,7 @@ const STATUS_OPTIONS = [
 export default function SalesPage() {
   const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
+  const { sales: saleCrud } = useCrudPermissions();
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState<Sale[]>([]);
   const [error, setError] = useState('');
@@ -166,23 +168,25 @@ export default function SalesPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sales</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => setBulkImportOpen(true)} className="btn btn-secondary">
-            <Icon icon={faFile} size="sm" className="mr-2" />
-            Bulk import
-          </button>
-          <a
-            href="#"
-            onClick={(e) => { e.preventDefault(); salesApi.downloadTemplate().catch(() => {}); }}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors"
-          >
-            Download template
-          </a>
-          <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
-            <Icon icon={faPlus} size="sm" className="mr-2" />
-            New Sale
-          </button>
-        </div>
+        {saleCrud.create ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setBulkImportOpen(true)} className="btn btn-secondary">
+              <Icon icon={faFile} size="sm" className="mr-2" />
+              Bulk import
+            </button>
+            <a
+              href="#"
+              onClick={(e) => { e.preventDefault(); salesApi.downloadTemplate().catch(() => {}); }}
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors"
+            >
+              Download template
+            </a>
+            <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
+              <Icon icon={faPlus} size="sm" className="mr-2" />
+              New Sale
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <BulkImportModal

@@ -183,10 +183,12 @@ export default function PayrollPage() {
         {loadingSuppliers ? (
           <div className="border border-gray-200 rounded-sm max-h-64 overflow-hidden">
             {Array.from({ length: 8 }, (_, i) => (
-              <div key={i} className="flex items-center gap-3 px-3 py-2.5 border-b border-gray-100 last:border-0">
-                <div className="w-4 h-4 rounded border border-gray-200 skeleton-shimmer bg-gray-200" />
-                <SkeletonBar className="h-4 flex-1 max-w-[200px]" />
-                <SkeletonBar className="h-3 w-12" />
+              <div key={i} className="flex items-start gap-3 px-3 py-2.5 border-b border-gray-100 last:border-0">
+                <div className="mt-0.5 h-4 w-4 shrink-0 rounded border border-gray-200 skeleton-shimmer bg-gray-200" />
+                <div className="min-w-0 flex-1 space-y-1">
+                  <SkeletonBar className="h-4 max-w-[240px]" />
+                  <SkeletonBar className="h-3 w-20" />
+                </div>
               </div>
             ))}
           </div>
@@ -206,15 +208,15 @@ export default function PayrollPage() {
               {suppliers.map((s) => (
                 <label
                   key={s.relationship_id}
-                  className="flex items-center gap-3 px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-0 cursor-pointer"
+                  className="mb-0 flex items-start gap-3 px-3 py-2 hover:bg-gray-50 border-b border-gray-100 last:border-0 cursor-pointer"
                 >
                   <input
                     type="checkbox"
                     checked={selectedCodes.has(s.account.code)}
                     onChange={() => toggleSupplier(s.account.code)}
-                    className="rounded border-gray-300 text-[var(--primary)]"
+                    className="mt-0.5 shrink-0 rounded border-gray-300 text-[var(--primary)]"
                   />
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <span className="font-medium text-gray-900">{s.name}</span>
                     <span className="text-xs text-gray-500 ml-2">({s.account.code})</span>
                   </div>

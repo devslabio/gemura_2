@@ -93,13 +93,34 @@ export const PERMISSIONS: PermissionDef[] = [
     code: 'mcc_manage_operations',
     name: 'Manage MCC operations',
     description:
-      'Record gate deliveries; create, edit, submit, and reject manifests; record and update milk tests; start and end staff shifts',
+      'Record gate deliveries; create, edit, and submit manifests; record and update milk tests; start and end staff shifts (manifest reject uses Accept MCC manifests)',
+    category: 'MCC',
+  },
+  {
+    code: 'mcc_floor_operations',
+    name: 'MCC floor / gate operations',
+    description:
+      'Gate intake work: record deliveries; create/submit manifest drafts; start/end own shift; supplier list for intake. Excludes milk-test traceability, roster admin, and manifest accept/reject.',
     category: 'MCC',
   },
   {
     code: 'mcc_accept_manifests',
     name: 'Accept MCC manifests',
     description: 'Accept submitted Umucunda manifests (releases payment-hold workflow)',
+    category: 'MCC',
+  },
+  {
+    code: 'mcc_view_own_operations',
+    name: 'View own Umucunda MCC operations',
+    description:
+      'View gate deliveries, manifests, and milk tests only for the Umucunda hub/route supplier linked to this user',
+    category: 'MCC',
+  },
+  {
+    code: 'mcc_manage_own_operations',
+    name: 'Manage own Umucunda MCC operations',
+    description:
+      'Record gate deliveries and create/submit manifest drafts only for the linked Umucunda supplier; start/end own shift only',
     category: 'MCC',
   },
 ];
@@ -144,9 +165,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
   ],
   casual_laborer: [
     'dashboard.view',
-    'view_collections',
-    'mcc_view_operations',
-    'mcc_manage_operations',
+    'mcc_floor_operations',
     'view_inventory',
   ],
   leadership: [
@@ -169,28 +188,27 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
     'view_collections',
     'create_collections',
     'update_collections',
-    'mcc_view_operations',
-    'mcc_manage_operations',
+    'mcc_view_own_operations',
+    'mcc_manage_own_operations',
     'view_sales',
     'create_sales',
-    'view_inventory',
   ],
   umucunda_b: [
     'dashboard.view',
     'view_collections',
     'create_collections',
     'update_collections',
-    'mcc_view_operations',
-    'mcc_manage_operations',
+    'mcc_view_own_operations',
+    'mcc_manage_own_operations',
     'view_sales',
     'create_sales',
-    'view_inventory',
   ],
   accountant: [
     'dashboard.view',
     'view_analytics',
   ],
   collector: [
+    'dashboard.view',
     'view_sales',
     'create_sales',
     'update_sales',
@@ -254,11 +272,14 @@ export const ROLE_DESCRIPTIONS: Record<RoleCode, string> = {
   admin: 'Administrative access; manage users and settings',
   manager: 'Full operational access; sales, collections, inventory, analytics; can manage team members',
   veterinary_officer: 'Quality testing and collection intake supervision with inventory visibility',
-  casual_laborer: 'Task-oriented gate and tank operations with limited operational read access',
+  casual_laborer:
+    'Floor tasks at intake: gate deliveries, manifest drafts, own shift, supplier picker at gate, inventory read for tank monitoring — no full collections UI, traceability tests, or roster screens',
   leadership: 'Governance view with aggregate analytics and operational monitoring',
   regulator: 'Read-only compliance and traceability oversight access',
-  umucunda_a: 'Collector profile managing own milk plus grouped collection operations',
-  umucunda_b: 'Collector profile focused on manifest-first grouped collection operations',
+  umucunda_a:
+    'Umucunda route operator: own gate deliveries & manifests (linked supplier), sales/collections; no site-wide MCC roster or inventory',
+  umucunda_b:
+    'Umucunda route operator (manifest-first): same scoped MCC visibility as Type A; linked supplier required for gate/manifest APIs',
   accountant: 'Finance access only; dashboard, payroll, loans, charges and finance reporting',
   collector: 'Milk receptionist access; sales and collections with supplier/customer views and inventory item management',
   viewer: 'Read-only access to main modules',

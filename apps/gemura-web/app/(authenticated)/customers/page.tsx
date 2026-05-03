@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { customersApi, Customer } from '@/lib/api/customers';
 import { useAuthStore } from '@/store/auth';
-import { usePermission } from '@/hooks/usePermission';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import DataTableWithPagination from '@/app/components/DataTableWithPagination';
 import FilterBar, { FilterBarGroup, FilterBarSearch, FilterBarActions, FilterBarExport } from '@/app/components/FilterBar';
 import type { TableColumn } from '@/app/components/DataTable';
@@ -24,9 +24,7 @@ const STATUS_OPTIONS = [
 export default function CustomersPage() {
   const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
-  const { hasPermission, isAdmin } = usePermission();
-  const role = (currentAccount?.role ?? '').toLowerCase();
-  const isReadOnlyTeamRole = role === 'agent' || role === 'collector' || role === 'veterinary' || role === 'veterinarian' || role === 'veternary' || role === 'milkreceptionist' || role === 'milk_receptionist';
+  const { customers: customerCrud } = useCrudPermissions();
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [error, setError] = useState('');
@@ -34,8 +32,6 @@ export default function CustomersPage() {
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const canCreateCustomer = !isReadOnlyTeamRole && (hasPermission('create_customers') || isAdmin());
-
   const loadCustomers = useCallback(async () => {
     try {
       setLoading(true);
@@ -185,23 +181,25 @@ export default function CustomersPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => canCreateCustomer && setBulkImportOpen(true)} className="btn btn-secondary" disabled={!canCreateCustomer}>
-            <Icon icon={faFile} size="sm" className="mr-2" />
-            Bulk import
-          </button>
-          <a
-            href="#"
-            onClick={(e) => { e.preventDefault(); customersApi.downloadTemplate().catch(() => {}); }}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors"
-          >
-            Download template
-          </a>
-          <button type="button" onClick={() => canCreateCustomer && setCreateModalOpen(true)} className="btn btn-primary" disabled={!canCreateCustomer}>
-            <Icon icon={faPlus} size="sm" className="mr-2" />
-            Add Customer
-          </button>
-        </div>
+        {customerCrud.create ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setBulkImportOpen(true)} className="btn btn-secondary">
+              <Icon icon={faFile} size="sm" className="mr-2" />
+              Bulk import
+            </button>
+            <a
+              href="#"
+              onClick={(e) => { e.preventDefault(); customersApi.downloadTemplate().catch(() => {}); }}
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors"
+            >
+              Download template
+            </a>
+            <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
+              <Icon icon={faPlus} size="sm" className="mr-2" />
+              Add Customer
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <BulkImportModal

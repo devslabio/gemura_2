@@ -155,7 +155,13 @@ export class SuppliersController {
   }
 
   @Post('get')
-  @RequirePermission('view_suppliers')
+  @RequireAnyPermission([
+    'view_suppliers',
+    'mcc_view_operations',
+    'mcc_view_own_operations',
+    'mcc_manage_own_operations',
+    'mcc_floor_operations',
+  ])
   @HttpCode(200)
   @ApiOperation({
     summary: 'Get all suppliers',

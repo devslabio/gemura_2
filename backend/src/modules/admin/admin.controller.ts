@@ -98,8 +98,8 @@ export class AdminController {
   @Get('roles')
   @RequirePermission('manage_users')
   @ApiOperation({
-    summary: 'Get all roles with default permissions',
-    description: 'Returns roles and their default permission set. Used for Roles admin page.',
+    summary: 'Get all platform roles with effective permissions',
+    description: 'Returns roles and permission codes from the database (editable via PUT /admin/platform-roles/:roleId).',
   })
   @ApiResponse({ status: 200, description: 'Roles retrieved successfully' })
   @ApiForbiddenResponse({ description: 'Requires manage_users permission' })
@@ -114,7 +114,7 @@ export class AdminController {
   @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Get all permissions with role assignments',
-    description: 'Returns permissions and which roles have them by default. Used for Permissions admin page.',
+    description: 'Returns permissions and which roles currently have them (database-backed).',
   })
   @ApiResponse({ status: 200, description: 'Permissions retrieved successfully' })
   @ApiForbiddenResponse({ description: 'Requires manage_users permission' })

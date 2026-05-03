@@ -79,7 +79,12 @@ export class EmployeesService {
       return ACCESS_GROUP_PERMISSIONS.general_access;
     }
     if (accessGroup === 'limited_access' || accessGroup === 'milk_receptionist_access') {
-      if (slug === 'collector' || slug === 'viewer' || slug === 'agent') {
+      if (
+        slug === 'collector' ||
+        slug === 'viewer' ||
+        slug === 'agent' ||
+        slug === 'casual_laborer'
+      ) {
         return ROLE_DEFAULT_PERMISSIONS[slug as RoleCode] || null;
       }
       return ACCESS_GROUP_PERMISSIONS.limited_access;
@@ -264,6 +269,7 @@ export class EmployeesService {
           status: e.status,
           created_at: e.created_at,
           is_owner: isOwner,
+          linked_umucunda_supplier_account_id: e.linked_umucunda_supplier_account_id ?? null,
         };
       }),
     };
@@ -317,6 +323,29 @@ export class EmployeesService {
       updateData.permissions = resolved ? JSON.stringify(resolved) : null;
     }
     if (updateDto.status) updateData.status = updateDto.status as any;
+
+    if (updateDto.linked_umucunda_supplier_account_id !== undefined) {
+      const sid = updateDto.linked_umucunda_supplier_account_id;
+      if (sid === null) {
+        updateData.linked_umucunda_supplier_account_id = null;
+      } else {
+        const link = await this.prisma.supplierCustomer.findFirst({
+          where: {
+            supplier_account_id: sid,
+            customer_account_id: resolvedAccountId,
+            relationship_status: 'active',
+          },
+        });
+        if (!link) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'linked_umucunda_supplier_account_id must be an active supplier for this MCC.',
+          });
+        }
+        updateData.linked_umucunda_supplier_account_id = sid;
+      }
+    }
 
     const updated = await this.prisma.userAccount.update({
       where: { id: employeeId },

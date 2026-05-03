@@ -46,7 +46,12 @@ function defaultFromDate() {
 export default function GateArrivalsPanel({ showPageHeading = false }: { showPageHeading?: boolean }) {
   const { currentAccount } = useAuthStore();
   const { hasAnyPermission } = usePermission();
-  const canManage = hasAnyPermission(['mcc_manage_operations', 'update_collections']);
+  const canManage = hasAnyPermission([
+    'mcc_manage_operations',
+    'mcc_manage_own_operations',
+    'mcc_floor_operations',
+    'update_collections',
+  ]);
   const accountId = currentAccount?.account_id ?? '';
   const [rows, setRows] = useState<MccGateDeliveryRow[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);

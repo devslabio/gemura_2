@@ -22,7 +22,12 @@ export class MccOperationsController {
   constructor(private readonly ops: MccOperationsService) {}
 
   @Get('gate-deliveries')
-  @RequireAnyPermission(['mcc_view_operations', 'view_collections'])
+  @RequireAnyPermission([
+    'mcc_view_operations',
+    'mcc_view_own_operations',
+    'view_collections',
+    'mcc_floor_operations',
+  ])
   @ApiOperation({ summary: 'List gate deliveries for the MCC (date range, UTC).' })
   @ApiQuery({ name: 'account_id', required: true })
   @ApiQuery({ name: 'from', required: false, description: 'YYYY-MM-DD' })
@@ -37,14 +42,19 @@ export class MccOperationsController {
   }
 
   @Post('gate-deliveries')
-  @RequireAnyPermission(['mcc_manage_operations', 'update_collections'])
+  @RequireAnyPermission(['mcc_manage_operations', 'mcc_manage_own_operations', 'mcc_floor_operations'])
   @ApiOperation({ summary: 'Record a gate delivery' })
   createGate(@CurrentUser() user: User, @Body() dto: CreateGateDeliveryDto) {
     return this.ops.createGateDelivery(user, dto);
   }
 
   @Get('manifests')
-  @RequireAnyPermission(['mcc_view_operations', 'view_collections'])
+  @RequireAnyPermission([
+    'mcc_view_operations',
+    'mcc_view_own_operations',
+    'view_collections',
+    'mcc_floor_operations',
+  ])
   @ApiQuery({ name: 'account_id', required: true })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
@@ -58,14 +68,14 @@ export class MccOperationsController {
   }
 
   @Post('manifests')
-  @RequireAnyPermission(['mcc_manage_operations', 'update_collections'])
+  @RequireAnyPermission(['mcc_manage_operations', 'mcc_manage_own_operations', 'mcc_floor_operations'])
   @ApiOperation({ summary: 'Create draft manifest for an Umucunda gate delivery' })
   createManifest(@CurrentUser() user: User, @Body() dto: CreateManifestDto) {
     return this.ops.createManifest(user, dto);
   }
 
   @Patch('manifests/:manifestId/draft')
-  @RequireAnyPermission(['mcc_manage_operations', 'update_collections'])
+  @RequireAnyPermission(['mcc_manage_operations', 'mcc_manage_own_operations', 'mcc_floor_operations'])
   updateDraft(
     @CurrentUser() user: User,
     @Param('manifestId') manifestId: string,
@@ -75,7 +85,7 @@ export class MccOperationsController {
   }
 
   @Patch('manifests/:manifestId/submit')
-  @RequireAnyPermission(['mcc_manage_operations', 'update_collections'])
+  @RequireAnyPermission(['mcc_manage_operations', 'mcc_manage_own_operations', 'mcc_floor_operations'])
   submit(@CurrentUser() user: User, @Param('manifestId') manifestId: string, @Query('account_id') accountId?: string) {
     return this.ops.submitManifest(user, manifestId, accountId);
   }
@@ -87,7 +97,7 @@ export class MccOperationsController {
   }
 
   @Patch('manifests/:manifestId/reject')
-  @RequireAnyPermission(['mcc_manage_operations', 'update_collections'])
+  @RequirePermission('mcc_accept_manifests')
   reject(
     @CurrentUser() user: User,
     @Param('manifestId') manifestId: string,
@@ -97,7 +107,7 @@ export class MccOperationsController {
   }
 
   @Get('test-results')
-  @RequirePermission('view_collections')
+  @RequireAnyPermission(['view_collections', 'mcc_view_operations', 'mcc_view_own_operations'])
   @ApiQuery({ name: 'account_id', required: true })
   @ApiQuery({ name: 'outcome', required: false })
   @ApiQuery({ name: 'from', required: false })
@@ -113,13 +123,13 @@ export class MccOperationsController {
   }
 
   @Post('test-results')
-  @RequireAnyPermission(['mcc_manage_operations', 'update_collections'])
+  @RequireAnyPermission(['mcc_manage_operations'])
   createTest(@CurrentUser() user: User, @Body() dto: CreateTestResultDto) {
     return this.ops.createTestResult(user, dto);
   }
 
   @Patch('test-results/:testResultId')
-  @RequireAnyPermission(['mcc_manage_operations', 'update_collections'])
+  @RequireAnyPermission(['mcc_manage_operations'])
   updateTest(
     @CurrentUser() user: User,
     @Param('testResultId') testResultId: string,
@@ -129,7 +139,12 @@ export class MccOperationsController {
   }
 
   @Get('shifts')
-  @RequireAnyPermission(['mcc_view_operations', 'view_collections'])
+  @RequireAnyPermission([
+    'mcc_view_operations',
+    'mcc_view_own_operations',
+    'view_collections',
+    'mcc_floor_operations',
+  ])
   @ApiQuery({ name: 'account_id', required: true })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
@@ -143,20 +158,25 @@ export class MccOperationsController {
   }
 
   @Get('staff-options')
-  @RequireAnyPermission(['mcc_view_operations', 'view_collections'])
+  @RequireAnyPermission([
+    'mcc_view_operations',
+    'mcc_view_own_operations',
+    'view_collections',
+    'mcc_floor_operations',
+  ])
   @ApiQuery({ name: 'account_id', required: true })
   staffOptions(@CurrentUser() user: User, @Query('account_id') accountId: string) {
     return this.ops.staffOptions(user, accountId);
   }
 
   @Post('shifts/start')
-  @RequireAnyPermission(['mcc_manage_operations', 'update_collections'])
+  @RequireAnyPermission(['mcc_manage_operations', 'mcc_manage_own_operations', 'mcc_floor_operations'])
   startShift(@CurrentUser() user: User, @Body() dto: StartShiftDto) {
     return this.ops.startShift(user, dto);
   }
 
   @Patch('shifts/:shiftId/end')
-  @RequireAnyPermission(['mcc_manage_operations', 'update_collections'])
+  @RequireAnyPermission(['mcc_manage_operations', 'mcc_manage_own_operations', 'mcc_floor_operations'])
   endShift(
     @CurrentUser() user: User,
     @Param('shiftId') shiftId: string,

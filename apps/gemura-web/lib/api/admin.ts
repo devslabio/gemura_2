@@ -125,6 +125,15 @@ export interface PermissionItem {
   roles: Array<{ id?: string; code: string; name: string }>;
 }
 
+export interface UpdatePlatformRoleData {
+  name?: string;
+  slug?: string;
+  description?: string | null;
+  permission_ids?: string[];
+  is_active?: boolean;
+  is_assignable?: boolean;
+}
+
 export const adminApi = {
   getDashboardStats: async (accountId?: string): Promise<{ code: number; status: string; message: string; data: DashboardStats }> => {
     const params = accountId ? { account_id: accountId } : {};
@@ -139,6 +148,15 @@ export const adminApi = {
   getPermissions: async (accountId?: string): Promise<{ code: number; status: string; message: string; data: { permissions: PermissionItem[] } }> => {
     const params = accountId ? { account_id: accountId } : {};
     return apiClient.get('/admin/permissions', { params });
+  },
+
+  updatePlatformRole: async (
+    roleId: string,
+    data: UpdatePlatformRoleData,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data?: { role: RoleItem & { id: string } } }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.put(`/admin/platform-roles/${roleId}`, data, { params });
   },
 
   getUsers: async (

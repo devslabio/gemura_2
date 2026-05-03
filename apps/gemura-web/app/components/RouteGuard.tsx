@@ -29,8 +29,16 @@ const OPERATIONS_PATH_PERMISSION: Record<string, string> = {
 /** Path prefix -> user needs at least one of these */
 const OPERATIONS_PATH_ANY_PERMISSION: Record<string, string[]> = {
   /** Matches OPERATIONS_NAV_ITEMS for Milk collection / Gate deliveries (gate tab vs records tab handled in-page). */
-  '/collections': ['mcc_view_operations', 'view_collections'],
-  '/operations': ['mcc_view_operations', 'view_collections'],
+  '/collections': ['mcc_view_operations', 'mcc_view_own_operations', 'view_collections'],
+  '/operations/traceability': ['mcc_view_operations'],
+  '/operations/staff': ['mcc_view_operations'],
+  '/operations/shifts': ['mcc_view_operations'],
+  '/operations': [
+    'mcc_view_operations',
+    'mcc_view_own_operations',
+    'view_collections',
+    'mcc_floor_operations',
+  ],
 };
 
 const FORCE_OPERATIONS_DASHBOARD =
@@ -58,7 +66,9 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     role === 'veterinarian' ||
     role === 'veternary' ||
     role === 'milkreceptionist' ||
-    role === 'milk_receptionist';
+    role === 'milk_receptionist' ||
+    role === 'umucunda_a' ||
+    role === 'umucunda_b';
   const isLimitedOpsPath = [
     '/dashboard',
     '/sales',
@@ -72,7 +82,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
   const pathKey = useMemo(() => {
     const keys = [
       ...new Set([...Object.keys(OPERATIONS_PATH_PERMISSION), ...Object.keys(OPERATIONS_PATH_ANY_PERMISSION)]),
-    ];
+    ].sort((a, b) => b.length - a.length);
     return keys.find((p) => pathname === p || pathname.startsWith(p + '/'));
   }, [pathname]);
   const requiredAnyPermission = pathKey ? OPERATIONS_PATH_ANY_PERMISSION[pathKey] : undefined;
@@ -140,9 +150,28 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
         pathname.startsWith('/operations/') ||
         pathname === '/collections' ||
         pathname.startsWith('/collections/');
-      if (mccCollectionsOrOpsPath && !hasAnyPermission(['mcc_view_operations', 'view_collections'])) {
+      if (
+        mccCollectionsOrOpsPath &&
+        !hasAnyPermission([
+          'mcc_view_operations',
+          'mcc_view_own_operations',
+          'view_collections',
+          'mcc_floor_operations',
+        ])
+      ) {
         router.replace('/dashboard');
         return;
+      }
+      // Stricter sub-routes (traceability, staff, shifts): full MCC ops only — scoped Umucunda must not bypass via /operations wildcard.
+      const pathSpecificAny =
+        pathKey && pathKey !== '/operations'
+          ? OPERATIONS_PATH_ANY_PERMISSION[pathKey]
+          : undefined;
+      if (pathSpecificAny?.length) {
+        if (isBusinessAccount(accountType) && !hasAnyPermission(pathSpecificAny)) {
+          router.replace('/dashboard');
+          return;
+        }
       }
       setAllowed(true);
       return;

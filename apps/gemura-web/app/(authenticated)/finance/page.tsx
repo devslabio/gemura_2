@@ -25,6 +25,7 @@ import Icon, {
 } from '@/app/components/Icon';
 import Modal from '@/app/components/Modal';
 import { FinancePageSkeleton } from '@/app/components/SkeletonLoader';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 
 function toYYYYMMDD(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -43,6 +44,7 @@ function formatAmount(amount: number): string {
 }
 
 export default function FinancePage() {
+  const { financeMutations } = useCrudPermissions();
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -209,10 +211,12 @@ export default function FinancePage() {
             <Icon icon={loading ? faSpinner : faArrowsRotate} size="sm" className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <button type="button" onClick={() => setShowRecordModal(true)} className="btn btn-primary">
-            <Icon icon={faPlus} size="sm" className="mr-2" />
-            Record Transaction
-          </button>
+          {financeMutations ? (
+            <button type="button" onClick={() => setShowRecordModal(true)} className="btn btn-primary">
+              <Icon icon={faPlus} size="sm" className="mr-2" />
+              Record Transaction
+            </button>
+          ) : null}
         </div>
       </div>
 

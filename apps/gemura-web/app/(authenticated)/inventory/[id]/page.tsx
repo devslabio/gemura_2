@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { usePermission } from '@/hooks/usePermission';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import { inventoryApi, InventoryItem, InventoryMovement } from '@/lib/api/inventory';
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
@@ -17,6 +18,7 @@ export default function InventoryItemDetailsPage() {
   const itemId = params.id as string;
   const { currentAccount } = useAuthStore();
   const { hasPermission, isAdmin } = usePermission();
+  const { inventory: inventoryCrud } = useCrudPermissions();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [item, setItem] = useState<InventoryItem | null>(null);
@@ -162,20 +164,22 @@ export default function InventoryItemDetailsPage() {
           </Link>
           <h1 className="text-2xl font-bold text-gray-900">{item?.name || 'Inventory Item Details'}</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href={`/inventory/${itemId}/sell`} className="btn btn-primary">
-            <Icon icon={faDollarSign} size="sm" className="mr-2" />
-            Sell Item
-          </Link>
-          <Link href={`/inventory/${itemId}/edit`} className="btn btn-secondary">
-            <Icon icon={faEdit} size="sm" className="mr-2" />
-            Edit
-          </Link>
-          <button type="button" onClick={handleDelete} disabled={deleting} className="btn bg-red-600 hover:bg-red-700 text-white border-0">
-            <Icon icon={faTrash} size="sm" className="mr-2" />
-            {deleting ? 'Deleting...' : 'Delete'}
-          </button>
-        </div>
+        {inventoryCrud.manage ? (
+          <div className="flex items-center gap-2">
+            <Link href={`/inventory/${itemId}/sell`} className="btn btn-primary">
+              <Icon icon={faDollarSign} size="sm" className="mr-2" />
+              Sell Item
+            </Link>
+            <Link href={`/inventory/${itemId}/edit`} className="btn btn-secondary">
+              <Icon icon={faEdit} size="sm" className="mr-2" />
+              Edit
+            </Link>
+            <button type="button" onClick={handleDelete} disabled={deleting} className="btn bg-red-600 hover:bg-red-700 text-white border-0">
+              <Icon icon={faTrash} size="sm" className="mr-2" />
+              {deleting ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {/* Error Message */}
@@ -405,14 +409,16 @@ export default function InventoryItemDetailsPage() {
                     }`}>
                       {item.is_listed_in_marketplace ? 'Listed' : 'Not Listed'}
                     </span>
-                    <button
-                      type="button"
-                      onClick={handleToggleListing}
-                      disabled={togglingListing}
-                      className="text-xs text-[var(--primary)] hover:underline disabled:opacity-50"
-                    >
-                      {togglingListing ? 'Updating...' : (item.is_listed_in_marketplace ? 'Remove from marketplace' : 'List on marketplace')}
-                    </button>
+                    {inventoryCrud.manage ? (
+                      <button
+                        type="button"
+                        onClick={handleToggleListing}
+                        disabled={togglingListing}
+                        className="text-xs text-[var(--primary)] hover:underline disabled:opacity-50"
+                      >
+                        {togglingListing ? 'Updating...' : (item.is_listed_in_marketplace ? 'Remove from marketplace' : 'List on marketplace')}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>

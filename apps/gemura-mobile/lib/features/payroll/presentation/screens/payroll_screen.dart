@@ -365,33 +365,54 @@ class _PayrollScreenState extends ConsumerState<PayrollScreen> {
                       // Supplier List
                       ...suppliers.map((supplier) {
                         final isSelected = _selectedSupplierCodes.contains(supplier.accountCode);
-                        return CheckboxListTile(
-                          value: isSelected,
-                          onChanged: (value) {
-                            setState(() {
-                              if (value == true) {
-                                _selectedSupplierCodes.add(supplier.accountCode);
-                              } else {
-                                _selectedSupplierCodes.remove(supplier.accountCode);
-                              }
-                              _payrollResult = null;
-                            });
-                          },
-                          title: Text(
-                            supplier.name,
-                            style: AppTheme.bodySmall.copyWith(
-                              fontWeight: FontWeight.w500,
+                        void toggle(bool? value) {
+                          setState(() {
+                            if (value == true) {
+                              _selectedSupplierCodes.add(supplier.accountCode);
+                            } else {
+                              _selectedSupplierCodes.remove(supplier.accountCode);
+                            }
+                            _payrollResult = null;
+                          });
+                        }
+
+                        return InkWell(
+                          onTap: () => toggle(!isSelected),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: AppTheme.spacing4),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Checkbox(
+                                  value: isSelected,
+                                  onChanged: toggle,
+                                  activeColor: AppTheme.primaryColor,
+                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        supplier.name,
+                                        style: AppTheme.bodySmall.copyWith(
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      Text(
+                                        supplier.accountCode,
+                                        style: AppTheme.labelSmall.copyWith(
+                                          color: AppTheme.textSecondaryColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          subtitle: Text(
-                            supplier.accountCode,
-                            style: AppTheme.labelSmall.copyWith(
-                              color: AppTheme.textSecondaryColor,
-                            ),
-                          ),
-                          activeColor: AppTheme.primaryColor,
-                          contentPadding: EdgeInsets.zero,
-                          dense: true,
                         );
                       }),
                     ],

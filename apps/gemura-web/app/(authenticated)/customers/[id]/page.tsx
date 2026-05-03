@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { usePermission } from '@/hooks/usePermission';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import { customersApi, CustomerDetails } from '@/lib/api/customers';
 import { DetailPageSkeleton } from '@/app/components/SkeletonLoader';
 import Icon, { faStore, faUser, faPhone, faEnvelope, faIdCard, faMapPin, faDollarSign, faEdit, faArrowLeft, faSpinner, faCalendar, faBuilding } from '@/app/components/Icon';
@@ -13,6 +14,7 @@ export default function CustomerDetailsPage() {
   const params = useParams();
   const customerId = params.id as string;
   const { hasPermission, isAdmin } = usePermission();
+  const { customers: customerCrud } = useCrudPermissions();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [customer, setCustomer] = useState<CustomerDetails | null>(null);
@@ -80,10 +82,12 @@ export default function CustomerDetailsPage() {
           </Link>
           <h1 className="text-2xl font-bold text-gray-900">{customer?.user?.name || 'Customer Details'}</h1>
         </div>
-        <Link href={`/customers/${customerId}/edit`} className="btn btn-primary">
-          <Icon icon={faEdit} size="sm" className="mr-2" />
-          Edit Customer
-        </Link>
+        {customerCrud.update ? (
+          <Link href={`/customers/${customerId}/edit`} className="btn btn-primary">
+            <Icon icon={faEdit} size="sm" className="mr-2" />
+            Edit Customer
+          </Link>
+        ) : null}
       </div>
 
       {error && (

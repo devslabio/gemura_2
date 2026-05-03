@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { loansApi, Loan, CreateLoanData } from '@/lib/api/loans';
 import { useAuthStore } from '@/store/auth';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import DataTableWithPagination from '@/app/components/DataTableWithPagination';
 import FilterBar, {
   FilterBarGroup,
@@ -39,6 +40,7 @@ const STATUS_OPTIONS = [
 
 export default function LoansPage() {
   const { currentAccount } = useAuthStore();
+  const { financeMutations } = useCrudPermissions();
   const [loading, setLoading] = useState(true);
   const [loans, setLoans] = useState<Loan[]>([]);
   const [error, setError] = useState('');
@@ -210,30 +212,32 @@ export default function LoansPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Loans</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setBulkImportOpen(true)}
-            className="btn btn-secondary"
-          >
-            <Icon icon={faFile} size="sm" className="mr-2" />
-            Bulk import
-          </button>
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              loansApi.downloadTemplate().catch(() => {});
-            }}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors"
-          >
-            Download template
-          </a>
-          <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
-            <Icon icon={faPlus} size="sm" className="mr-2" />
-            Add loan
-          </button>
-        </div>
+        {financeMutations ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setBulkImportOpen(true)}
+              className="btn btn-secondary"
+            >
+              <Icon icon={faFile} size="sm" className="mr-2" />
+              Bulk import
+            </button>
+            <a
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                loansApi.downloadTemplate().catch(() => {});
+              }}
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors"
+            >
+              Download template
+            </a>
+            <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
+              <Icon icon={faPlus} size="sm" className="mr-2" />
+              Add loan
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <BulkImportModal

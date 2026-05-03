@@ -5,10 +5,12 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { loansApi, Loan } from '@/lib/api/loans';
 import { useToastStore } from '@/store/toast';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import Icon, { faArrowLeft, faCalendar, faSpinner, faEdit, faCheckCircle } from '@/app/components/Icon';
 import Modal from '@/app/components/Modal';
 
 export default function LoanDetailPage() {
+  const { financeMutations } = useCrudPermissions();
   const params = useParams();
   const id = params?.id as string;
   const [loan, setLoan] = useState<Loan | null>(null);
@@ -130,10 +132,12 @@ export default function LoanDetailPage() {
         <Link href="/loans" className="text-sm text-gray-600 hover:text-[var(--primary)] inline-flex items-center gap-1">
           <Icon icon={faArrowLeft} size="sm" /> Back to Loans
         </Link>
-        <button type="button" onClick={openEdit} className="btn btn-secondary">
-          <Icon icon={faEdit} size="sm" className="mr-2" />
-          Edit loan
-        </button>
+        {financeMutations ? (
+          <button type="button" onClick={openEdit} className="btn btn-secondary">
+            <Icon icon={faEdit} size="sm" className="mr-2" />
+            Edit loan
+          </button>
+        ) : null}
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -188,7 +192,7 @@ export default function LoanDetailPage() {
         </dl>
       </div>
 
-      {loan.status === 'active' && loan.outstanding > 0 && (
+      {financeMutations && loan.status === 'active' && loan.outstanding > 0 && (
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-3">Record repayment</h2>
           <form onSubmit={handleRecordRepayment} className="space-y-3">

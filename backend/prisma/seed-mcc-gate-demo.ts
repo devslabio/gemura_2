@@ -402,6 +402,20 @@ async function main() {
     },
   });
 
+  const umucundaDemoUsers = await prisma.user.findMany({
+    where: { OR: [{ email: 'umucunda.a@gemura.rw' }, { email: 'umucunda.b@gemura.rw' }] },
+    select: { id: true },
+  });
+  for (const u of umucundaDemoUsers) {
+    await prisma.userAccount.updateMany({
+      where: { user_id: u.id, account_id: mainAccount.id },
+      data: { linked_umucunda_supplier_account_id: umucundaHub.id },
+    });
+  }
+  if (umucundaDemoUsers.length) {
+    console.log(`   Linked demo Umucunda users → hub supplier ${umucundaHub.code} (scoped gate/manifest APIs).`);
+  }
+
   console.log('✅ MCC operations demo seed complete.');
   console.log(`   MCC: ${mainAccount.code} — ${mainAccount.name}`);
   console.log('   Gate: direct + Umucunda A/B across last 6 days (draft / submitted / accepted / no manifest / rejected test / pending).');

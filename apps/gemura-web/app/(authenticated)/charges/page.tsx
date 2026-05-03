@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { chargesApi, Charge, CreateChargeData } from '@/lib/api/charges';
 import { suppliersApi, Supplier } from '@/lib/api/suppliers';
 import { useAuthStore } from '@/store/auth';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import { useToastStore } from '@/store/toast';
 import Icon, { faPlus, faTag, faEdit, faTrash, faSpinner, faArrowsRotate } from '@/app/components/Icon';
 import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
@@ -28,6 +29,7 @@ const initialForm: CreateChargeData & { account_id?: string } = {
 
 export default function ChargesPage() {
   const { currentAccount } = useAuthStore();
+  const { financeMutations } = useCrudPermissions();
   const [charges, setCharges] = useState<Charge[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -165,10 +167,12 @@ export default function ChargesPage() {
             <Icon icon={loading ? faSpinner : faArrowsRotate} size="sm" className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
-            <Icon icon={faPlus} size="sm" className="mr-2" />
-            New charge
-          </button>
+          {financeMutations ? (
+            <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
+              <Icon icon={faPlus} size="sm" className="mr-2" />
+              New charge
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -182,9 +186,11 @@ export default function ChargesPage() {
         <div className="bg-white border border-gray-200 rounded-sm p-12 text-center">
           <Icon icon={faTag} className="text-gray-300 mx-auto mb-4" size="2x" />
           <p className="text-gray-600 font-medium">No charges yet</p>
-          <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary mt-4 inline-flex">
-            New charge
-          </button>
+          {financeMutations ? (
+            <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary mt-4 inline-flex">
+              New charge
+            </button>
+          ) : null}
         </div>
       ) : (
         <div className="bg-white border border-gray-200 rounded-sm overflow-hidden">
@@ -218,17 +224,23 @@ export default function ChargesPage() {
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <Link href={`/charges/${c.id}/edit`} className="p-1.5 text-gray-600 hover:text-[var(--primary)] inline-flex mr-1" title="Edit">
-                        <Icon icon={faEdit} size="sm" />
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteId(c.id)}
-                        className="p-1.5 text-gray-600 hover:text-red-600 inline-flex"
-                        title="Delete"
-                      >
-                        <Icon icon={faTrash} size="sm" />
-                      </button>
+                      {financeMutations ? (
+                        <>
+                          <Link href={`/charges/${c.id}/edit`} className="p-1.5 text-gray-600 hover:text-[var(--primary)] inline-flex mr-1" title="Edit">
+                            <Icon icon={faEdit} size="sm" />
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteId(c.id)}
+                            className="p-1.5 text-gray-600 hover:text-red-600 inline-flex"
+                            title="Delete"
+                          >
+                            <Icon icon={faTrash} size="sm" />
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -353,15 +365,20 @@ export default function ChargesPage() {
                     <p className="text-sm text-gray-500">No suppliers found.</p>
                   ) : (
                     suppliers.map((s) => (
-                      <label key={s.account.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                      <label
+                        key={s.account.id}
+                        className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded cursor-pointer"
+                      >
                         <input
                           type="checkbox"
                           checked={(form.supplier_account_ids || []).includes(s.account.id)}
                           onChange={() => toggleSupplier(s.account.id)}
-                          className="rounded border-gray-300"
+                          className="mt-0.5 shrink-0 rounded border-gray-300"
                         />
-                        <span className="text-sm text-gray-900">{s.name}</span>
-                        <span className="text-xs text-gray-500">{s.account.code}</span>
+                        <div className="min-w-0 flex-1 text-sm text-gray-900">
+                          <span className="font-medium">{s.name}</span>
+                          <span className="text-xs text-gray-500 ml-2">({s.account.code})</span>
+                        </div>
                       </label>
                     ))
                   )}

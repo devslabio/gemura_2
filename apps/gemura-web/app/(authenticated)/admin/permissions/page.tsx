@@ -157,7 +157,9 @@ export default function AdminPermissionsPage() {
       <div className="bg-white border border-gray-200 rounded-sm overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
           <h2 className="text-sm font-semibold text-gray-800">Permission definitions</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Each permission can be granted to users via their role or by direct assignment when editing a user.</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Grants are stored per platform role in the database. Use Roles → Edit permissions to change menu/API access; restarting the server does not reset them.
+          </p>
         </div>
 
         {loading ? (

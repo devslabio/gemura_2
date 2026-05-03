@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { usePermission } from '@/hooks/usePermission';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import { suppliersApi, SupplierDetails } from '@/lib/api/suppliers';
 import { DetailPageSkeleton } from '@/app/components/SkeletonLoader';
 import Icon, { faBuilding, faUser, faPhone, faEnvelope, faIdCard, faMapPin, faDollarSign, faEdit, faArrowLeft, faSpinner, faCalendar } from '@/app/components/Icon';
@@ -13,6 +14,7 @@ export default function SupplierDetailsPage() {
   const params = useParams();
   const supplierId = params.id as string;
   const { hasPermission, isAdmin } = usePermission();
+  const { suppliers: supplierCrud } = useCrudPermissions();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [supplier, setSupplier] = useState<SupplierDetails | null>(null);
@@ -82,10 +84,12 @@ export default function SupplierDetailsPage() {
           </Link>
           <h1 className="text-2xl font-bold text-gray-900">{supplier?.name || 'Supplier Details'}</h1>
         </div>
-        <Link href={`/suppliers/${supplierId}/edit`} className="btn btn-primary">
-          <Icon icon={faEdit} size="sm" className="mr-2" />
-          Edit Supplier
-        </Link>
+        {supplierCrud.update ? (
+          <Link href={`/suppliers/${supplierId}/edit`} className="btn btn-primary">
+            <Icon icon={faEdit} size="sm" className="mr-2" />
+            Edit Supplier
+          </Link>
+        ) : null}
       </div>
 
       {/* Error Message */}

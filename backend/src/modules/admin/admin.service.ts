@@ -2024,7 +2024,8 @@ export class AdminService {
   }
 
   /**
-   * Get all platform roles with permission codes (database-backed; seeded from defaults).
+   * Get all platform roles with permission codes (database-backed).
+   * Initial links come from config only when a role has none yet; admins change grants via `updatePlatformRole`.
    */
   async getRoles(user: User, accountId: string) {
     await this.checkAdminPermission(user, accountId);
