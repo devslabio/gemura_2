@@ -37,6 +37,7 @@ import CreateInventoryForm from '../inventory/CreateInventoryForm';
 import dynamic from 'next/dynamic';
 import MccManagerDashboardSection from '@/app/components/manager/MccManagerDashboardSection';
 import VeterinaryQualityStrip from '@/app/components/VeterinaryQualityStrip';
+import VeterinaryQualityDesk from '@/app/components/VeterinaryQualityDesk';
 import { MCC_OPERATIONS_SUB_PANELS } from '@/lib/config/nav.config';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
@@ -126,7 +127,15 @@ function BusinessDashboard() {
   const [recordDate, setRecordDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [recordSubmitting, setRecordSubmitting] = useState(false);
 
-  type DashboardTab = 'overview' | 'operations' | 'sales' | 'collections' | 'inventory' | 'finance' | 'loans';
+  type DashboardTab =
+    | 'overview'
+    | 'quality'
+    | 'operations'
+    | 'sales'
+    | 'collections'
+    | 'inventory'
+    | 'finance'
+    | 'loans';
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
   const [inventoryStats, setInventoryStats] = useState<InventoryStats | null>(null);
   const [inventoryLoading, setInventoryLoading] = useState(false);
@@ -170,6 +179,7 @@ function BusinessDashboard() {
     if (isVeterinaryRole) {
       return [
         { id: 'overview', label: 'Overview' },
+        { id: 'quality', label: 'Quality desk' },
         { id: 'inventory', label: 'Inventory' },
       ];
     }
@@ -523,6 +533,16 @@ function BusinessDashboard() {
       </div>
 
       {/* Overview — business snapshot: totals, trends, quick actions (all accounts including MCC) */}
+      {dashboardTab === 'quality' &&
+        showVetQualityStrip &&
+        currentAccount?.account_id && (
+          <VeterinaryQualityDesk
+            accountId={currentAccount.account_id}
+            dateFrom={dateRange.date_from}
+            dateTo={dateRange.date_to}
+          />
+        )}
+
       {dashboardTab === 'overview' && (
         <>
       {showVetQualityStrip && currentAccount?.account_id ? (
