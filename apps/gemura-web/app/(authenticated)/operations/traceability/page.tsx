@@ -1,8 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { mccOperationsApi, type MccGateDeliveryRow, type MccTestResultRow } from '@/lib/api/mcc-operations';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  mccOperationsApi,
+  type MccGateDeliveryRow,
+  type MccManifestRow,
+  type MccTestResultRow,
+} from '@/lib/api/mcc-operations';
 import { mccManagerApi } from '@/lib/api/mcc-manager';
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
@@ -75,13 +81,16 @@ function csvBoolDetail(row: MccTestResultRow, key: string): string {
   return '';
 }
 
-export default function OperationsTraceabilityPage() {
+function TraceabilityPageInner() {
   const { currentAccount } = useAuthStore();
   const { mccTraceabilityMutations: canManage } = useCrudPermissions();
   const toast = useToastStore();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const accountId = currentAccount?.account_id ?? '';
   const [rows, setRows] = useState<MccTestResultRow[]>([]);
   const [gates, setGates] = useState<MccGateDeliveryRow[]>([]);
+  const [manifests, setManifests] = useState<MccManifestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [outcome, setOutcome] = useState<string>('');
   const [from, setFrom] = useState(defaultTraceabilityFrom);
@@ -100,6 +109,8 @@ export default function OperationsTraceabilityPage() {
   const [lactometerReading, setLactometerReading] = useState('');
   const [visualOk, setVisualOk] = useState(false);
   const [qualityNotes, setQualityNotes] = useState('');
+  const [manifestLineId, setManifestLineId] = useState('');
+  const testNextHandledRef = useRef(false);
 
   const sortedTestRows = useMemo(() => {
     return [...rows].sort((a, b) => {
@@ -126,6 +137,16 @@ export default function OperationsTraceabilityPage() {
     [gatesFifo],
   );
 
+  const linesForSelectedGate = useMemo(() => {
+    if (!gateId) return [];
+    const m = manifests.find((x) => x.gate_delivery?.id === gateId);
+    return m?.lines ?? [];
+  }, [manifests, gateId]);
+
+  useEffect(() => {
+    setManifestLineId('');
+  }, [gateId]);
+
   const {
     page: testPage,
     setPage: setTestPage,
@@ -140,12 +161,14 @@ export default function OperationsTraceabilityPage() {
     if (!accountId) return;
     setLoading(true);
     try {
-      const [t, g] = await Promise.all([
+      const [t, g, mf] = await Promise.all([
         mccOperationsApi.listTestResults(accountId, outcome || undefined, from, to),
         mccOperationsApi.listGateDeliveries(accountId, from, to),
+        mccOperationsApi.listManifests(accountId, from, to),
       ]);
       setRows(t.data ?? []);
       setGates(g.data ?? []);
+      setManifests(mf.data ?? []);
     } catch (e: unknown) {
       toast.error((e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to load');
     } finally {
@@ -233,19 +256,45 @@ export default function OperationsTraceabilityPage() {
     setModalMode('create');
     setEditingRow(null);
     setGateId('');
+    setManifestLineId('');
     setRejectionCause('');
     resetQualityFields();
   };
 
-  const openCreateModal = () => {
+  const openCreateModal = useCallback((preselectedGateId?: string) => {
     setModalMode('create');
     setEditingRow(null);
-    setGateId('');
+    setGateId(preselectedGateId ?? '');
+    setManifestLineId('');
     setTestOutcome('accepted');
     setRejectionCause('');
     resetQualityFields();
     setModalOpen(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (searchParams.get('outcome') !== 'pending') return;
+    setOutcome('pending');
+    router.replace('/operations/traceability', { scroll: false });
+  }, [searchParams, router]);
+
+  useEffect(() => {
+    if (searchParams.get('testNext') !== '1') return;
+    if (!canManage || loading) return;
+    if (testNextHandledRef.current) return;
+    testNextHandledRef.current = true;
+    router.replace('/operations/traceability', { scroll: false });
+    const first = gatesEligibleForTest[0];
+    if (first) {
+      openCreateModal(first.id);
+    } else {
+      toast.error('No eligible gate delivery for a new test.');
+    }
+  }, [searchParams, loading, canManage, gatesEligibleForTest, router, toast, openCreateModal]);
+
+  useEffect(() => {
+    if (searchParams.get('testNext') !== '1') testNextHandledRef.current = false;
+  }, [searchParams]);
 
   const openEditModal = (row: MccTestResultRow) => {
     setModalMode('edit');
@@ -274,6 +323,7 @@ export default function OperationsTraceabilityPage() {
       await mccOperationsApi.createTestResult({
         account_id: accountId,
         mcc_gate_delivery_id: gateId,
+        ...(manifestLineId.trim() ? { manifest_line_id: manifestLineId.trim() } : {}),
         outcome: testOutcome,
         rejection_cause: testOutcome === 'rejected' ? rejectionCause || undefined : undefined,
         ...(detail ? { detail } : {}),
@@ -342,7 +392,7 @@ export default function OperationsTraceabilityPage() {
           {canManage && (
             <button
               type="button"
-              onClick={openCreateModal}
+              onClick={() => openCreateModal()}
               disabled={gatesEligibleForTest.length === 0}
               title={
                 gates.length > 0 && gatesEligibleForTest.length === 0
@@ -596,6 +646,23 @@ export default function OperationsTraceabilityPage() {
                   );
                 })}
               </select>
+              {linesForSelectedGate.length > 0 && (
+                <div className="mt-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Manifest line (optional)</label>
+                  <select
+                    value={manifestLineId}
+                    onChange={(e) => setManifestLineId(e.target.value)}
+                    className={`${FILTER_INPUT} max-w-none w-full`}
+                  >
+                    <option value="">Whole gate / unspecified</option>
+                    {linesForSelectedGate.map((ln) => (
+                      <option key={ln.id} value={ln.id}>
+                        {(ln.farmer_supplier?.name || ln.farmer_supplier?.code || 'Farmer')} · {ln.declared_litres} L
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           )}
           <div>
@@ -710,5 +777,19 @@ export default function OperationsTraceabilityPage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+export default function OperationsTraceabilityPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-4 w-full min-w-0 p-1">
+          <p className="text-gray-500 text-sm">Loading traceability…</p>
+        </div>
+      }
+    >
+      <TraceabilityPageInner />
+    </Suspense>
   );
 }
