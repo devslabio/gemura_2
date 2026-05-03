@@ -454,7 +454,7 @@ export default function MccManagerDashboardSection({
                   : `No gate on ${rangeDateTo} · sample from recent txn list only`
           }
           icon={faClipboardList}
-          href="/collections#gate-arrivals"
+          href="/operations/gate"
           {...BLUE}
         />
         <StatCard
