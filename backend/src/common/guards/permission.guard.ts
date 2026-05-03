@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PERMISSION_KEY, ROLE_KEY } from '../decorators/permission.decorator';
+import { PERMISSION_KEY, PERMISSION_ANY_KEY, ROLE_KEY } from '../decorators/permission.decorator';
 import { RbacService } from '../../modules/rbac/rbac.service';
 
 @Injectable()
@@ -29,9 +29,10 @@ export class PermissionGuard implements CanActivate {
 
     // Get required permission from metadata (set by decorator)
     const requiredPermission = this.reflectPermission(context);
+    const requiredAnyPermissions = this.reflectPermissionAny(context);
     const requiredRole = this.reflectRole(context);
 
-    if (!requiredPermission && !requiredRole) {
+    if (!requiredPermission && !requiredRole && !(requiredAnyPermissions?.length ?? 0)) {
       // No permission/role required, allow access
       return true;
     }
@@ -63,9 +64,15 @@ export class PermissionGuard implements CanActivate {
       });
     }
 
-    if (requiredRole) {
-      const okRole = await this.rbac.assertGuardRole(userAccount, requiredRole);
-      if (okRole) return true;
+    if (requiredAnyPermissions?.length) {
+      const okAny = await this.rbac.assertGuardAnyPermission(userAccount, requiredAnyPermissions);
+      if (!okAny) {
+        throw new ForbiddenException({
+          code: 403,
+          status: 'error',
+          message: `Insufficient permissions. Required one of: ${requiredAnyPermissions.join(', ')}`,
+        });
+      }
     }
 
     if (requiredPermission) {
@@ -79,7 +86,23 @@ export class PermissionGuard implements CanActivate {
       }
     }
 
+    if (requiredRole) {
+      const okRole = await this.rbac.assertGuardRole(userAccount, requiredRole);
+      if (!okRole) {
+        throw new ForbiddenException({
+          code: 403,
+          status: 'error',
+          message: `Insufficient role. Required: ${requiredRole}`,
+        });
+      }
+    }
+
     return true;
+  }
+
+  private reflectPermissionAny(context: ExecutionContext): string[] | undefined {
+    const handler = context.getHandler();
+    return Reflect.getMetadata(PERMISSION_ANY_KEY, handler);
   }
 
   private reflectPermission(context: ExecutionContext): string | undefined {

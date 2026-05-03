@@ -2,18 +2,21 @@ import { Controller, Post, Body, UseGuards, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiUnauthorizedResponse, ApiBadRequestResponse } from '@nestjs/swagger';
 import { StatsService } from './stats.service';
 import { TokenGuard } from '../../common/guards/token.guard';
+import { PermissionGuard } from '../../common/guards/permission.guard';
+import { RequirePermission } from '../../common/decorators/permission.decorator';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { User } from '@prisma/client';
 import { GetOverviewDto } from './dto/get-overview.dto';
 
 @ApiTags('Stats')
 @Controller('stats')
-@UseGuards(TokenGuard)
+@UseGuards(TokenGuard, PermissionGuard)
 @ApiBearerAuth()
 export class StatsController {
   constructor(private readonly statsService: StatsService) {}
 
   @Post('overview')
+  @RequirePermission('dashboard.view')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Get overview statistics',
@@ -71,10 +74,11 @@ export class StatsController {
     schema: { example: { code: 401, status: 'error', message: 'Access denied. Token is required.' } },
   })
   async getOverview(@CurrentUser() user: User, @Body() dto?: GetOverviewDto) {
-    return this.statsService.getOverview(user, dto?.account_id, dto?.date_from, dto?.date_to);
+    return this.statsService.getOverview(user, dto?.account_id, dto?.date_from, dto?.date_to, dto?.tz_offset_minutes);
   }
 
   @Post()
+  @RequirePermission('dashboard.view')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Get general statistics',

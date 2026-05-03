@@ -508,7 +508,7 @@ export default function UserDetailsPage() {
                           disabled={
                             onlyOne ||
                             removingAccountId !== null ||
-                            membershipBusy ||
+                            !!membershipBusy ||
                             revokeMembershipTarget !== null
                           }
                           className="btn btn-secondary text-sm px-3 py-2 inline-flex items-center gap-2 border-red-200 text-red-700 hover:bg-red-50 disabled:opacity-50 whitespace-nowrap"
@@ -584,7 +584,7 @@ export default function UserDetailsPage() {
                     type="button"
                     onClick={() => void handleAddMembership()}
                     disabled={
-                      membershipBusy || removingAccountId !== null || !draftLinkAccountId || !rolesForNewMembership.length
+                      !!membershipBusy || removingAccountId !== null || !draftLinkAccountId || !rolesForNewMembership.length
                     }
                     className="btn btn-primary h-10 px-4 text-sm inline-flex items-center justify-center gap-2 whitespace-nowrap"
                   >

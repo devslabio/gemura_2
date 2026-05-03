@@ -80,6 +80,8 @@ export default function AdminPermissionsPage() {
     const start = (permPage - 1) * permPageSize;
     return filtered.slice(start, start + permPageSize);
   }, [filtered, permPage, permPageSize]);
+
+  return (
     <div className="space-y-4">
       <nav className="text-sm text-gray-600">
         <Link href="/admin/users" className="text-[var(--primary)] hover:underline">User Administration</Link>

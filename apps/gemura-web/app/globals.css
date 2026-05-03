@@ -408,6 +408,22 @@ label.required::after {
   border-color: #b91c1c;
 }
 
+.btn-success {
+  background-color: #059669;
+  color: white;
+  border-color: #059669;
+}
+
+.btn-success:hover:not(:disabled) {
+  background-color: #047857;
+  border-color: #047857;
+}
+
+.btn-success:active:not(:disabled) {
+  background-color: #065f46;
+  border-color: #065f46;
+}
+
 .btn-sm {
   padding: 0.5rem 0.75rem; /* 8px 12px */
   font-size: 0.75rem; /* 12px */

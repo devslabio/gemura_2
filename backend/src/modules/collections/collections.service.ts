@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { User } from '@prisma/client';
+import { MccMilkManifestStatus, User } from '@prisma/client';
 import { CreateCollectionDto } from './dto/create-collection.dto';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
 import { CancelCollectionDto } from './dto/cancel-collection.dto';
@@ -222,6 +222,136 @@ export class CollectionsService {
     return shift === 'evening' ? 'evening' : 'morning';
   }
 
+  private mccCollectionContext(sale: {
+    mcc_manifest_line_id: string | null;
+    mcc_gate_delivery_id: string | null;
+  }): 'umucunda_manifest_line' | 'direct_gate' | null {
+    if (sale.mcc_manifest_line_id) return 'umucunda_manifest_line';
+    if (sale.mcc_gate_delivery_id) return 'direct_gate';
+    return null;
+  }
+
+  private litresCloseEnough(a: number, b: number, tol = 0.05): boolean {
+    return Math.abs(a - b) <= tol;
+  }
+
+  /** Resolves optional MCC gate / manifest links for a milk collection (mutually exclusive). */
+  private async resolveMccCollectionLinkData(args: {
+    customerAccountId: string;
+    supplierAccountId: string;
+    quantity: number;
+    mcc_gate_delivery_id?: string;
+    mcc_manifest_line_id?: string;
+  }): Promise<{ mcc_gate_delivery_id: string | null; mcc_manifest_line_id: string | null }> {
+    const { customerAccountId, supplierAccountId, quantity, mcc_gate_delivery_id, mcc_manifest_line_id } = args;
+    if (!mcc_gate_delivery_id && !mcc_manifest_line_id) {
+      return { mcc_gate_delivery_id: null, mcc_manifest_line_id: null };
+    }
+    if (mcc_gate_delivery_id && mcc_manifest_line_id) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message:
+          'Specify either mcc_gate_delivery_id (direct gate) or mcc_manifest_line_id (Umucunda manifest line), not both.',
+      });
+    }
+    if (mcc_manifest_line_id) {
+      const line = await this.prisma.mccManifestLine.findUnique({
+        where: { id: mcc_manifest_line_id },
+        include: {
+          manifest: true,
+          linked_collection: { select: { id: true } },
+        },
+      });
+      if (!line) {
+        throw new NotFoundException({
+          code: 404,
+          status: 'error',
+          message: 'Manifest line not found.',
+        });
+      }
+      if (line.manifest.mcc_account_id !== customerAccountId) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Manifest does not belong to this collection centre.',
+        });
+      }
+      if (line.manifest.status !== MccMilkManifestStatus.accepted) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Link collections only to manifest lines on an accepted manifest.',
+        });
+      }
+      if (line.farmer_supplier_account_id !== supplierAccountId) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Selected supplier must match the farmer on the manifest line.',
+        });
+      }
+      if (line.linked_collection) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'This manifest line already has a linked milk collection.',
+        });
+      }
+      const declared = Number(line.declared_litres);
+      if (!this.litresCloseEnough(quantity, declared)) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `Collection quantity must match manifest line litres (${declared} L).`,
+        });
+      }
+      return { mcc_gate_delivery_id: null, mcc_manifest_line_id: line.id };
+    }
+    const gate = await this.prisma.mccGateDelivery.findFirst({
+      where: { id: mcc_gate_delivery_id!, mcc_account_id: customerAccountId },
+      include: { linked_milk_sale: { select: { id: true } } },
+    });
+    if (!gate) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Gate delivery not found for this centre.',
+      });
+    }
+    if (gate.source_type !== 'direct') {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message:
+          'mcc_gate_delivery_id is only for direct farmer gate arrivals. For Umucunda batches, link mcc_manifest_line_id per farmer.',
+      });
+    }
+    if (gate.source_account_id !== supplierAccountId) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Selected supplier must match the source account on the gate delivery.',
+      });
+    }
+    if (gate.linked_milk_sale) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'This gate delivery already has a linked milk collection.',
+      });
+    }
+    const gateLitres = Number(gate.gate_volume_litres);
+    if (!this.litresCloseEnough(quantity, gateLitres)) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: `Collection quantity must match gate volume (${gateLitres} L).`,
+      });
+    }
+    return { mcc_gate_delivery_id: gate.id, mcc_manifest_line_id: null };
+  }
+
   async createCollection(user: User, createDto: CreateCollectionDto) {
     const {
       supplier_account_code,
@@ -234,6 +364,8 @@ export class CollectionsService {
       milk_production_id,
       rejection_reason,
       collection_shift,
+      mcc_gate_delivery_id,
+      mcc_manifest_line_id,
     } = createDto;
 
     const collectionShift = collection_shift || 'morning';
@@ -324,6 +456,14 @@ export class CollectionsService {
       validatedMilkProductionId = milk_production_id;
     }
 
+    const mccLinks = await this.resolveMccCollectionLinkData({
+      customerAccountId,
+      supplierAccountId,
+      quantity: Number(quantity),
+      mcc_gate_delivery_id,
+      mcc_manifest_line_id,
+    });
+
     // Create milk sale (collection)
     try {
       const collectionStatus = status || 'accepted';
@@ -339,6 +479,14 @@ export class CollectionsService {
       ];
       if (rejection_reason) {
         metadataLines.unshift(this.formatMetadataLine('REJECTED_REASON', rejection_reason));
+      }
+      if (mccLinks.mcc_gate_delivery_id) {
+        metadataLines.push(this.formatMetadataLine('MCC_COLLECTION', 'direct_gate'));
+        metadataLines.push(this.formatMetadataLine('MCC_GATE_DELIVERY_ID', mccLinks.mcc_gate_delivery_id));
+      }
+      if (mccLinks.mcc_manifest_line_id) {
+        metadataLines.push(this.formatMetadataLine('MCC_COLLECTION', 'umucunda_manifest_line'));
+        metadataLines.push(this.formatMetadataLine('MCC_MANIFEST_LINE_ID', mccLinks.mcc_manifest_line_id));
       }
       const metadataBlock = metadataLines.join('\n');
       const finalNotes = notes ? `${metadataBlock}\n${notes}` : metadataBlock;
@@ -359,6 +507,8 @@ export class CollectionsService {
           payment_history: paymentHistory,
           recorded_by: user.id,
           created_by: user.id,
+          mcc_gate_delivery_id: mccLinks.mcc_gate_delivery_id ?? undefined,
+          mcc_manifest_line_id: mccLinks.mcc_manifest_line_id ?? undefined,
         },
       });
 
@@ -467,6 +617,13 @@ export class CollectionsService {
           collection_shift: collectionShift,
           amount_paid: amountPaid,
           payment_status: finalPaymentStatus,
+          mcc_gate_delivery_id: mccLinks.mcc_gate_delivery_id,
+          mcc_manifest_line_id: mccLinks.mcc_manifest_line_id,
+          mcc_collection_context: mccLinks.mcc_manifest_line_id
+            ? 'umucunda_manifest_line'
+            : mccLinks.mcc_gate_delivery_id
+              ? 'direct_gate'
+              : null,
         },
       };
     } catch (error) {
@@ -764,6 +921,7 @@ export class CollectionsService {
   }
 
   async getCollections(user: User, filters?: {
+    supplier_account_id?: string;
     supplier_name?: string;
     status?: string;
     date_from?: string;
@@ -810,7 +968,9 @@ export class CollectionsService {
     };
 
     if (filters) {
-      if (filters.supplier_name) {
+      if (filters.supplier_account_id?.trim()) {
+        where.supplier_account_id = filters.supplier_account_id.trim();
+      } else if (filters.supplier_name) {
         where.supplier_account = {
           is: {
             name: {
@@ -888,6 +1048,9 @@ export class CollectionsService {
       notes: collection.notes,
       created_at: collection.created_at,
       updated_at: collection.updated_at,
+      mcc_gate_delivery_id: collection.mcc_gate_delivery_id,
+      mcc_manifest_line_id: collection.mcc_manifest_line_id,
+      mcc_collection_context: this.mccCollectionContext(collection),
       supplier_account: {
         id: collection.supplier_account.id,
         code: collection.supplier_account.code,
@@ -1014,6 +1177,9 @@ export class CollectionsService {
           name: collection.recorded_by_user.name,
           phone: collection.recorded_by_user.phone,
         },
+        mcc_gate_delivery_id: collection.mcc_gate_delivery_id,
+        mcc_manifest_line_id: collection.mcc_manifest_line_id,
+        mcc_collection_context: this.mccCollectionContext(collection),
       },
     };
   }

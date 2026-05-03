@@ -6,7 +6,7 @@ import DigitalClock from './DigitalClock';
 export default function AuthHeroPanel({
   children,
   brandTitle = 'Gemura',
-  brandSubtitle = 'Milk collection services platform',
+  brandSubtitle = 'Milk operations platform',
 }: {
   children?: ReactNode;
   brandTitle?: string;

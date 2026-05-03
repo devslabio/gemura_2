@@ -20,16 +20,8 @@ export class PermissionService {
       return false;
     }
 
-    const role = this.normalizeRole(currentAccount.role);
-
     // System admin tier and admin receive full checks (matches backend RBAC).
     if (isPlatformSuperAdminRole(currentAccount.role)) {
-      return true;
-    }
-
-    // Managers should have full operations access even if explicit
-    // permission payload is missing/incomplete on the account object.
-    if (role === 'manager') {
       return true;
     }
 

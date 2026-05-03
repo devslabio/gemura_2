@@ -70,6 +70,7 @@ function getPeriodRange(period: PeriodKey, customFrom?: string, customTo?: strin
   let end: Date;
   switch (period) {
     case 'day':
+      /** Local calendar day: 00:00–23:59:59 (represented as one YYYY-MM-DD for the API). */
       start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       break;
@@ -103,7 +104,7 @@ export default function Dashboard() {
   const [overview, setOverview] = useState<OverviewResponse['data'] | null>(null);
   const [error, setError] = useState('');
   const [chartTab, setChartTab] = useState<'value' | 'volume'>('value');
-  const [period, setPeriod] = useState<PeriodKey>('quarter');
+  const [period, setPeriod] = useState<PeriodKey>('day');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);

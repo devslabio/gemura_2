@@ -12,11 +12,11 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://gemura.com'),
   title: {
-    default: "Gemura - Milk collection services platform",
+    default: "Gemura - Milk operations platform",
     template: "%s | Gemura",
   },
   description: "Gemura's comprehensive platform for milk collection, sales, and financial operations management",
-  keywords: ["gemura", "milk collection", "milk collection services platform", "sales management", "accounting"],
+  keywords: ["gemura", "milk collection", "milk operations", "sales management", "accounting"],
   authors: [{ name: "Gemura" }],
   creator: "Gemura",
   publisher: "Gemura",

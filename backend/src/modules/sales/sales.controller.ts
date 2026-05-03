@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiBadReque
 import { Response } from 'express';
 import { SalesService } from './sales.service';
 import { TokenGuard } from '../../common/guards/token.guard';
+import { PermissionGuard } from '../../common/guards/permission.guard';
+import { RequirePermission } from '../../common/decorators/permission.decorator';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { User } from '@prisma/client';
 import { GetSalesDto } from './dto/get-sales.dto';
@@ -14,12 +16,13 @@ import { RecordPaymentDto } from '../accounting/receivables-payables/dto/record-
 
 @ApiTags('Sales')
 @Controller('sales')
-@UseGuards(TokenGuard)
+@UseGuards(TokenGuard, PermissionGuard)
 @ApiBearerAuth()
 export class SalesController {
   constructor(private readonly salesService: SalesService) {}
 
   @Post('sales')
+  @RequirePermission('view_sales')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Get sales list with filters',
@@ -133,6 +136,7 @@ export class SalesController {
   }
 
   @Put('update')
+  @RequirePermission('update_sales')
   @ApiOperation({
     summary: 'Update a sale',
     description: 'Update sale details including quantity, status, customer, notes, or date. Only sales belonging to the user\'s default account can be updated.',
@@ -234,6 +238,7 @@ export class SalesController {
   }
 
   @Post('cancel')
+  @RequirePermission('update_sales')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Cancel a sale',
@@ -302,6 +307,7 @@ export class SalesController {
   }
 
   @Post()
+  @RequirePermission('create_sales')
   @ApiOperation({
     summary: 'Create a new sale',
     description: 'Create a new milk sale transaction. The sale is created from the supplier perspective (user\'s default account is the supplier selling to customers). Supports both UUID and account code for customer identification. Default status is "accepted".',
@@ -440,6 +446,7 @@ export class SalesController {
   }
 
   @Get('template')
+  @RequirePermission('view_sales')
   @ApiOperation({
     summary: 'Download sales CSV template',
     description: 'Returns a CSV file with header row and one example row for bulk import.',
@@ -462,6 +469,7 @@ export class SalesController {
   }
 
   @Post('bulk')
+  @RequirePermission('create_sales')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Bulk create sales',
@@ -489,6 +497,7 @@ export class SalesController {
   }
 
   @Post(':saleId/payment')
+  @RequirePermission('update_sales')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Record payment for a sale',

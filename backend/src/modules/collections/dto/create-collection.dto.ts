@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsNumber, IsOptional, IsIn } from 'class-validator';
+import { IsNotEmpty, IsString, IsNumber, IsOptional, IsIn, IsUUID } from 'class-validator';
 import { IsNotFutureDate } from '../../../common/validators/not-future-date.validator';
 
 export class CreateCollectionDto {
@@ -98,5 +98,23 @@ export class CreateCollectionDto {
   @IsOptional()
   @IsString()
   milk_production_id?: string;
+
+  @ApiProperty({
+    description:
+      'Optional: link this collection to a direct farmer gate delivery (MCC). Must match supplier and litres. Mutually exclusive with mcc_manifest_line_id.',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID('4')
+  mcc_gate_delivery_id?: string;
+
+  @ApiProperty({
+    description:
+      'Optional: link this collection to an accepted Umucunda manifest farmer line. Supplier must match the line farmer and litres must match. Mutually exclusive with mcc_gate_delivery_id.',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID('4')
+  mcc_manifest_line_id?: string;
 }
 

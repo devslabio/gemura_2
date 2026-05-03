@@ -41,7 +41,7 @@ export default function StatCard({
           )}
         </div>
         <div
-          className="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center"
+          className="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center self-start"
           style={{ backgroundColor: iconBgColor, color: iconColor }}
         >
           <Icon icon={icon} size="lg" />
@@ -51,7 +51,11 @@ export default function StatCard({
   );
 
   if (href) {
-    return <Link href={href} className="block">{content}</Link>;
+    return (
+      <Link href={href} className="block">
+        {content}
+      </Link>
+    );
   }
   return content;
 }

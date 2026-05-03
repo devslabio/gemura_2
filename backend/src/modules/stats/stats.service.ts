@@ -2,11 +2,30 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { User, Prisma } from '@prisma/client';
 
+/** YYYY-MM-DD calendar bounds in a fixed offset east of UTC (see GetOverviewDto.tz_offset_minutes). Uses 24h spans (no DST). */
+function saleAtBoundsUtcInclusive(dateFromStr: string, dateToStr: string, tzOffsetEastMinutes?: number): { gte: Date; lte: Date } {
+  const dayBounds = (dateStr: string): { start: Date; end: Date } => {
+    const [y, mo, d] = dateStr.split('-').map(Number);
+    if (tzOffsetEastMinutes === undefined) {
+      return {
+        start: new Date(`${dateStr}T00:00:00.000Z`),
+        end: new Date(`${dateStr}T23:59:59.999Z`),
+      };
+    }
+    const startMs = Date.UTC(y, mo - 1, d, 0, 0, 0, 0) - tzOffsetEastMinutes * 60 * 1000;
+    const endMs = startMs + 86400000 - 1;
+    return { start: new Date(startMs), end: new Date(endMs) };
+  };
+  const from = dayBounds(dateFromStr);
+  const to = dayBounds(dateToStr);
+  return { gte: from.start, lte: to.end };
+}
+
 @Injectable()
 export class StatsService {
   constructor(private prisma: PrismaService) {}
 
-  async getOverview(user: User, accountIdParam?: string, dateFromStr?: string, dateToStr?: string) {
+  async getOverview(user: User, accountIdParam?: string, dateFromStr?: string, dateToStr?: string, tzOffsetEastMinutes?: number) {
     let accountId: string;
 
     if (accountIdParam) {
@@ -38,12 +57,7 @@ export class StatsService {
     }
 
     const saleAtFilter: Prisma.MilkSaleWhereInput['sale_at'] =
-      dateFromStr && dateToStr
-        ? {
-            gte: new Date(`${dateFromStr}T00:00:00.000Z`),
-            lte: new Date(`${dateToStr}T23:59:59.999Z`),
-          }
-        : undefined;
+      dateFromStr && dateToStr ? saleAtBoundsUtcInclusive(dateFromStr, dateToStr, tzOffsetEastMinutes) : undefined;
 
     const baseWhere = (extra: Prisma.MilkSaleWhereInput): Prisma.MilkSaleWhereInput => ({
       ...extra,

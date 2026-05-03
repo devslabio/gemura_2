@@ -7,22 +7,18 @@ import { usePermission } from '@/hooks/usePermission';
 const ROLE_DEFINITIONS = [
   {
     name: 'Milk Receptionist',
-    description: 'Access to sales, collections, suppliers, customers, and inventory with ability to add inventory items.',
     permissionGroup: 'Milk Receptionist Access',
   },
   {
     name: 'Veterinary',
-    description: 'Same access as Milk Receptionist, plus can add inventory items.',
     permissionGroup: 'Milk Receptionist Access',
   },
   {
     name: 'Accountant',
-    description: 'Access to overall dashboard, payroll, loans, charges, and finance only.',
     permissionGroup: 'General Full Access',
   },
   {
     name: 'Manager',
-    description: 'Oversees center-wide activities and team operations.',
     permissionGroup: 'General Full Access',
   },
 ];
@@ -30,13 +26,11 @@ const ROLE_DEFINITIONS = [
 const PERMISSION_GROUPS = [
   {
     name: 'General Full Access',
-    summary: 'Allowed to view all sidebar tabs.',
     grantedTo: ['Manager', 'Accountant'],
     tabs: ['All sidebar tabs'],
   },
   {
     name: 'Milk Receptionist Access',
-    summary: 'Limited operational access for daily milk-center workflows.',
     grantedTo: ['Milk Receptionist', 'Veterinary'],
     tabs: ['Sales', 'Collections', 'Suppliers', 'Customers', 'Inventory (Add Item enabled)'],
   },
@@ -57,9 +51,6 @@ export default function RolesPermissionsPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Roles & Permissions</h1>
-        <p className="text-sm text-gray-600 mt-1">
-          Role definitions and access groups for milk collection center teams.
-        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -79,9 +70,6 @@ export default function RolesPermissionsPage() {
 
       <div className="bg-white border border-gray-200 rounded-sm p-5">
         <h2 className="text-lg font-semibold text-gray-900">Roles</h2>
-        <p className="text-sm text-gray-600 mt-1">
-          These are the primary user roles currently used in this dashboard.
-        </p>
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           {ROLE_DEFINITIONS.map((role) => (
@@ -92,7 +80,6 @@ export default function RolesPermissionsPage() {
                   {role.permissionGroup}
                 </span>
               </div>
-              <p className="text-sm text-gray-600 mt-2">{role.description}</p>
             </div>
           ))}
         </div>
@@ -100,15 +87,11 @@ export default function RolesPermissionsPage() {
 
       <div className="bg-white border border-gray-200 rounded-sm p-5">
         <h2 className="text-lg font-semibold text-gray-900">Permission Groups</h2>
-        <p className="text-sm text-gray-600 mt-1">
-          Access is assigned through these permission groups.
-        </p>
 
         <div className="mt-4 space-y-4">
           {PERMISSION_GROUPS.map((group) => (
             <div key={group.name} className="border border-gray-200 rounded-sm p-4">
               <h3 className="font-semibold text-gray-900">{group.name}</h3>
-              <p className="text-sm text-gray-600 mt-1">{group.summary}</p>
 
               <div className="mt-3">
                 <p className="text-xs uppercase tracking-wide text-gray-500 font-medium">Granted To</p>

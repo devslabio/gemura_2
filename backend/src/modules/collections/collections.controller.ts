@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiBadReque
 import { Response } from 'express';
 import { CollectionsService } from './collections.service';
 import { TokenGuard } from '../../common/guards/token.guard';
+import { PermissionGuard } from '../../common/guards/permission.guard';
+import { RequirePermission } from '../../common/decorators/permission.decorator';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { User } from '@prisma/client';
 import { CreateCollectionDto } from './dto/create-collection.dto';
@@ -15,12 +17,13 @@ import { RecordPaymentDto } from '../accounting/receivables-payables/dto/record-
 
 @ApiTags('Collections')
 @Controller('collections')
-@UseGuards(TokenGuard)
+@UseGuards(TokenGuard, PermissionGuard)
 @ApiBearerAuth()
 export class CollectionsController {
   constructor(private readonly collectionsService: CollectionsService) {}
 
   @Get('rejection-reasons')
+  @RequirePermission('view_collections')
   @ApiOperation({
     summary: 'Get all milk rejection reasons',
     description: 'Returns a list of all active milk rejection reasons ordered by sort order. Use query parameter include_inactive=true to include inactive reasons.',
@@ -79,6 +82,7 @@ export class CollectionsController {
   }
 
   @Get('rejection-reasons/:id')
+  @RequirePermission('view_collections')
   @ApiOperation({
     summary: 'Get rejection reason by ID',
     description: 'Returns a single milk rejection reason by its ID',
@@ -131,6 +135,7 @@ export class CollectionsController {
   }
 
   @Post('rejection-reasons')
+  @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Create a new milk rejection reason',
     description: 'Creates a new milk rejection reason. The name must be unique.',
@@ -221,6 +226,7 @@ export class CollectionsController {
   }
 
   @Put('rejection-reasons/:id')
+  @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Update a milk rejection reason',
     description: 'Updates an existing milk rejection reason. All fields are optional.',
@@ -329,6 +335,7 @@ export class CollectionsController {
   }
 
   @Delete('rejection-reasons/:id')
+  @RequirePermission('manage_users')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Delete a milk rejection reason',
@@ -390,6 +397,7 @@ export class CollectionsController {
   }
 
   @Get('supplier-animals')
+  @RequirePermission('view_collections')
   @ApiOperation({
     summary: 'Get animals for a supplier',
     description: 'Returns animals belonging to the given supplier account. Only available when the supplier is linked to your account. Use when linking a milk collection to an animal.',
@@ -415,9 +423,16 @@ export class CollectionsController {
   }
 
   @Get()
+  @RequirePermission('view_collections')
   @ApiOperation({
     summary: 'Get all collections',
     description: 'Retrieve all milk collections for the authenticated user\'s default account (as customer/collector buying from suppliers). Supports filtering by supplier name, status, date range, quantity range, and price range. Data is scoped to the user\'s default account.',
+  })
+  @ApiQuery({
+    name: 'supplier_account_id',
+    required: false,
+    description: 'Filter by supplier account UUID (exact match). Takes precedence over supplier_name.',
+    type: String,
   })
   @ApiQuery({
     name: 'supplier_name',
@@ -540,8 +555,9 @@ export class CollectionsController {
       message: 'Access denied. Token is required.',
     },
   })
-  async getCollections(@CurrentUser() user: User, @Query('account_id') accountId?: string, @Query('supplier_name') supplierName?: string, @Query('status') status?: string, @Query('date_from') dateFrom?: string, @Query('date_to') dateTo?: string, @Query('quantity_min') quantityMin?: number, @Query('quantity_max') quantityMax?: number, @Query('price_min') priceMin?: number, @Query('price_max') priceMax?: number) {
+  async getCollections(@CurrentUser() user: User, @Query('account_id') accountId?: string, @Query('supplier_account_id') supplierAccountId?: string, @Query('supplier_name') supplierName?: string, @Query('status') status?: string, @Query('date_from') dateFrom?: string, @Query('date_to') dateTo?: string, @Query('quantity_min') quantityMin?: number, @Query('quantity_max') quantityMax?: number, @Query('price_min') priceMin?: number, @Query('price_max') priceMax?: number) {
     const filters: any = {};
+    if (supplierAccountId) filters.supplier_account_id = supplierAccountId;
     if (supplierName) filters.supplier_name = supplierName;
     if (status) filters.status = status;
     if (dateFrom) filters.date_from = dateFrom;
@@ -554,6 +570,7 @@ export class CollectionsController {
   }
 
   @Post('create')
+  @RequirePermission('create_collections')
   @ApiOperation({
     summary: 'Record milk collection',
     description: 'Record a milk collection transaction from a supplier. The collection is stored as a milk sale record with quantity, unit price, and status.',
@@ -653,6 +670,7 @@ export class CollectionsController {
   }
 
   @Get('template')
+  @RequirePermission('view_collections')
   @ApiOperation({
     summary: 'Download collections CSV template',
     description: 'Returns a CSV file with header row and one example row for bulk import.',
@@ -675,6 +693,7 @@ export class CollectionsController {
   }
 
   @Post('bulk')
+  @RequirePermission('create_collections')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Bulk create collections',
@@ -702,6 +721,7 @@ export class CollectionsController {
   }
 
   @Delete(':id')
+  @RequirePermission('update_collections')
   @ApiOperation({
     summary: 'Delete collection (soft delete)',
     description: 'Soft delete a milk collection by setting status to deleted. This preserves the record for historical purposes. Only collections belonging to the user\'s default account can be deleted.',
@@ -749,6 +769,7 @@ export class CollectionsController {
   }
 
   @Get(':id')
+  @RequirePermission('view_collections')
   @ApiOperation({
     summary: 'Get collection details',
     description: 'Retrieve details of a specific milk collection by ID. Only collections belonging to the user\'s default account can be accessed.',
@@ -811,6 +832,7 @@ export class CollectionsController {
   }
 
   @Put('update')
+  @RequirePermission('update_collections')
   @ApiOperation({
     summary: 'Update collection',
     description: 'Update collection details including quantity, status, date, or notes. Only collections belonging to the user\'s default account can be updated.',
@@ -873,6 +895,7 @@ export class CollectionsController {
   }
 
   @Post('cancel')
+  @RequirePermission('update_collections')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Cancel collection',
@@ -920,6 +943,7 @@ export class CollectionsController {
   }
 
   @Post(':collectionId/payment')
+  @RequirePermission('update_collections')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Record payment for a collection',

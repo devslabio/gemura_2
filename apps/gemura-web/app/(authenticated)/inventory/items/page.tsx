@@ -180,7 +180,6 @@ export default function InventoryItemsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Items</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Inventory · Items</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => canManageInventory && setBulkImportOpen(true)} className="btn btn-secondary" disabled={!canManageInventory}>

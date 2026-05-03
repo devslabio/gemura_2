@@ -45,7 +45,9 @@ export interface OverviewResponse {
 export interface GetOverviewParams {
   account_id?: string;
   date_from?: string; // YYYY-MM-DD
-  date_to?: string;   // YYYY-MM-DD
+  date_to?: string; // YYYY-MM-DD
+  /** Same as `-Date.getTimezoneOffset()` — local calendar day from midnight in the browser */
+  tz_offset_minutes?: number;
 }
 
 export const statsApi = {
@@ -54,6 +56,9 @@ export const statsApi = {
     if (accountId) body.account_id = accountId;
     if (params?.date_from) body.date_from = params.date_from;
     if (params?.date_to) body.date_to = params.date_to;
+    if (params?.date_from && params?.date_to) {
+      body.tz_offset_minutes = -new Date().getTimezoneOffset();
+    }
     return apiClient.post<OverviewResponse>('/stats/overview', Object.keys(body).length ? body : {});
   },
 };

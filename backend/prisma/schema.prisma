@@ -347,6 +347,7 @@ model Account {
   mcc_manifest_lines_as_farmer       MccManifestLine[]               @relation("MccManifestLineFarmerSupplier")
   mcc_credit_events_farmer           MccCreditEvent[]               @relation("MccCreditEventFarmer")
   mcc_credit_events_as_mcc           MccCreditEvent[]               @relation("MccCreditEventMccAccount")
+  mcc_staff_shifts                   MccStaffShift[]                @relation("MccStaffShiftMccAccount")
 
   @@index([code])
   @@index([type])
@@ -407,6 +408,7 @@ model User {
   milk_sales_recorded          MilkSale[]         @relation("MilkSaleRecordedBy")
   mcc_gate_deliveries_recorded MccGateDelivery[] @relation("MccGateDeliveryRecordedBy")
   mcc_milk_tests_recorded      MccMilkTestResult[] @relation("MccMilkTestTester")
+  mcc_staff_shifts             MccStaffShift[]     @relation("MccStaffShiftUser")
   created_accounts             Account[]          @relation("AccountCreatedBy")
   updated_accounts             Account[]          @relation("AccountUpdatedBy")
   created_users                User[]             @relation("UserCreatedBy")
@@ -562,6 +564,8 @@ model MilkSale {
   payment_history     Json?          @map("payment_history")
   recorded_by         String         @map("recorded_by") @db.Uuid
   mcc_gate_delivery_id String?      @unique @map("mcc_gate_delivery_id") @db.Uuid
+  /// When set, this collection pays a specific farmer line on an accepted Umucunda manifest (gate context via line → manifest → gate).
+  mcc_manifest_line_id String?      @unique @map("mcc_manifest_line_id") @db.Uuid
   created_at          DateTime       @default(now()) @map("created_at")
   updated_at          DateTime       @updatedAt @map("updated_at")
   created_by          String?        @map("created_by") @db.Uuid
@@ -572,6 +576,7 @@ model MilkSale {
   customer_account    Account             @relation("MilkSaleCustomer", fields: [customer_account_id], references: [id], onDelete: Restrict)
   recorded_by_user    User                @relation("MilkSaleRecordedBy", fields: [recorded_by], references: [id], onDelete: Restrict)
   mcc_gate_delivery   MccGateDelivery?    @relation("MilkSaleGateDelivery", fields: [mcc_gate_delivery_id], references: [id], onDelete: SetNull)
+  mcc_manifest_line   MccManifestLine?    @relation("MilkSaleManifestLine", fields: [mcc_manifest_line_id], references: [id], onDelete: SetNull)
   animal              Animal?              @relation(fields: [animal_id], references: [id], onDelete: SetNull)
   milk_production     MilkProduction?      @relation(fields: [milk_production_id], references: [id], onDelete: SetNull)
 
@@ -585,6 +590,7 @@ model MilkSale {
   @@index([created_at])
   @@index([payment_status])
   @@index([mcc_gate_delivery_id])
+  @@index([mcc_manifest_line_id])
   @@map("milk_sales")
 }
 
@@ -652,6 +658,7 @@ model MccManifestLine {
   manifest         MccMilkManifest     @relation(fields: [manifest_id], references: [id], onDelete: Cascade)
   farmer_supplier  Account             @relation("MccManifestLineFarmerSupplier", fields: [farmer_supplier_account_id], references: [id], onDelete: Restrict)
   milk_test_results MccMilkTestResult[]
+  linked_collection MilkSale?          @relation("MilkSaleManifestLine")
 
   @@index([manifest_id])
   @@index([farmer_supplier_account_id])
@@ -697,6 +704,25 @@ model MccCreditEvent {
   @@index([farmer_account_id, created_at(sort: Desc)])
   @@index([mcc_gate_delivery_id])
   @@map("mcc_credit_events")
+}
+
+/// Staff shift at an MCC (gate / reception); open shift has ended_at null.
+model MccStaffShift {
+  id                  String    @id @default(uuid()) @db.Uuid
+  mcc_account_id      String    @map("mcc_account_id") @db.Uuid
+  user_id             String    @map("user_id") @db.Uuid
+  started_at          DateTime  @default(now()) @map("started_at")
+  ended_at            DateTime? @map("ended_at")
+  role_label_snapshot String?   @map("role_label_snapshot") @db.VarChar(64)
+  notes               String?   @db.Text
+  created_at          DateTime  @default(now()) @map("created_at")
+
+  mcc_account Account @relation("MccStaffShiftMccAccount", fields: [mcc_account_id], references: [id], onDelete: Restrict)
+  user        User    @relation("MccStaffShiftUser", fields: [user_id], references: [id], onDelete: Restrict)
+
+  @@index([mcc_account_id, started_at(sort: Desc)])
+  @@index([user_id, ended_at])
+  @@map("mcc_staff_shifts")
 }
 
 // Milk production (per animal or farm per day) – can be linked to sales later via milk_production_id on MilkSale

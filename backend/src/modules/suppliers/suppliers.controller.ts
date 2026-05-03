@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiBadReque
 import { Response } from 'express';
 import { SuppliersService } from './suppliers.service';
 import { TokenGuard } from '../../common/guards/token.guard';
+import { PermissionGuard } from '../../common/guards/permission.guard';
+import { RequireAnyPermission, RequirePermission } from '../../common/decorators/permission.decorator';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { User } from '@prisma/client';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
@@ -11,12 +13,13 @@ import { BulkCreateSuppliersDto } from './dto/bulk-create-suppliers.dto';
 
 @ApiTags('Suppliers')
 @Controller('suppliers')
-@UseGuards(TokenGuard)
+@UseGuards(TokenGuard, PermissionGuard)
 @ApiBearerAuth()
 export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
 
   @Post('create')
+  @RequireAnyPermission(['create_suppliers', 'update_suppliers'])
   @ApiOperation({
     summary: 'Create or update supplier',
     description: 'Create a new supplier relationship or update an existing one. If supplier exists (by phone/email/nid), updates the relationship. Otherwise, creates new user, account, and wallet.',
@@ -102,6 +105,7 @@ export class SuppliersController {
   }
 
   @Get('template')
+  @RequirePermission('view_suppliers')
   @ApiOperation({
     summary: 'Download suppliers CSV template',
     description: 'Returns a CSV file with header row and one example row for bulk import.',
@@ -124,6 +128,7 @@ export class SuppliersController {
   }
 
   @Post('bulk')
+  @RequireAnyPermission(['create_suppliers', 'update_suppliers'])
   @ApiOperation({
     summary: 'Bulk create or update suppliers',
     description: 'Create or update multiple suppliers from an array. Returns success count and per-row errors.',
@@ -150,6 +155,7 @@ export class SuppliersController {
   }
 
   @Post('get')
+  @RequirePermission('view_suppliers')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Get all suppliers',
@@ -205,6 +211,7 @@ export class SuppliersController {
   }
 
   @Get('by-id/:id')
+  @RequirePermission('view_suppliers')
   @ApiOperation({
     summary: 'Get supplier details by ID',
     description: 'Retrieve detailed information about a specific supplier by account ID (UUID). Returns supplier account details, user information, and relationship data. The supplier must be associated with the user\'s default account.',
@@ -291,6 +298,7 @@ export class SuppliersController {
   }
 
   @Get(':code')
+  @RequirePermission('view_suppliers')
   @ApiOperation({
     summary: 'Get supplier details by code',
     description: 'Retrieve details of a specific supplier by account code. Returns supplier information and relationship details.',
@@ -355,6 +363,7 @@ export class SuppliersController {
   }
 
   @Put('update')
+  @RequirePermission('update_suppliers')
   @ApiOperation({
     summary: 'Update supplier relationship',
     description: 'Update supplier relationship details including price per liter and relationship status.',
@@ -426,6 +435,7 @@ export class SuppliersController {
   }
 
   @Delete(':code')
+  @RequirePermission('update_suppliers')
   @ApiOperation({
     summary: 'Delete supplier relationship',
     description: 'Delete (deactivate) a supplier relationship. This sets the relationship status to inactive.',

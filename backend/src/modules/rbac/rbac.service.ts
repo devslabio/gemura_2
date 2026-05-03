@@ -56,7 +56,9 @@ export class RbacService implements OnModuleInit {
       const existingRole = await this.prisma.platformRole.findUnique({ where: { slug } });
       const id = existingRole?.id ?? randomUUID();
       const isSystem = slug === 'system_admin' || slug === 'admin';
-      const isAssignable = slug !== 'supplier' && slug !== 'customer';
+      /** Not offered in tenant team management (`GET /employees/roles`); use admin tooling for top-tier links. */
+      const isAssignable =
+        slug !== 'supplier' && slug !== 'customer' && slug !== 'system_admin';
 
       const roleRow = await this.prisma.platformRole.upsert({
         where: { slug },
@@ -277,6 +279,16 @@ export class RbacService implements OnModuleInit {
     if (isPlatformSuperAdminRole(r)) return true;
     const codes = await this.getEffectivePermissionCodes(userAccount);
     return codes.includes(requiredPermission);
+  }
+
+  async assertGuardAnyPermission(
+    userAccount: { role: string; platform_role_id: string | null; permissions: unknown },
+    requiredAny: string[],
+  ): Promise<boolean> {
+    const r = (userAccount.role || '').toLowerCase();
+    if (isPlatformSuperAdminRole(r)) return true;
+    const codes = await this.getEffectivePermissionCodes(userAccount);
+    return requiredAny.some((p) => codes.includes(p));
   }
 
   async assertGuardRole(userAccount: { role: string }, requiredRole: string): Promise<boolean> {
