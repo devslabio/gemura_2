@@ -46,6 +46,8 @@ export interface MccTestResultRow {
   outcome: string;
   rejection_cause: string | null;
   source_resolution_status: string | null;
+  /** Structured quality readings from API (`temperature_c`, `fat_percent`, etc.). */
+  detail?: Record<string, unknown> | null;
   tested_at: string;
   gate_delivery: {
     id: string;
@@ -169,13 +171,19 @@ export const mccOperationsApi = {
     manifest_line_id?: string;
     outcome: 'pending' | 'accepted' | 'rejected';
     rejection_cause?: string;
+    detail?: Record<string, unknown>;
   }) {
     return apiClient.post<{ code: number; data: { id: string } }>('/mcc/operations/test-results', body);
   },
 
   updateTestResult(
     testResultId: string,
-    body: { account_id?: string; outcome: 'pending' | 'accepted' | 'rejected'; rejection_cause?: string },
+    body: {
+      account_id?: string;
+      outcome: 'pending' | 'accepted' | 'rejected';
+      rejection_cause?: string;
+      detail?: Record<string, unknown>;
+    },
   ) {
     return apiClient.patch<{ code: number }>(`/mcc/operations/test-results/${testResultId}`, body);
   },

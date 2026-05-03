@@ -600,6 +600,7 @@ export class MccOperationsService {
         outcome: r.outcome,
         rejection_cause: r.rejection_cause,
         source_resolution_status: r.source_resolution_status,
+        detail: r.detail as Record<string, unknown> | null,
         tested_at: r.tested_at.toISOString(),
         gate_delivery: r.gate_delivery,
         manifest_line: r.manifest_line,
@@ -612,10 +613,31 @@ export class MccOperationsService {
     const accountId = await this.resolveAccountId(user, dto.account_id);
     const gate = await this.prisma.mccGateDelivery.findFirst({
       where: { id: dto.mcc_gate_delivery_id, mcc_account_id: accountId },
+      include: { manifest: true },
     });
     if (!gate) {
       throw new NotFoundException({ code: 404, status: 'error', message: 'Gate delivery not found.' });
     }
+
+    const umucunda =
+      gate.source_type === 'umucunda_a' || gate.source_type === 'umucunda_b';
+    if (umucunda) {
+      if (!gate.manifest) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Create and submit the Umucunda manifest before recording a milk test.',
+        });
+      }
+      if (gate.manifest.status === MccMilkManifestStatus.draft) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Submit the manifest before recording a milk test.',
+        });
+      }
+    }
+
     if (dto.manifest_line_id) {
       const line = await this.prisma.mccManifestLine.findFirst({
         where: { id: dto.manifest_line_id },
@@ -637,6 +659,7 @@ export class MccOperationsService {
         outcome: dto.outcome,
         rejection_cause: dto.rejection_cause ?? null,
         tested_by_user_id: user.id,
+        ...(dto.detail !== undefined ? { detail: dto.detail as object } : {}),
       },
     });
 
@@ -666,6 +689,7 @@ export class MccOperationsService {
       data: {
         outcome: dto.outcome,
         rejection_cause: dto.rejection_cause ?? null,
+        ...(dto.detail !== undefined ? { detail: dto.detail as object } : {}),
       },
     });
 

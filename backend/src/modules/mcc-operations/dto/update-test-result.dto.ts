@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsEnum, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class UpdateTestResultDto {
   @ApiProperty({ required: false })
@@ -15,4 +15,13 @@ export class UpdateTestResultDto {
   @IsOptional()
   @IsString()
   rejection_cause?: string;
+
+  @ApiProperty({
+    required: false,
+    description: 'Replaces existing detail when provided.',
+    additionalProperties: true,
+  })
+  @IsOptional()
+  @IsObject()
+  detail?: Record<string, unknown>;
 }
