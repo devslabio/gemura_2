@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { usePermission } from '@/hooks/usePermission';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import { salesApi, Sale } from '@/lib/api/sales';
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
@@ -17,6 +18,7 @@ export default function SaleDetailsPage() {
   const saleId = params.id as string;
   const { currentAccount } = useAuthStore();
   const { hasPermission, isAdmin } = usePermission();
+  const { sales: saleCrud } = useCrudPermissions();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sale, setSale] = useState<Sale | null>(null);
@@ -110,7 +112,7 @@ export default function SaleDetailsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Sale Details</h1>
         </div>
         <div className="flex items-center gap-2">
-          {sale && sale.status !== 'cancelled' && sale.status !== 'deleted' && (
+          {sale && sale.status !== 'cancelled' && sale.status !== 'deleted' && saleCrud.update && (
             <>
               <Link href={`/sales/${saleId}/edit`} className="btn btn-primary">
                 <Icon icon={faEdit} size="sm" className="mr-2" />

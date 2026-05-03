@@ -356,6 +356,7 @@ model Account {
   mcc_credit_events_farmer           MccCreditEvent[]               @relation("MccCreditEventFarmer")
   mcc_credit_events_as_mcc           MccCreditEvent[]               @relation("MccCreditEventMccAccount")
   mcc_staff_shifts                   MccStaffShift[]                @relation("MccStaffShiftMccAccount")
+  user_accounts_umucunda_scope       UserAccount[]                  @relation("UserAccountUmucundaSupplierScope")
 
   @@index([code])
   @@index([type])
@@ -528,6 +529,9 @@ model UserAccount {
   user          User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
   account       Account        @relation(fields: [account_id], references: [id], onDelete: Cascade)
   platform_role PlatformRole?  @relation(fields: [platform_role_id], references: [id], onDelete: SetNull)
+  /// When set on an Umucunda (hub/route) operator at this MCC, MCC ops APIs scope gate deliveries & manifests to this supplier account only.
+  linked_umucunda_supplier_account_id String? @map("linked_umucunda_supplier_account_id") @db.Uuid
+  linked_umucunda_supplier            Account? @relation("UserAccountUmucundaSupplierScope", fields: [linked_umucunda_supplier_account_id], references: [id], onDelete: SetNull)
 
   @@unique([user_id, account_id])
   @@index([user_id])

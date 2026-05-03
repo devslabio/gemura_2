@@ -47,7 +47,12 @@ export default function OperationsManifestsPage() {
   const { currentAccount } = useAuthStore();
   const { hasPermission, hasAnyPermission } = usePermission();
   const accountId = currentAccount?.account_id ?? '';
-  const canManage = hasAnyPermission(['mcc_manage_operations', 'update_collections']);
+  const canManage = hasAnyPermission([
+    'mcc_manage_operations',
+    'mcc_manage_own_operations',
+    'mcc_floor_operations',
+    'update_collections',
+  ]);
   const canAcceptManifests = hasPermission('mcc_accept_manifests');
 
   const [manifests, setManifests] = useState<MccManifestRow[]>([]);
@@ -433,7 +438,7 @@ export default function OperationsManifestsPage() {
                   {m.status === 'submitted' && !canAcceptManifests && (
                     <span className="text-xs text-gray-500">Accept requires Accept MCC manifests permission</span>
                   )}
-                  {canManage && m.status === 'submitted' && (
+                  {canAcceptManifests && m.status === 'submitted' && (
                     <button
                       type="button"
                       onClick={() => {
@@ -445,7 +450,7 @@ export default function OperationsManifestsPage() {
                       Reject
                     </button>
                   )}
-                  {canManage && m.status === 'draft' && (
+                  {canAcceptManifests && m.status === 'draft' && (
                     <button
                       type="button"
                       onClick={() => {

@@ -107,7 +107,11 @@ export default function OperationsStaffPage() {
   const toast = useToastStore();
   const accountId = currentAccount?.account_id ?? '';
   const canViewOps = hasAnyPermission(['mcc_view_operations', 'view_collections']);
-  const canManageShifts = hasAnyPermission(['mcc_manage_operations', 'update_collections']);
+  const canManageShifts = hasAnyPermission([
+    'mcc_manage_operations',
+    'mcc_manage_own_operations',
+    'mcc_floor_operations',
+  ]);
   const canManageTeam = canManageUsers();
   const roleLower = (currentAccount?.role ?? '').toLowerCase();
   const canStartShiftForOthers = ['manager', 'system_admin', 'admin', 'owner'].includes(roleLower);

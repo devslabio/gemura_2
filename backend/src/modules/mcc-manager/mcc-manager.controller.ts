@@ -17,7 +17,7 @@ export class MccManagerController {
   constructor(private readonly mccManager: MccManagerService) {}
 
   @Get('overview')
-  @RequireAnyPermission(['mcc_view_operations', 'view_collections'])
+  @RequireAnyPermission(['mcc_view_operations', 'mcc_view_own_operations', 'view_collections'])
   @ApiOperation({
     summary: 'MCC manager operations overview (gate, manifests, rejections, staff)',
     description:
@@ -38,7 +38,7 @@ export class MccManagerController {
   }
 
   @Patch('test-results/:testResultId/resolution')
-  @RequireAnyPermission(['mcc_manage_operations', 'update_collections'])
+  @RequireAnyPermission(['mcc_manage_operations'])
   @ApiOperation({
     summary: 'Update traceability resolution on a rejected gate test',
     description: 'Sets source_resolution_status for an MccMilkTestResult linked to this MCC account.',

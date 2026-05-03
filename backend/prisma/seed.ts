@@ -141,6 +141,44 @@ async function main() {
     `✅ Role demos on ${mainAccount.code}: admin, manager, veterinary_officer, casual_laborer, leadership, regulator, umucunda_a, umucunda_b, accountant, collector, viewer, agent`,
   );
 
+  /** Demo Umucunda hub — `linked_umucunda_supplier_account_id` is required for scoped MCC API access */
+  const umucundaHubSeed = await prisma.account.upsert({
+    where: { code: 'A_SEED_UMU_GATE' },
+    update: { name: 'Umucunda hub — Nyabihu / Musanze route', status: 'active' },
+    create: {
+      code: 'A_SEED_UMU_GATE',
+      name: 'Umucunda hub — Nyabihu / Musanze route',
+      type: 'tenant',
+      status: 'active',
+    },
+  });
+  await prisma.supplierCustomer.upsert({
+    where: {
+      supplier_account_id_customer_account_id: {
+        supplier_account_id: umucundaHubSeed.id,
+        customer_account_id: mainAccount.id,
+      },
+    },
+    update: { relationship_status: 'active', price_per_liter: 400 },
+    create: {
+      supplier_account_id: umucundaHubSeed.id,
+      customer_account_id: mainAccount.id,
+      price_per_liter: 400,
+      relationship_status: 'active',
+    },
+  });
+  const umucundaLinked = await prisma.userAccount.updateMany({
+    where: {
+      account_id: mainAccount.id,
+      role: { in: ['umucunda_a', 'umucunda_b'] },
+      status: 'active',
+    },
+    data: { linked_umucunda_supplier_account_id: umucundaHubSeed.id },
+  });
+  console.log(
+    `✅ Umucunda demo hub ${umucundaHubSeed.code} linked on ${umucundaLinked.count} membership(s) (scoped gate/manifest)`,
+  );
+
   const demoCustomerAccount = await prisma.account.upsert({
     where: { code: 'A_ROLE_DEMO_CUST' },
     update: { name: 'Role Demo Customer Org', status: 'active' },

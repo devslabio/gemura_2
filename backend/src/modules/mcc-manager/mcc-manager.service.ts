@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { User, MccSourceResolutionStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MccAccessScopeService } from '../mcc-operations/mcc-access-scope.service';
 
 function dayBoundsUtc(dateStr: string): { start: Date; end: Date } {
   const start = new Date(`${dateStr}T00:00:00.000Z`);
@@ -20,7 +21,10 @@ function decN(v: { toString(): string } | null | undefined): number {
 
 @Injectable()
 export class MccManagerService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mccScope: MccAccessScopeService,
+  ) {}
 
   private async resolveAccountId(user: User, accountIdParam?: string): Promise<string> {
     const accountId = accountIdParam || user.default_account_id;
@@ -48,11 +52,13 @@ export class MccManagerService {
   async getManagerOverview(user: User, accountIdParam: string | undefined, dateStr: string) {
     const accountId = await this.resolveAccountId(user, accountIdParam);
     const { start, end } = dayBoundsUtc(dateStr);
+    const scope = await this.mccScope.resolveViewScope(user.id, accountId);
 
     const deliveries = await this.prisma.mccGateDelivery.findMany({
       where: {
         mcc_account_id: accountId,
         arrived_at: { gte: start, lt: end },
+        ...(scope.mode === 'scoped' ? { source_account_id: scope.supplierAccountId } : {}),
       },
       include: {
         source_account: { select: { id: true, name: true, code: true } },
@@ -120,11 +126,16 @@ export class MccManagerService {
       });
     }
 
+    const gateFilter =
+      scope.mode === 'scoped'
+        ? { mcc_account_id: accountId, source_account_id: scope.supplierAccountId }
+        : { mcc_account_id: accountId };
+
     const rejections = await this.prisma.mccMilkTestResult.findMany({
       where: {
         outcome: 'rejected',
         tested_at: { gte: start, lt: end },
-        gate_delivery: { mcc_account_id: accountId },
+        gate_delivery: gateFilter,
       },
       include: {
         gate_delivery: {
@@ -162,21 +173,30 @@ export class MccManagerService {
     });
 
     const staffRoles = ['casual_laborer', 'collector', 'agent'];
-    const staffAccounts = await this.prisma.userAccount.findMany({
-      where: {
-        account_id: accountId,
-        status: 'active',
-        role: { in: staffRoles },
-      },
-      include: {
-        user: { select: { id: true, name: true, phone: true } },
-      },
-    });
+    const staffAccounts =
+      scope.mode === 'scoped'
+        ? []
+        : await this.prisma.userAccount.findMany({
+            where: {
+              account_id: accountId,
+              status: 'active',
+              role: { in: staffRoles },
+            },
+            include: {
+              user: { select: { id: true, name: true, phone: true } },
+            },
+          });
 
-    const openShifts = await this.prisma.mccStaffShift.findMany({
-      where: { mcc_account_id: accountId, ended_at: null },
-      select: { user_id: true, started_at: true, role_label_snapshot: true },
-    });
+    const openShifts =
+      scope.mode === 'scoped'
+        ? await this.prisma.mccStaffShift.findMany({
+            where: { mcc_account_id: accountId, ended_at: null, user_id: user.id },
+            select: { user_id: true, started_at: true, role_label_snapshot: true },
+          })
+        : await this.prisma.mccStaffShift.findMany({
+            where: { mcc_account_id: accountId, ended_at: null },
+            select: { user_id: true, started_at: true, role_label_snapshot: true },
+          });
     const shiftByUserId = new Map(openShifts.map((s) => [s.user_id, s]));
 
     const staffFromUa = await Promise.all(
@@ -236,7 +256,7 @@ export class MccManagerService {
       }),
     );
 
-    const staff = [...staffFromUa, ...extraRows];
+    const staff = scope.mode === 'scoped' ? [] : [...staffFromUa, ...extraRows];
 
     return {
       code: 200,

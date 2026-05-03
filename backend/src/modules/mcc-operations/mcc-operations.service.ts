@@ -7,6 +7,7 @@ import {
 import { MccMilkManifestStatus, User } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MccAccessScopeService } from './mcc-access-scope.service';
 import { CreateGateDeliveryDto } from './dto/create-gate-delivery.dto';
 import { CreateManifestDto } from './dto/create-manifest.dto';
 import { CreateTestResultDto } from './dto/create-test-result.dto';
@@ -35,7 +36,10 @@ function defaultRangeDays(days: number): { start: Date; end: Date } {
 
 @Injectable()
 export class MccOperationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mccScope: MccAccessScopeService,
+  ) {}
 
   private async resolveAccountId(user: User, accountIdParam?: string): Promise<string> {
     const accountId = accountIdParam || user.default_account_id;
@@ -127,8 +131,18 @@ export class MccOperationsService {
       end = r.end;
     }
 
+    const scope = await this.mccScope.resolveViewScope(user.id, accountId);
+    const gateWhere: {
+      mcc_account_id: string;
+      arrived_at: { gte: Date; lt: Date };
+      source_account_id?: string;
+    } = { mcc_account_id: accountId, arrived_at: { gte: start, lt: end } };
+    if (scope.mode === 'scoped') {
+      gateWhere.source_account_id = scope.supplierAccountId;
+    }
+
     const rows = await this.prisma.mccGateDelivery.findMany({
-      where: { mcc_account_id: accountId, arrived_at: { gte: start, lt: end } },
+      where: gateWhere,
       include: {
         source_account: { select: { id: true, name: true, code: true } },
         recorded_by: { select: { id: true, name: true } },
@@ -158,6 +172,14 @@ export class MccOperationsService {
 
   async createGateDelivery(user: User, dto: CreateGateDeliveryDto) {
     const accountId = await this.resolveAccountId(user, dto.account_id);
+    const manageScope = await this.mccScope.resolveManageScope(user.id, accountId);
+    if (manageScope.mode === 'scoped' && dto.source_account_id !== manageScope.supplierAccountId) {
+      throw new ForbiddenException({
+        code: 403,
+        status: 'error',
+        message: 'You can only record gate deliveries for your linked Umucunda route supplier.',
+      });
+    }
     await this.assertSupplierDeliversToMcc(accountId, dto.source_account_id);
 
     const arrivedAt = dto.arrived_at ? new Date(dto.arrived_at) : new Date();
@@ -209,11 +231,21 @@ export class MccOperationsService {
       end = r.end;
     }
 
+    const scope = await this.mccScope.resolveViewScope(user.id, accountId);
+    const manifestWhere: {
+      mcc_account_id: string;
+      umucunda_supplier_account_id?: string;
+      gate_delivery: { arrived_at: { gte: Date; lt: Date } };
+    } = {
+      mcc_account_id: accountId,
+      gate_delivery: { arrived_at: { gte: start, lt: end } },
+    };
+    if (scope.mode === 'scoped') {
+      manifestWhere.umucunda_supplier_account_id = scope.supplierAccountId;
+    }
+
     const rows = await this.prisma.mccMilkManifest.findMany({
-      where: {
-        mcc_account_id: accountId,
-        gate_delivery: { arrived_at: { gte: start, lt: end } },
-      },
+      where: manifestWhere,
       include: {
         gate_delivery: {
           select: { id: true, arrived_at: true, gate_volume_litres: true, source_type: true },
@@ -281,6 +313,15 @@ export class MccOperationsService {
       });
     }
 
+    const manageScopeCreate = await this.mccScope.resolveManageScope(user.id, accountId);
+    if (manageScopeCreate.mode === 'scoped' && dto.umucunda_supplier_account_id !== manageScopeCreate.supplierAccountId) {
+      throw new ForbiddenException({
+        code: 403,
+        status: 'error',
+        message: 'You can only create manifests for your linked Umucunda route supplier.',
+      });
+    }
+
     const existing = await this.prisma.mccMilkManifest.findUnique({
       where: { gate_delivery_id: gate.id },
     });
@@ -325,8 +366,16 @@ export class MccOperationsService {
 
   async getManifestById(user: User, accountIdResolved: string, manifestId: string) {
     await this.resolveAccountId(user, accountIdResolved);
+    const scope = await this.mccScope.resolveViewScope(user.id, accountIdResolved);
+    const mWhere: { id: string; mcc_account_id: string; umucunda_supplier_account_id?: string } = {
+      id: manifestId,
+      mcc_account_id: accountIdResolved,
+    };
+    if (scope.mode === 'scoped') {
+      mWhere.umucunda_supplier_account_id = scope.supplierAccountId;
+    }
     const m = await this.prisma.mccMilkManifest.findFirst({
-      where: { id: manifestId, mcc_account_id: accountIdResolved },
+      where: mWhere,
       include: {
         gate_delivery: { select: { id: true, arrived_at: true, gate_volume_litres: true, source_type: true } },
         umucunda_supplier: { select: { id: true, name: true, code: true } },
@@ -381,6 +430,14 @@ export class MccOperationsService {
         message: 'Only draft manifests can be edited.',
       });
     }
+    const manageScope = await this.mccScope.resolveManageScope(user.id, accountId);
+    if (manageScope.mode === 'scoped' && m.umucunda_supplier_account_id !== manageScope.supplierAccountId) {
+      throw new ForbiddenException({
+        code: 403,
+        status: 'error',
+        message: 'You can only edit manifests for your linked Umucunda route supplier.',
+      });
+    }
     if (dto.lines) {
       if (!dto.lines.length) {
         throw new BadRequestException({ code: 400, status: 'error', message: 'lines cannot be empty.' });
@@ -405,6 +462,7 @@ export class MccOperationsService {
 
   async submitManifest(user: User, manifestId: string, accountIdParam?: string) {
     const accountId = await this.resolveAccountId(user, accountIdParam);
+    const manageScopeSubmit = await this.mccScope.resolveManageScope(user.id, accountId);
     const m = await this.prisma.mccMilkManifest.findFirst({
       where: { id: manifestId, mcc_account_id: accountId },
       include: { lines: true },
@@ -417,6 +475,13 @@ export class MccOperationsService {
     }
     if (!m.lines.length) {
       throw new BadRequestException({ code: 400, status: 'error', message: 'Add lines before submitting.' });
+    }
+    if (manageScopeSubmit.mode === 'scoped' && m.umucunda_supplier_account_id !== manageScopeSubmit.supplierAccountId) {
+      throw new ForbiddenException({
+        code: 403,
+        status: 'error',
+        message: 'You can only submit manifests for your linked Umucunda route supplier.',
+      });
     }
     await this.prisma.mccMilkManifest.update({
       where: { id: manifestId },
@@ -492,13 +557,19 @@ export class MccOperationsService {
       end = r.end;
     }
 
+    const scope = await this.mccScope.resolveViewScope(user.id, accountId);
+    const gateScoped =
+      scope.mode === 'scoped'
+        ? { mcc_account_id: accountId, source_account_id: scope.supplierAccountId }
+        : { mcc_account_id: accountId };
+
     const where: {
       tested_at: { gte: Date; lt: Date };
-      gate_delivery: { mcc_account_id: string };
+      gate_delivery: typeof gateScoped;
       outcome?: 'pending' | 'accepted' | 'rejected';
     } = {
       tested_at: { gte: start, lt: end },
-      gate_delivery: { mcc_account_id: accountId },
+      gate_delivery: gateScoped,
     };
     if (outcome === 'pending' || outcome === 'accepted' || outcome === 'rejected') {
       where.outcome = outcome;
@@ -614,12 +685,23 @@ export class MccOperationsService {
       end = r.end;
     }
 
+    const scope = await this.mccScope.resolveViewScope(user.id, accountId);
+    const shiftWhere: {
+      mcc_account_id: string;
+      started_at: { lt: Date };
+      OR: ({ ended_at: null } | { ended_at: { gt: Date } })[];
+      user_id?: string;
+    } = {
+      mcc_account_id: accountId,
+      started_at: { lt: end },
+      OR: [{ ended_at: null }, { ended_at: { gt: start } }],
+    };
+    if (scope.mode === 'scoped') {
+      shiftWhere.user_id = user.id;
+    }
+
     const rows = await this.prisma.mccStaffShift.findMany({
-      where: {
-        mcc_account_id: accountId,
-        started_at: { lt: end },
-        OR: [{ ended_at: null }, { ended_at: { gt: start } }],
-      },
+      where: shiftWhere,
       include: { user: { select: { id: true, name: true, phone: true } } },
       orderBy: { started_at: 'desc' },
     });
@@ -643,8 +725,12 @@ export class MccOperationsService {
 
   async staffOptions(user: User, accountIdParam?: string) {
     const accountId = await this.resolveAccountId(user, accountIdParam);
+    const scope = await this.mccScope.resolveViewScope(user.id, accountId);
     const uas = await this.prisma.userAccount.findMany({
-      where: { account_id: accountId, status: 'active' },
+      where:
+        scope.mode === 'scoped'
+          ? { account_id: accountId, status: 'active', user_id: user.id }
+          : { account_id: accountId, status: 'active' },
       include: { user: { select: { id: true, name: true, phone: true } } },
       orderBy: { role: 'asc' },
     });
@@ -665,6 +751,7 @@ export class MccOperationsService {
 
   async startShift(user: User, dto: StartShiftDto) {
     const accountId = await this.resolveAccountId(user, dto.account_id);
+    await this.mccScope.resolveManageScope(user.id, accountId);
     const targetUserId = dto.user_id ?? user.id;
     await this.assertCanStartShiftForOther(user, accountId, targetUserId);
 
@@ -720,6 +807,7 @@ export class MccOperationsService {
 
   async endShift(user: User, shiftId: string, accountIdParam?: string) {
     const accountId = await this.resolveAccountId(user, accountIdParam);
+    await this.mccScope.resolveManageScope(user.id, accountId);
     const shift = await this.prisma.mccStaffShift.findFirst({
       where: { id: shiftId, mcc_account_id: accountId },
     });

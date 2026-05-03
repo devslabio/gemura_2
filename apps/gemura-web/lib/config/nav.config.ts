@@ -80,6 +80,8 @@ export const MCC_OPERATIONS_SUB_PANELS: {
   label: string;
   href: string;
   description: string;
+  /** If set, user needs one of these (e.g. full MCC ops, not Umucunda scoped). */
+  requiresAnyPermission?: string[];
 }[] = [
   {
     id: 'gate',
@@ -98,18 +100,21 @@ export const MCC_OPERATIONS_SUB_PANELS: {
     label: 'Traceability',
     href: '/operations/traceability',
     description: 'Milk tests and resolution workflow.',
+    requiresAnyPermission: ['mcc_view_operations'],
   },
   {
     id: 'staff',
     label: 'Staff',
     href: '/operations/staff',
     description: 'Roster, roles on duty, and shift actions.',
+    requiresAnyPermission: ['mcc_view_operations'],
   },
   {
     id: 'shifts',
     label: 'Shifts',
     href: '/operations/shifts',
     description: 'Shift history and handovers.',
+    requiresAnyPermission: ['mcc_view_operations'],
   },
 ];
 
@@ -157,7 +162,12 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
     href: '/operations/gate',
     section: 'operations',
     navGroup: 'Sales & milk',
-    requiresAnyPermission: ['mcc_view_operations', 'view_collections'],
+    requiresAnyPermission: [
+      'mcc_view_operations',
+      'mcc_view_own_operations',
+      'view_collections',
+      'mcc_floor_operations',
+    ],
   },
   {
     icon: faRightFromBracket,
@@ -173,7 +183,12 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
     href: '/operations/manifests',
     section: 'operations',
     navGroup: 'MCC operations',
-    requiresAnyPermission: ['mcc_view_operations', 'view_collections'],
+    requiresAnyPermission: [
+      'mcc_view_operations',
+      'mcc_view_own_operations',
+      'view_collections',
+      'mcc_floor_operations',
+    ],
   },
   {
     icon: faEye,
@@ -181,7 +196,7 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
     href: '/operations/traceability',
     section: 'operations',
     navGroup: 'MCC operations',
-    requiresAnyPermission: ['mcc_view_operations', 'view_collections'],
+    requiresPermission: 'mcc_view_operations',
   },
   {
     icon: faUsers,
@@ -189,7 +204,7 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
     href: '/operations/staff',
     section: 'operations',
     navGroup: 'MCC operations',
-    requiresAnyPermission: ['mcc_view_operations', 'view_collections'],
+    requiresPermission: 'mcc_view_operations',
   },
   {
     icon: faClock,
@@ -197,7 +212,7 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
     href: '/operations/shifts',
     section: 'operations',
     navGroup: 'MCC operations',
-    requiresAnyPermission: ['mcc_view_operations', 'view_collections'],
+    requiresPermission: 'mcc_view_operations',
   },
   { icon: faBuilding, label: 'Suppliers', href: '/suppliers', section: 'operations', navGroup: 'Contacts', requiresPermission: 'view_suppliers' },
   { icon: faStore, label: 'Customers', href: '/customers', section: 'operations', navGroup: 'Contacts', requiresPermission: 'view_customers' },

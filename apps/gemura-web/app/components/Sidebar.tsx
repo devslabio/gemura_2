@@ -55,7 +55,9 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     role === 'veterinarian' ||
     role === 'veternary' ||
     role === 'milkreceptionist' ||
-    role === 'milk_receptionist';
+    role === 'milk_receptionist' ||
+    role === 'umucunda_a' ||
+    role === 'umucunda_b';
   const limitedOpsAllowedPrefixes = [
     '/dashboard',
     '/sales',

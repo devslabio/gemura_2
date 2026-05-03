@@ -429,10 +429,20 @@ export default function MccManagerDashboardSection({
           value={formatL(litresPeriod)}
           subtitle={[
             litres7Avg > 0.01
-              ? `Trailing 7-day avg ${formatL(litres7Avg)}/day · ${intakeVsAvg === 'good' ? 'On track' : intakeVsAvg === 'amber' ? 'Watch' : 'Below trend'}`
-              : 'Compare after more history',
+              ? `7d avg ${formatL(litres7Avg)}/d · ${intakeVsAvg === 'good' ? 'On track' : intakeVsAvg === 'amber' ? 'Watch' : 'Below trend'}`
+              : 'Need more history',
             gate && gate.total_litres > 0
-              ? `Gate (${rangeDateTo}): ${formatL(gate.total_litres)} · ${gate.delivery_count} load${gate.delivery_count === 1 ? '' : 's'}`
+              ? `${formatL(gate.total_litres)} · ${gate.delivery_count} load${gate.delivery_count === 1 ? '' : 's'} · gate`
+              : '',
+          ]
+            .filter(Boolean)
+            .join('\n')}
+          subtitleTitle={[
+            litres7Avg > 0.01
+              ? `Trailing 7-day avg ${formatL(litres7Avg)} L/day · ${intakeVsAvg === 'good' ? 'On track' : intakeVsAvg === 'amber' ? 'Watch' : 'Below trend'}`
+              : 'Compare intake once more history is recorded.',
+            gate && gate.total_litres > 0
+              ? `Gate (${rangeDateTo} UTC): ${formatL(gate.total_litres)} L · ${gate.delivery_count} load${gate.delivery_count === 1 ? '' : 's'}`
               : '',
           ]
             .filter(Boolean)
@@ -446,12 +456,12 @@ export default function MccManagerDashboardSection({
           value={splitTotal > 0 ? `${pctDirect}% / ${pctUmu}%` : '—'}
           subtitle={
             splitTotal > 0
-              ? `${formatL(directL)} direct · ${formatL(umucundaL)} Umucunda${useGateSplit ? ' · gate' : ' · estimate'}`
+              ? `${formatL(directL)} direct\n${formatL(umucundaL)} Umucunda · ${useGateSplit ? 'gate' : 'est.'}`
               : mccLoading
                 ? 'Loading…'
                 : periodKey === 'day'
                   ? 'No gate or same-day collections'
-                  : `No gate on ${rangeDateTo} · sample from recent txn list only`
+                  : `No gate (${rangeDateTo})\nestimated from collections`
           }
           icon={faClipboardList}
           href="/operations/gate"
@@ -474,8 +484,13 @@ export default function MccManagerDashboardSection({
           value={manifestRows.length ? `${submittedCount}/${manifestRows.length}` : mccLoading ? '…' : '0/0'}
           subtitle={
             manifestRows.length
-              ? `Submitted / scheduled · gate ${rangeDateTo} (UTC)`
-              : `No manifest rows for gate ${rangeDateTo}`
+              ? `${submittedCount}/${manifestRows.length} submitted\nGate · ${rangeDateTo}`
+              : `No manifest rows\n${rangeDateTo}`
+          }
+          subtitleTitle={
+            manifestRows.length
+              ? `Submitted or pending routes · Gate calendar day ${rangeDateTo} (UTC)`
+              : `No manifest compliance rows for gate date ${rangeDateTo}`
           }
           icon={faClipboardList}
           href="/operations/manifests"

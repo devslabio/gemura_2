@@ -28,7 +28,11 @@ export class RbacService implements OnModuleInit {
   }
 
   /**
-   * Upsert permission catalog and default roles from roles-permissions.config (idempotent).
+   * Upsert permission catalog and platform roles from roles-permissions.config (idempotent).
+   *
+   * **Role ↔ permission links** are seeded from ROLE_DEFAULT_PERMISSIONS only when a role has **no**
+   * rows yet (`platform_role_permissions`). After that, admins assign permissions via
+   * `PUT /admin/platform-roles/:roleId`; restarting the API does not wipe stored grants.
    */
   async ensureCatalogFromConfig(): Promise<void> {
     for (const p of PERMISSIONS) {
@@ -79,15 +83,18 @@ export class RbacService implements OnModuleInit {
         },
       });
 
+      const linkCount = await this.prisma.platformRolePermission.count({
+        where: { platform_role_id: roleRow.id },
+      });
+      if (linkCount > 0) {
+        continue;
+      }
+
       const permCodes = [...new Set(ROLE_DEFAULT_PERMISSIONS[rc] || [])];
       const permRows = await this.prisma.platformPermission.findMany({
         where: { code: { in: permCodes } },
       });
       const uniquePerms = [...new Map(permRows.map((p) => [p.id, p])).values()];
-
-      await this.prisma.platformRolePermission.deleteMany({
-        where: { platform_role_id: roleRow.id },
-      });
 
       if (uniquePerms.length > 0) {
         await this.prisma.platformRolePermission.createMany({

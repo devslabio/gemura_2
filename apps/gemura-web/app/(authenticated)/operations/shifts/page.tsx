@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { mccOperationsApi, type MccShiftRow, type MccStaffOption } from '@/lib/api/mcc-operations';
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
-import { usePermission } from '@/hooks/usePermission';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import { useClientPagination } from '@/hooks/useClientPagination';
 import Modal from '@/app/components/Modal';
 import Pagination from '@/app/components/Pagination';
@@ -29,8 +29,7 @@ function defaultShiftsFrom() {
 
 export default function OperationsShiftsPage() {
   const { currentAccount, user } = useAuthStore();
-  const { hasAnyPermission } = usePermission();
-  const canManage = hasAnyPermission(['mcc_manage_operations', 'update_collections']);
+  const { mccShiftMutations: canManage } = useCrudPermissions();
   const toast = useToastStore();
   const accountId = currentAccount?.account_id ?? '';
   const role = (currentAccount?.role ?? '').toLowerCase();

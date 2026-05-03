@@ -108,7 +108,7 @@ function BusinessDashboard() {
   const orgType = (accountType ?? '').toLowerCase();
   const showMccOpsDashboard =
     (orgType === 'tenant' || orgType === 'branch' || orgType === 'mcc') &&
-    hasAnyPermission(['mcc_view_operations', 'view_collections']);
+    hasAnyPermission(['mcc_view_operations', 'mcc_view_own_operations', 'view_collections']);
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<OverviewResponse['data'] | null>(null);
   const [error, setError] = useState('');
@@ -916,7 +916,9 @@ function BusinessDashboard() {
           <div>
             <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide mb-3">Work areas</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {MCC_OPERATIONS_SUB_PANELS.map(({ href, label, description }) => (
+              {MCC_OPERATIONS_SUB_PANELS.filter(
+                (p) => !p.requiresAnyPermission?.length || hasAnyPermission(p.requiresAnyPermission),
+              ).map(({ href, label, description }) => (
                 <Link
                   key={href}
                   href={href}

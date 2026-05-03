@@ -9,7 +9,10 @@ interface StatCardProps {
   value: string | number;
   icon: IconDefinition;
   href?: string;
+  /** Use `\\n` for a second line; each line truncates with ellipsis. */
   subtitle?: string;
+  /** Optional longer description shown as native tooltip on the subtitle block. */
+  subtitleTitle?: string;
   iconBgColor?: string;
   iconColor?: string;
 }
@@ -23,6 +26,7 @@ export default function StatCard({
   icon,
   href,
   subtitle,
+  subtitleTitle,
   iconBgColor = '#eff6ff',
   iconColor = 'var(--primary)',
 }: StatCardProps) {
@@ -36,9 +40,22 @@ export default function StatCard({
           <div className="text-2xl font-bold text-gray-900">
             {value}
           </div>
-          {subtitle && (
-            <div className="text-xs text-gray-600 mt-1.5">{subtitle}</div>
-          )}
+          {subtitle ? (
+            <div
+              className="mt-1.5 space-y-0.5"
+              title={subtitleTitle ?? subtitle.replace(/\n/g, ' · ')}
+            >
+              {subtitle
+                .split('\n')
+                .map((l) => l.trim())
+                .filter(Boolean)
+                .map((line, i) => (
+                  <div key={i} className="text-[11px] leading-snug text-gray-600 truncate">
+                    {line}
+                  </div>
+                ))}
+            </div>
+          ) : null}
         </div>
         <div
           className="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center self-start"

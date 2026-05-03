@@ -359,19 +359,21 @@ input[type="radio"]:disabled {
   cursor: not-allowed;
 }
 
-/* Label styles */
-label {
-  display: block;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #374151;
-  margin-bottom: 0.5rem;
-  line-height: 1.5;
-}
+/* Label styles — @layer base so Tailwind utilities (flex, inline-flex, hidden, …) override display */
+@layer base {
+  label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+  }
 
-label.required::after {
-  content: " *";
-  color: #dc2626;
+  label.required::after {
+    content: " *";
+    color: #dc2626;
+  }
 }
 
 /* Button Styles */

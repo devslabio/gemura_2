@@ -164,39 +164,62 @@ class _ContactSelectionScreenState extends State<ContactSelectionScreen> {
                                 width: isSelected ? 2 : 1,
                               ),
                             ),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-                                                               child: Text(
-                                 ((contact.displayName ?? '').isNotEmpty 
-                                     ? (contact.displayName ?? '')[0].toUpperCase() 
-                                     : '?'),
-                                  style: AppTheme.bodyMedium.copyWith(
-                                    color: AppTheme.primaryColor,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                              title: Text(
-                                contact.displayName ?? 'Unknown Contact',
-                                style: AppTheme.bodyMedium.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              subtitle: contact.phones?.isNotEmpty == true
-                                  ? Text(
-                                      contact.phones!.first.value ?? '',
-                                      style: AppTheme.bodySmall.copyWith(
-                                        color: AppTheme.textSecondaryColor,
-                                      ),
-                                    )
-                                  : null,
-                              trailing: Checkbox(
-                                value: isSelected,
-                                onChanged: (_) => _toggleContactSelection(contact),
-                                activeColor: AppTheme.primaryColor,
-                              ),
+                            child: InkWell(
                               onTap: () => _toggleContactSelection(contact),
+                              borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppTheme.spacing8,
+                                  vertical: AppTheme.spacing4,
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Checkbox(
+                                      value: isSelected,
+                                      onChanged: (_) => _toggleContactSelection(contact),
+                                      activeColor: AppTheme.primaryColor,
+                                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                    CircleAvatar(
+                                      backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                                      radius: 20,
+                                      child: Text(
+                                        ((contact.displayName ?? '').isNotEmpty
+                                                ? (contact.displayName ?? '')[0].toUpperCase()
+                                                : '?'),
+                                        style: AppTheme.bodyMedium.copyWith(
+                                          color: AppTheme.primaryColor,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: AppTheme.spacing12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            contact.displayName ?? 'Unknown Contact',
+                                            style: AppTheme.bodyMedium.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          if (contact.phones?.isNotEmpty == true)
+                                            Text(
+                                              contact.phones!.first.value ?? '',
+                                              style: AppTheme.bodySmall.copyWith(
+                                                color: AppTheme.textSecondaryColor,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           );
                         },

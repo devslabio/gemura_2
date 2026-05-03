@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { adminApi, type RoleItem } from '@/lib/api/admin';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
-import Icon, { faLock, faChevronDown, faChevronUp } from '@/app/components/Icon';
+import Icon, { faLock, faChevronDown, faChevronUp, faEdit } from '@/app/components/Icon';
 import FilterBar, { FilterBarSearch, FilterBarGroup } from '@/app/components/FilterBar';
 import Pagination from '@/app/components/Pagination';
 import { TableSkeleton } from '@/app/components/SkeletonLoader';
@@ -144,7 +144,9 @@ export default function AdminRolesPage() {
       <div className="bg-white border border-gray-200 rounded-sm overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
           <h2 className="text-sm font-semibold text-gray-800">Role definitions</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Assign a role to users when creating or editing them; permissions can be overridden per user.</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Permissions for each role are stored in the database. Use Edit permissions to control menu and API access for everyone with that role.
+          </p>
         </div>
 
         {loading ? (
@@ -160,6 +162,7 @@ export default function AdminRolesPage() {
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Name</th>
                   <th className="text-left py-3 px-4 font-semibold text-gray-700">Description</th>
                   <th className="text-right py-3 px-4 font-semibold text-gray-700">Permissions</th>
+                  <th className="text-right py-3 px-4 font-semibold text-gray-700 w-36">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -190,10 +193,23 @@ export default function AdminRolesPage() {
                             {role.permissionCount} permission{role.permissionCount !== 1 ? 's' : ''}
                           </span>
                         </td>
+                        <td className="py-3 px-4 text-right">
+                          {role.id ? (
+                            <Link
+                              href={`/admin/roles/${role.id}`}
+                              className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--primary)] hover:underline"
+                            >
+                              <Icon icon={faEdit} size="sm" />
+                              Edit permissions
+                            </Link>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
+                        </td>
                       </tr>
                       {isExpanded && (
                         <tr className="bg-gray-50/50">
-                          <td colSpan={4} className="py-4 px-4">
+                          <td colSpan={5} className="py-4 px-4">
                             <div className="pl-8">
                               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
                                 Permissions for {role.name}
