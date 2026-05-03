@@ -23,11 +23,10 @@ export default function GateArrivalsPanel() {
   const { currentAccount } = useAuthStore();
   const { hasAnyPermission } = usePermission();
   const canManage = hasAnyPermission(['mcc_manage_operations', 'update_collections']);
-  const toast = useToastStore();
   const accountId = currentAccount?.account_id ?? '';
   const [rows, setRows] = useState<MccGateDeliveryRow[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [from, setFrom] = useState(() => {
@@ -53,7 +52,12 @@ export default function GateArrivalsPanel() {
   } = useClientPagination(rows, { resetKey: `${from}-${to}` });
 
   const load = useCallback(async () => {
-    if (!accountId) return;
+    if (!accountId) {
+      setRows([]);
+      setSuppliers([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [g, s] = await Promise.all([
@@ -64,11 +68,11 @@ export default function GateArrivalsPanel() {
       setSuppliers(s.data ?? []);
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to load';
-      toast.error(msg);
+      useToastStore.getState().error(msg);
     } finally {
       setLoading(false);
     }
-  }, [accountId, from, to, toast]);
+  }, [accountId, from, to]);
 
   useEffect(() => {
     load();
@@ -85,7 +89,7 @@ export default function GateArrivalsPanel() {
     if (!accountId) return;
     const vol = Number(volume);
     if (!sourceAccountId || !Number.isFinite(vol) || vol <= 0) {
-      toast.error('Choose a supplier and enter a positive volume (litres).');
+      useToastStore.getState().error('Choose a supplier and enter a positive volume (litres).');
       return;
     }
     setSaving(true);
@@ -97,13 +101,13 @@ export default function GateArrivalsPanel() {
         gate_volume_litres: vol,
         notes: notes.trim() || undefined,
       });
-      toast.success('Gate arrival recorded.');
+      useToastStore.getState().success('Gate arrival recorded.');
       setModalOpen(false);
       resetForm();
       await load();
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Save failed';
-      toast.error(msg);
+      useToastStore.getState().error(msg);
     } finally {
       setSaving(false);
     }
@@ -150,7 +154,11 @@ export default function GateArrivalsPanel() {
       </div>
 
       <div className="card overflow-hidden">
-        {loading ? (
+        {!accountId ? (
+          <div className="card-body">
+            <p className="text-gray-500 text-sm">Select an account to load gate arrivals.</p>
+          </div>
+        ) : loading ? (
           <div className="card-body">
             <p className="text-gray-500 text-sm">Loading…</p>
           </div>
