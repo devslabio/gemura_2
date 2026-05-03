@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { collectionsApi, Collection, CollectionsFilters } from '@/lib/api/collections';
+import { suppliersApi, type Supplier } from '@/lib/api/suppliers';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
 import DataTableWithPagination from '@/app/components/DataTableWithPagination';
 import type { TableColumn } from '@/app/components/DataTable';
 import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
 import FilterBar, { FilterBarGroup, FilterBarActions, FilterBarApply, FilterBarExport } from '@/app/components/FilterBar';
+import SearchableSelect from '@/app/components/SearchableSelect';
 import Modal from '@/app/components/Modal';
 import BulkImportModal from '@/app/components/BulkImportModal';
 import CreateCollectionForm from './CreateCollectionForm';
@@ -40,8 +42,44 @@ export default function CollectionsPage() {
     status: searchParams.get('status') || undefined,
     date_from: searchParams.get('date_from') || undefined,
     date_to: searchParams.get('date_to') || undefined,
+    supplier_account_id: searchParams.get('supplier_account_id') || undefined,
     supplier_name: searchParams.get('supplier_name') || undefined,
   });
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+
+  useEffect(() => {
+    const aid = currentAccount?.account_id;
+    if (!aid) {
+      setSuppliers([]);
+      return;
+    }
+    let cancelled = false;
+    suppliersApi
+      .getAllSuppliers(aid)
+      .then((res) => {
+        if (!cancelled && res.code === 200) setSuppliers(res.data ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setSuppliers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAccount?.account_id]);
+
+  const supplierFilterOptions = useMemo(() => {
+    const opts = suppliers.map((s) => {
+      const name = s.account.name?.trim();
+      const code = (s.account.code ?? '').trim();
+      const label =
+        name && code && name.toLowerCase() !== code.toLowerCase()
+          ? `${name} (${code})`
+          : name || code || 'Supplier';
+      return { value: s.account.id, label };
+    });
+    opts.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+    return [{ value: '', label: 'All suppliers' }, ...opts];
+  }, [suppliers]);
 
   /**
    * One-shot redirect to /operations/gate:
@@ -248,7 +286,6 @@ export default function CollectionsPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold text-gray-900">Milk collection</h1>
-          <p className="text-sm text-gray-600 mt-1">Supplier milk purchases for this account.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button type="button" onClick={() => setBulkImportOpen(true)} className="btn btn-secondary">
@@ -349,13 +386,24 @@ export default function CollectionsPage() {
             className="input h-9 min-h-[2.25rem] !py-1.5 !px-3 text-sm w-full text-gray-900"
           />
         </FilterBarGroup>
-        <FilterBarGroup label="Supplier Name">
-          <input
-            type="text"
-            value={filters.supplier_name || ''}
-            onChange={(e) => handleFilterChange('supplier_name', e.target.value)}
-            placeholder="Search supplier name..."
-            className="input h-9 min-h-[2.25rem] !py-1.5 !px-3 text-sm w-full text-gray-900"
+        <FilterBarGroup label="Supplier">
+          <SearchableSelect
+            id="collections-filter-supplier"
+            ariaLabel="Filter by supplier"
+            options={supplierFilterOptions}
+            value={filters.supplier_account_id ?? ''}
+            onChange={(id) =>
+              setFilters((prev) => ({
+                ...prev,
+                supplier_account_id: id || undefined,
+                supplier_name: undefined,
+              }))
+            }
+            placeholder={!currentAccount?.account_id ? 'Select an account…' : 'All suppliers'}
+            disabled={!currentAccount?.account_id}
+            portalDropdown
+            maxListHeight={280}
+            triggerClassName="!py-1.5 min-h-[2.25rem] pr-8"
           />
         </FilterBarGroup>
         <FilterBarActions onClear={handleClearFilters} />

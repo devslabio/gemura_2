@@ -206,7 +206,7 @@ export default function AdminLoginPage() {
 
           <div className="mt-12 text-center">
             <p className="text-xs text-gray-500 mb-2">© 2020–{new Date().getFullYear()} Gemura</p>
-            <p className="text-xs text-gray-500">Milk collection services platform</p>
+            <p className="text-xs text-gray-500">Milk operations platform</p>
           </div>
         </div>
       </div>
@@ -215,7 +215,7 @@ export default function AdminLoginPage() {
       <div className="hidden lg:flex lg:w-[60%] relative">
         <AuthHeroPanel
           brandTitle="Gemura"
-          brandSubtitle="Milk collection services platform"
+          brandSubtitle="Milk operations platform"
         />
       </div>
     </div>

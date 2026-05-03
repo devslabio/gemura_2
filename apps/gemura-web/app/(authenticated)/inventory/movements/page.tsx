@@ -50,7 +50,6 @@ export default function InventoryMovementsPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Movements</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Inventory · Movements — stock in and out across all items</p>
       </div>
 
       {error && (

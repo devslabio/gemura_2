@@ -2,6 +2,8 @@ import { Controller, Post, Get, Put, Delete, Body, UseGuards, Param, Query } fro
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiQuery, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiNotFoundResponse, ApiForbiddenResponse, ApiParam } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
 import { TokenGuard } from '../../common/guards/token.guard';
+import { PermissionGuard } from '../../common/guards/permission.guard';
+import { RequirePermission } from '../../common/decorators/permission.decorator';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { User } from '@prisma/client';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
@@ -10,12 +12,13 @@ import { InviteEmployeeDto } from './dto/invite-employee.dto';
 
 @ApiTags('Employees')
 @Controller('employees')
-@UseGuards(TokenGuard)
+@UseGuards(TokenGuard, PermissionGuard)
 @ApiBearerAuth()
 export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
 
   @Post()
+  @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Create employee',
     description: 'Add a user as an employee to your default account. The user can be identified by phone, email, or account code. Requires system_admin, admin, manager, or legacy owner on the account. If the user doesn\'t exist, they will be created.',
@@ -110,6 +113,7 @@ export class EmployeesController {
   }
 
   @Get()
+  @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Get employees',
     description: 'Get all employees for the given account (or default). Optional status filter: active | inactive. Caller must be system_admin, admin, manager, or legacy owner on the account.',
@@ -164,6 +168,7 @@ export class EmployeesController {
   }
 
   @Post('invite')
+  @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Add team member',
     description: 'Add a user to the account by email or phone. If they already have an account, they are linked to this account. If not, a new user is created (name and password required).',
@@ -197,6 +202,7 @@ export class EmployeesController {
   }
 
   @Get('roles')
+  @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Get roles config',
     description: 'Returns roles and default permissions for use in employee management UI. Requires system_admin, admin, manager, or legacy owner on the account.',
@@ -208,6 +214,7 @@ export class EmployeesController {
   }
 
   @Get('permissions')
+  @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Get permissions config',
     description: 'Returns permissions list for use in employee management UI. Requires system_admin, admin, manager, or legacy owner on the account.',
@@ -219,6 +226,7 @@ export class EmployeesController {
   }
 
   @Put(':id/access')
+  @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Update employee access',
     description: 'Update employee role, permissions, or status. Requires system_admin, admin, manager, or legacy owner. Can update role, permissions array, or status (active/inactive).',
@@ -319,6 +327,7 @@ export class EmployeesController {
   }
 
   @Delete(':id')
+  @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Delete employee',
     description: 'Remove an employee from your default account (soft delete). The employee will be deactivated but not permanently deleted. Requires system_admin, admin, manager, or legacy owner.',

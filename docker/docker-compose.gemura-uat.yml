@@ -1,0 +1,68 @@
+# Gemura UAT stack on Kwezi (parallel to production)
+# Defaults: UI 3024, API 3025 (override via UI_UAT_PORT / API_UAT_PORT).
+# Uses .env.uat on server and separate database gemura_uat_db.
+
+services:
+  gemura-uat-api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: gemura-uat-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3004
+      TZ: Africa/Kigali
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET:-gemura_jwt_secret_uat_2026}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3024,http://localhost:3025}
+    ports:
+      - "${API_UAT_PORT:-3025}:3004"
+    networks:
+      - kwezi_default
+      - default
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        sleep 5 &&
+        npx prisma migrate deploy &&
+        node dist/src/main.js
+      "
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3004/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
+  gemura-uat-ui:
+    build:
+      context: ../apps/gemura-web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3025/api}
+    container_name: gemura-uat-ui
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      TZ: Africa/Kigali
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "${UI_UAT_PORT:-3024}:3005"
+    depends_on:
+      - gemura-uat-api
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3005/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+networks:
+  kwezi_default:
+    external: true
+    name: kwezi_default

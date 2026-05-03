@@ -15,6 +15,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { EmployeesModule } from './modules/employees/employees.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { StatsModule } from './modules/stats/stats.module';
+import { MccManagerModule } from './modules/mcc-manager/mcc-manager.module';
+import { MccOperationsModule } from './modules/mcc-operations/mcc-operations.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { MarketModule } from './modules/market/market.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
@@ -72,6 +74,8 @@ import { AppController } from './app.controller';
     EmployeesModule,
     AnalyticsModule,
     StatsModule,
+    MccManagerModule,
+    MccOperationsModule,
     ReportsModule,
     MarketModule,
     AccountingModule,

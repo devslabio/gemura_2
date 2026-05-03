@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { mccOperationsApi, type MccGateDeliveryRow } from '@/lib/api/mcc-operations';
 import { suppliersApi, type Supplier } from '@/lib/api/suppliers';
 import { useAuthStore } from '@/store/auth';
@@ -9,17 +9,41 @@ import { usePermission } from '@/hooks/usePermission';
 import { useClientPagination } from '@/hooks/useClientPagination';
 import Modal from '@/app/components/Modal';
 import Pagination from '@/app/components/Pagination';
+import FilterBar, { FilterBarGroup, FilterBarActions, FilterBarApply, FilterBarExport } from '@/app/components/FilterBar';
+import SearchableSelect from '@/app/components/SearchableSelect';
 import Icon, { faPlus } from '@/app/components/Icon';
 
 const FILTER_INPUT =
   'input h-9 min-h-[2.25rem] !py-1.5 !px-3 text-sm w-full min-w-0 sm:max-w-[11rem] text-gray-900';
 
+const INPUT_FULL =
+  'input h-9 min-h-[2.25rem] !py-1.5 !px-3 text-sm w-full text-gray-900';
+
+const SOURCE_TYPE_OPTIONS = [
+  { value: '', label: 'All types' },
+  { value: 'direct', label: 'Direct farmer' },
+  { value: 'umucunda_a', label: 'Umucunda A' },
+  { value: 'umucunda_b', label: 'Umucunda B' },
+];
+
+const MANIFEST_FILTER_OPTIONS = [
+  { value: '', label: 'All' },
+  { value: 'none', label: 'No manifest' },
+  { value: 'has', label: 'Has manifest' },
+];
+
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+function defaultFromDate() {
+  const x = new Date();
+  x.setUTCDate(x.getUTCDate() - 7);
+  return isoDate(x);
+}
+
 /** Gate intake log + record modal (same behavior as legacy `/operations/gate`). */
-export default function GateArrivalsPanel() {
+export default function GateArrivalsPanel({ showPageHeading = false }: { showPageHeading?: boolean }) {
   const { currentAccount } = useAuthStore();
   const { hasAnyPermission } = usePermission();
   const canManage = hasAnyPermission(['mcc_manage_operations', 'update_collections']);
@@ -29,17 +53,40 @@ export default function GateArrivalsPanel() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [from, setFrom] = useState(() => {
-    const x = new Date();
-    x.setUTCDate(x.getUTCDate() - 7);
-    return isoDate(x);
-  });
+  const [from, setFrom] = useState(defaultFromDate);
   const [to, setTo] = useState(() => isoDate(new Date()));
+  const [supplierAccountIdFilter, setSupplierAccountIdFilter] = useState('');
+  const [sourceTypeFilter, setSourceTypeFilter] = useState('');
+  const [manifestFilter, setManifestFilter] = useState('');
 
   const [sourceType, setSourceType] = useState<'direct' | 'umucunda_a' | 'umucunda_b'>('direct');
   const [sourceAccountId, setSourceAccountId] = useState('');
   const [volume, setVolume] = useState('');
   const [notes, setNotes] = useState('');
+
+  const supplierFilterOptions = useMemo(() => {
+    const opts = suppliers.map((s) => {
+      const name = s.account.name?.trim();
+      const code = (s.account.code ?? '').trim();
+      const label =
+        name && code && name.toLowerCase() !== code.toLowerCase()
+          ? `${name} (${code})`
+          : name || code || 'Supplier';
+      return { value: s.account.id, label };
+    });
+    opts.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+    return [{ value: '', label: 'All suppliers' }, ...opts];
+  }, [suppliers]);
+
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      if (sourceTypeFilter && r.source_type !== sourceTypeFilter) return false;
+      if (manifestFilter === 'none' && r.manifest) return false;
+      if (manifestFilter === 'has' && !r.manifest) return false;
+      if (supplierAccountIdFilter && r.source_account?.id !== supplierAccountIdFilter) return false;
+      return true;
+    });
+  }, [rows, supplierAccountIdFilter, sourceTypeFilter, manifestFilter]);
 
   const {
     page: gatePage,
@@ -49,7 +96,21 @@ export default function GateArrivalsPanel() {
     totalItems: gateTotalItems,
     startIndex: gateStartIndex,
     pageSize: gatePageSize,
-  } = useClientPagination(rows, { resetKey: `${from}-${to}` });
+  } = useClientPagination(filteredRows, {
+    resetKey: `${from}-${to}-${supplierAccountIdFilter}-${sourceTypeFilter}-${manifestFilter}`,
+  });
+
+  const handleClearFilters = () => {
+    setFrom(defaultFromDate());
+    setTo(isoDate(new Date()));
+    setSupplierAccountIdFilter('');
+    setSourceTypeFilter('');
+    setManifestFilter('');
+  };
+
+  const handleApplyFilters = () => {
+    void load();
+  };
 
   const load = useCallback(async () => {
     if (!accountId) {
@@ -115,34 +176,12 @@ export default function GateArrivalsPanel() {
 
   return (
     <div className="space-y-4 w-full min-w-0">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <p className="text-sm text-gray-600 max-w-2xl">
-          Bulk arrivals before manifests or collections. Direct farmer intake can use <strong>New collection</strong> → <strong>New direct gate</strong> in one step. Manifests:{' '}
-          <strong>Operations → Manifests</strong>.
-        </p>
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-          <div className="flex flex-col gap-1 min-w-0 sm:min-w-[9rem]">
-            <span className="text-xs font-medium text-gray-600">From</span>
-            <input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className={FILTER_INPUT}
-            />
+      {showPageHeading ? (
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl font-bold text-gray-900">Gate arrivals</h1>
           </div>
-          <div className="flex flex-col gap-1 min-w-0 sm:min-w-[9rem]">
-            <span className="text-xs font-medium text-gray-600">To</span>
-            <input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className={FILTER_INPUT}
-            />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => load()} className="btn btn-secondary">
-              Apply
-            </button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end">
             {canManage && (
               <button type="button" onClick={() => setModalOpen(true)} className="btn btn-primary">
                 <Icon icon={faPlus} size="sm" className="mr-2" />
@@ -151,7 +190,101 @@ export default function GateArrivalsPanel() {
             )}
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-wrap justify-end gap-2">
+          {canManage && (
+            <button type="button" onClick={() => setModalOpen(true)} className="btn btn-primary">
+              <Icon icon={faPlus} size="sm" className="mr-2" />
+              New gate arrival
+            </button>
+          )}
+        </div>
+      )}
+
+      <FilterBar>
+        <FilterBarGroup label="Source type">
+          <select
+            value={sourceTypeFilter}
+            onChange={(e) => setSourceTypeFilter(e.target.value)}
+            className={INPUT_FULL}
+          >
+            {SOURCE_TYPE_OPTIONS.map((o) => (
+              <option key={o.value || 'all'} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </FilterBarGroup>
+        <FilterBarGroup label="Manifest">
+          <select
+            value={manifestFilter}
+            onChange={(e) => setManifestFilter(e.target.value)}
+            className={INPUT_FULL}
+          >
+            {MANIFEST_FILTER_OPTIONS.map((o) => (
+              <option key={o.value || 'all'} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </FilterBarGroup>
+        <FilterBarGroup label="Date From">
+          <input
+            type="date"
+            value={from}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setFrom(e.target.value)}
+            className={INPUT_FULL}
+          />
+        </FilterBarGroup>
+        <FilterBarGroup label="Date To">
+          <input
+            type="date"
+            value={to}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setTo(e.target.value)}
+            className={INPUT_FULL}
+          />
+        </FilterBarGroup>
+        <FilterBarGroup label="Supplier">
+          <SearchableSelect
+            id="gate-filter-supplier"
+            ariaLabel="Filter by supplier"
+            options={supplierFilterOptions}
+            value={supplierAccountIdFilter}
+            onChange={setSupplierAccountIdFilter}
+            placeholder={!accountId ? 'Select an account…' : 'All suppliers'}
+            disabled={!accountId}
+            portalDropdown
+            maxListHeight={280}
+            triggerClassName="!py-1.5 min-h-[2.25rem] pr-8"
+          />
+        </FilterBarGroup>
+        <FilterBarActions onClear={handleClearFilters} />
+        <FilterBarApply onApply={handleApplyFilters} />
+        <FilterBarExport<MccGateDeliveryRow>
+          data={filteredRows}
+          exportFilename="gate-arrivals"
+          exportColumns={[
+            { key: 'arrived_at', label: 'Arrived', getValue: (r) => new Date(r.arrived_at).toLocaleString() },
+            {
+              key: 'source_account',
+              label: 'Source',
+              getValue: (r) => r.source_account?.name || r.source_account?.code || '—',
+            },
+            { key: 'source_type', label: 'Type', getValue: (r) => r.source_type },
+            { key: 'gate_volume_litres', label: 'Volume (L)', getValue: (r) => String(r.gate_volume_litres) },
+            {
+              key: 'manifest',
+              label: 'Manifest',
+              getValue: (r) =>
+                r.manifest ? `${r.manifest.manifest_ref} (${r.manifest.status})` : '',
+            },
+            { key: 'notes', label: 'Notes', getValue: (r) => r.notes ?? '' },
+          ]}
+          disabled={loading || !accountId}
+        />
+      </FilterBar>
 
       <div className="card overflow-hidden">
         {!accountId ? (
@@ -165,6 +298,10 @@ export default function GateArrivalsPanel() {
         ) : rows.length === 0 ? (
           <div className="card-body">
             <p className="text-gray-500 text-sm">No gate arrivals in this range.</p>
+          </div>
+        ) : filteredRows.length === 0 ? (
+          <div className="card-body">
+            <p className="text-gray-500 text-sm">No arrivals match your filters.</p>
           </div>
         ) : (
           <div className="table-responsive">
@@ -204,7 +341,7 @@ export default function GateArrivalsPanel() {
         )}
       </div>
 
-      {!loading && rows.length > 0 && (
+      {!loading && filteredRows.length > 0 && (
         <Pagination
           currentPage={gatePage}
           totalPages={gateTotalPages}

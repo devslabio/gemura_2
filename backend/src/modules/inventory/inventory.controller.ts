@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam, ApiQuery, 
 import { Response } from 'express';
 import { InventoryService } from './inventory.service';
 import { TokenGuard } from '../../common/guards/token.guard';
+import { PermissionGuard } from '../../common/guards/permission.guard';
+import { RequirePermission } from '../../common/decorators/permission.decorator';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { User } from '@prisma/client';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
@@ -14,12 +16,13 @@ import { BulkCreateInventoryDto } from './dto/bulk-create-inventory.dto';
 
 @ApiTags('Inventory')
 @Controller('inventory')
-@UseGuards(TokenGuard)
+@UseGuards(TokenGuard, PermissionGuard)
 @ApiBearerAuth()
 export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
   @Get()
+  @RequirePermission('view_inventory')
   @ApiOperation({
     summary: 'Get inventory items',
     description: 'Retrieve a list of inventory items for the current user\'s default account. Can be filtered by status and low stock alerts. Data is scoped to the user\'s default account.',
@@ -92,6 +95,7 @@ export class InventoryController {
   }
 
   @Get('stats')
+  @RequirePermission('view_inventory')
   @ApiOperation({
     summary: 'Get inventory statistics',
     description: 'Retrieve aggregated statistics about inventory for the user\'s default account including total items, stock levels, low stock alerts, and value summaries.',
@@ -135,6 +139,7 @@ export class InventoryController {
   }
 
   @Get('stats/valuation-over-time')
+  @RequirePermission('view_inventory')
   @ApiOperation({
     summary: 'Get inventory valuation over time',
     description: 'Returns stock valuation (total value and quantity) for the account. Currently returns a single snapshot (as of today); historical series can be added when daily snapshots are stored. Used by the dashboard "Stock value over time" chart.',
@@ -191,6 +196,7 @@ export class InventoryController {
   }
 
   @Get('stats/top-by-value')
+  @RequirePermission('view_inventory')
   @ApiOperation({
     summary: 'Get top inventory items by stock value',
     description: 'Returns inventory items sorted by stock value (price × quantity) descending. Used by the dashboard "Top items by value" chart. Only includes non-inactive items.',
@@ -241,6 +247,7 @@ export class InventoryController {
   }
 
   @Get('stats/stock-movement')
+  @RequirePermission('view_inventory')
   @ApiOperation({
     summary: 'Get stock movement (in/out) by date',
     description: 'Returns daily stock movement: stock_out is aggregated from inventory sales; stock_in is reserved for future use (e.g. stock receipts). Used by the dashboard "Stock movement" chart. Scoped to the account\'s products.',
@@ -298,6 +305,7 @@ export class InventoryController {
   }
 
   @Get('template')
+  @RequirePermission('view_inventory')
   @ApiOperation({
     summary: 'Download inventory CSV template',
     description: 'Returns a CSV file with header row and one example row for bulk import.',
@@ -320,6 +328,7 @@ export class InventoryController {
   }
 
   @Get('movements')
+  @RequirePermission('view_inventory')
   @ApiOperation({
     summary: 'Get all inventory movements',
     description: 'Returns paginated list of stock movements across all inventory items. Scoped to account_id (or user default). Optional filters: product_id, movement_type, date_from, date_to.',
@@ -355,6 +364,7 @@ export class InventoryController {
   }
 
   @Get(':id/movements')
+  @RequirePermission('view_inventory')
   @ApiOperation({
     summary: 'Get inventory movements for a product',
     description: 'Returns paginated list of stock movements for the given product. Scoped to account_id (or user default).',
@@ -417,6 +427,7 @@ export class InventoryController {
   }
 
   @Get(':id')
+  @RequirePermission('view_inventory')
   @ApiOperation({
     summary: 'Get inventory item by ID',
     description: 'Retrieve detailed information about a specific inventory item by its ID. The item must belong to the user\'s default account.',
@@ -479,6 +490,7 @@ export class InventoryController {
   }
 
   @Post()
+  @RequirePermission('manage_inventory')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Create inventory item',
@@ -567,6 +579,7 @@ export class InventoryController {
   }
 
   @Post('bulk')
+  @RequirePermission('manage_inventory')
   @ApiOperation({
     summary: 'Bulk create inventory items',
     description: 'Create multiple inventory items from an array. Returns success count and per-row errors.',
@@ -593,6 +606,7 @@ export class InventoryController {
   }
 
   @Put(':id')
+  @RequirePermission('manage_inventory')
   @ApiOperation({
     summary: 'Update inventory item',
     description: 'Update details of an existing inventory item. Only items belonging to the user\'s default account can be updated.',
@@ -673,6 +687,7 @@ export class InventoryController {
   }
 
   @Put(':id/stock')
+  @RequirePermission('manage_inventory')
   @ApiOperation({
     summary: 'Update stock quantity',
     description: 'Update the stock quantity of an inventory item. Can be used to add stock (positive value) or adjust stock levels. Only items belonging to the user\'s default account can be updated.',
@@ -765,6 +780,7 @@ export class InventoryController {
   }
 
   @Post(':id/toggle-listing')
+  @RequirePermission('manage_inventory')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Toggle marketplace listing',
@@ -842,6 +858,7 @@ export class InventoryController {
   }
 
   @Delete(':id')
+  @RequirePermission('manage_inventory')
   @ApiOperation({
     summary: 'Delete inventory item (soft delete)',
     description: 'Soft delete an inventory item by setting its status to inactive. The item will no longer appear in active listings but can be restored. Only items belonging to the user\'s default account can be deleted.',
@@ -896,6 +913,7 @@ export class InventoryController {
   }
 
   @Post(':id/sell')
+  @RequirePermission('manage_inventory')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Sell inventory item',

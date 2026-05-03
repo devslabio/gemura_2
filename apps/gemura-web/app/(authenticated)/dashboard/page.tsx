@@ -35,6 +35,8 @@ import CreateCustomerForm from '../customers/CreateCustomerForm';
 import CreateSupplierForm from '../suppliers/CreateSupplierForm';
 import CreateInventoryForm from '../inventory/CreateInventoryForm';
 import dynamic from 'next/dynamic';
+import MccManagerDashboardSection from '@/app/components/manager/MccManagerDashboardSection';
+import { MCC_OPERATIONS_SUB_PANELS } from '@/lib/config/nav.config';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
@@ -42,7 +44,7 @@ const BLUE_ICON = { iconBgColor: '#eff6ff', iconColor: 'var(--primary)' };
 const GREEN_ICON = { iconBgColor: '#dcfce7', iconColor: '#059669' };
 const PURPLE_ICON = { iconBgColor: '#f3e8ff', iconColor: '#7c3aed' };
 
-type PeriodKey = 'day' | 'month' | 'quarter' | 'year' | 'custom';
+type PeriodKey = 'day' | 'month' | 'week' | 'quarter' | 'year' | 'custom';
 
 function toYYYYMMDD(d: Date): string {
   const y = d.getFullYear();
@@ -60,6 +62,7 @@ function getPeriodRange(period: PeriodKey, customFrom?: string, customTo?: strin
   let end: Date;
   switch (period) {
     case 'day':
+      /** Local calendar day: 00:00–23:59:59 (represented as one YYYY-MM-DD for the API). */
       start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       break;
@@ -67,6 +70,17 @@ function getPeriodRange(period: PeriodKey, customFrom?: string, customTo?: strin
       start = new Date(now.getFullYear(), now.getMonth(), 1);
       end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       break;
+    case 'week': {
+      /** Calendar week Monday–Sunday (local). */
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const dow = today.getDay();
+      const mondayOffset = dow === 0 ? -6 : 1 - dow;
+      start = new Date(today);
+      start.setDate(today.getDate() + mondayOffset);
+      end = new Date(start);
+      end.setDate(start.getDate() + 6);
+      break;
+    }
     case 'quarter': {
       const q = Math.ceil((now.getMonth() + 1) / 3);
       start = new Date(now.getFullYear(), (q - 1) * 3, 1);
@@ -86,15 +100,20 @@ function getPeriodRange(period: PeriodKey, customFrom?: string, customTo?: strin
 
 function BusinessDashboard() {
   const { currentAccount } = useAuthStore();
-  const { hasPermission } = usePermission();
+  const { hasPermission, hasAnyPermission } = usePermission();
   const accountType = currentAccount?.account_type ?? '';
   const role = (currentAccount?.role ?? '').toLowerCase();
   const isVeterinaryRole = ['veterinary', 'veterinarian', 'veternary', 'agent', 'veterinary_officer'].includes(role);
+  // Login `account_type` is Prisma Account.type (tenant | branch | admin), not User.account_type (mcc).
+  const orgType = (accountType ?? '').toLowerCase();
+  const showMccOpsDashboard =
+    (orgType === 'tenant' || orgType === 'branch' || orgType === 'mcc') &&
+    hasAnyPermission(['mcc_view_operations', 'view_collections']);
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<OverviewResponse['data'] | null>(null);
   const [error, setError] = useState('');
   const [chartTab, setChartTab] = useState<'value' | 'volume'>('value');
-  const [period, setPeriod] = useState<PeriodKey>('quarter');
+  const [period, setPeriod] = useState<PeriodKey>('day');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -106,7 +125,7 @@ function BusinessDashboard() {
   const [recordDate, setRecordDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [recordSubmitting, setRecordSubmitting] = useState(false);
 
-  type DashboardTab = 'overview' | 'sales' | 'collections' | 'inventory' | 'finance' | 'loans';
+  type DashboardTab = 'overview' | 'operations' | 'sales' | 'collections' | 'inventory' | 'finance' | 'loans';
   const [dashboardTab, setDashboardTab] = useState<DashboardTab>('overview');
   const [inventoryStats, setInventoryStats] = useState<InventoryStats | null>(null);
   const [inventoryLoading, setInventoryLoading] = useState(false);
@@ -125,6 +144,9 @@ function BusinessDashboard() {
   const [financeExpenseByCategory, setFinanceExpenseByCategory] = useState<{ category_name: string; amount: number }[]>([]);
   const [loansData, setLoansData] = useState<Loan[]>([]);
   const [loansLoading, setLoansLoading] = useState(false);
+  const [managerToday, setManagerToday] = useState<OverviewResponse['data'] | null>(null);
+  const [managerLast7, setManagerLast7] = useState<OverviewResponse['data'] | null>(null);
+  const [managerOpsLoading, setManagerOpsLoading] = useState(false);
 
   const dateRange = useMemo(
     () => getPeriodRange(period, customFrom || undefined, customTo || undefined),
@@ -150,6 +172,7 @@ function BusinessDashboard() {
       ];
     }
     const available: { id: DashboardTab; label: string }[] = [{ id: 'overview', label: 'Overview' }];
+    if (showMccOpsDashboard) available.push({ id: 'operations', label: 'Operations' });
     if (canViewSales) available.push({ id: 'sales', label: 'Sales' });
     if (canViewCollections) available.push({ id: 'collections', label: 'Collections' });
     if (canViewInventory) available.push({ id: 'inventory', label: 'Inventory' });
@@ -158,7 +181,14 @@ function BusinessDashboard() {
       available.push({ id: 'loans', label: 'Loans' });
     }
     return available;
-  }, [canViewSales, canViewCollections, canViewInventory, canViewAnalytics, isVeterinaryRole]);
+  }, [
+    showMccOpsDashboard,
+    canViewSales,
+    canViewCollections,
+    canViewInventory,
+    canViewAnalytics,
+    isVeterinaryRole,
+  ]);
 
   useEffect(() => {
     if (!tabs.some((tab) => tab.id === dashboardTab)) {
@@ -202,6 +232,60 @@ function BusinessDashboard() {
       cancelled = true;
     };
   }, [accountType, currentAccount?.account_id, dateRange.date_from, dateRange.date_to, refreshKey]);
+  // MCC manager panel data — loaded only on Operations tab (not shown on Overview)
+  useEffect(() => {
+    if (!showMccOpsDashboard || !currentAccount?.account_id || dashboardTab !== 'operations') {
+      return;
+    }
+    let cancelled = false;
+    const from = dateRange.date_from;
+    const to = dateRange.date_to;
+    const endLocal = new Date(
+      Number(to.slice(0, 4)),
+      Number(to.slice(5, 7)) - 1,
+      Number(to.slice(8, 10)),
+    );
+    const start7 = new Date(endLocal);
+    start7.setDate(endLocal.getDate() - 6);
+    const from7 = toYYYYMMDD(start7);
+    const to7 = to;
+    setManagerOpsLoading(true);
+    Promise.all([
+      statsApi.getOverview(currentAccount.account_id, { date_from: from, date_to: to }),
+      statsApi.getOverview(currentAccount.account_id, { date_from: from7, date_to: to7 }),
+    ])
+      .then(([d0, d7]) => {
+        if (cancelled) return;
+        if (d0.code === 200 && d0.data) setManagerToday(d0.data);
+        else setManagerToday(null);
+        if (d7.code === 200 && d7.data) setManagerLast7(d7.data);
+        else setManagerLast7(null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setManagerToday(null);
+          setManagerLast7(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setManagerOpsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    showMccOpsDashboard,
+    currentAccount?.account_id,
+    dashboardTab,
+    dateRange.date_from,
+    dateRange.date_to,
+    refreshKey,
+  ]);
+
+  useEffect(() => {
+    setManagerToday(null);
+    setManagerLast7(null);
+  }, [currentAccount?.account_id]);
 
   // Load inventory stats and chart data when Inventory tab is selected
   useEffect(() => {
@@ -347,7 +431,9 @@ function BusinessDashboard() {
 
   if (error) {
     return (
-      <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-6 text-sm text-red-800">{error}</div>
+      <div className="bg-red-50 border border-red-200 rounded-sm p-4">
+        <p className="text-sm text-red-600">{error}</p>
+      </div>
     );
   }
 
@@ -367,77 +453,76 @@ function BusinessDashboard() {
 
   return (
     <div className="-mt-1 space-y-4">
-      {/* Header with tabs (resolveITpro style: single row, border-bottom, underline active tab) */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-3 pb-3 border-b-2 border-gray-200">
-        <div className="flex-shrink-0">
-          <h1 className="text-2xl font-semibold text-gray-900 leading-tight">Dashboard</h1>
-        </div>
-        <div className="flex flex-1 min-w-0 gap-1 overflow-x-auto">
-          {tabs.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setDashboardTab(id)}
-              className={`
-                flex items-center gap-1.5 py-2 px-4 rounded-t border-b-2 border-transparent
-                text-[13px] font-medium whitespace-nowrap transition-all duration-200
-                ${dashboardTab === id
-                  ? 'text-[var(--primary)] border-b-2 border-[var(--primary)] bg-[var(--primary)]/5 font-semibold'
-                  : 'text-gray-500 border-b-2 border-transparent bg-transparent hover:text-[var(--primary)] hover:bg-[var(--primary)]/5'
+      {/* Header: tab row — Overview, Operations (MCC), Sales, … — plus period */}
+      <div className="mb-3 pb-3 border-b-2 border-gray-200">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-1 min-w-0 gap-1 overflow-x-auto">
+            {tabs.map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setDashboardTab(id)}
+                className={`
+                  flex items-center gap-1.5 py-2 px-4 rounded-t border-b-2 border-transparent
+                  text-[13px] font-medium whitespace-nowrap transition-all duration-200
+                  ${dashboardTab === id
+                    ? 'text-[var(--primary)] border-b-2 border-[var(--primary)] bg-[var(--primary)]/5 font-semibold'
+                    : 'text-gray-500 border-b-2 border-transparent bg-transparent hover:text-[var(--primary)] hover:bg-[var(--primary)]/5'
+                  }
+                `}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="relative flex-shrink-0">
+            <select
+              value={period}
+              onChange={(e) => {
+                const v = e.target.value as PeriodKey;
+                setPeriod(v);
+                if (v === 'custom' && !customFrom && !customTo) {
+                  const n = new Date();
+                  setCustomFrom(toYYYYMMDD(new Date(n.getFullYear(), n.getMonth(), 1)));
+                  setCustomTo(toYYYYMMDD(n));
                 }
-              `}
+              }}
+              title={periodLabel}
+              className="min-w-0 w-[120px] border border-gray-300 rounded py-0.5 pl-1.5 pr-6 text-xs text-gray-900 bg-white focus:ring-1 focus:ring-[var(--primary)] focus:border-[var(--primary)]"
             >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="relative flex-shrink-0">
-          <select
-            value={period}
-            onChange={(e) => {
-              const v = e.target.value as PeriodKey;
-              setPeriod(v);
-              if (v === 'custom' && !customFrom && !customTo) {
-                const n = new Date();
-                setCustomFrom(toYYYYMMDD(new Date(n.getFullYear(), n.getMonth(), 1)));
-                setCustomTo(toYYYYMMDD(n));
-              }
-            }}
-            title={periodLabel}
-            className="min-w-0 w-[120px] border border-gray-300 rounded py-0.5 pl-1.5 pr-6 text-xs text-gray-900 bg-white focus:ring-1 focus:ring-[var(--primary)] focus:border-[var(--primary)]"
-          >
-            <option value="day">Day</option>
-            <option value="month">Month</option>
-            <option value="quarter">Quarter</option>
-            <option value="year">Year</option>
-            <option value="custom">Custom</option>
-          </select>
-          {period === 'custom' && (
-            <div className="absolute top-full right-0 z-10 mt-0.5 py-1.5 px-1.5 bg-white border border-gray-200 rounded shadow-lg flex items-center gap-1.5">
-              <input
-                type="date"
-                value={customFrom}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => setCustomFrom(e.target.value)}
-                className="border border-gray-300 rounded px-1.5 py-0.5 text-xs w-28"
-              />
-              <span className="text-gray-400 text-[10px]">–</span>
-              <input
-                type="date"
-                value={customTo}
-                max={new Date().toISOString().slice(0, 10)}
-                onChange={(e) => setCustomTo(e.target.value)}
-                className="border border-gray-300 rounded px-1.5 py-0.5 text-xs w-28"
-              />
-            </div>
-          )}
+              <option value="day">Day</option>
+              <option value="month">Month</option>
+              <option value="week">Week</option>
+              <option value="quarter">Quarter</option>
+              <option value="year">Year</option>
+              <option value="custom">Custom</option>
+            </select>
+            {period === 'custom' && (
+              <div className="absolute top-full right-0 z-10 mt-0.5 py-1.5 px-1.5 bg-white border border-gray-200 rounded shadow-lg flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={customFrom}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="border border-gray-300 rounded px-1.5 py-0.5 text-xs w-28"
+                />
+                <span className="text-gray-400 text-[10px]">–</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="border border-gray-300 rounded px-1.5 py-0.5 text-xs w-28"
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Overview tab */}
+      {/* Overview — business snapshot: totals, trends, quick actions (all accounts including MCC) */}
       {dashboardTab === 'overview' && (
         <>
-      {/* Summary cards - same data as mobile */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total Sales"
@@ -813,6 +898,43 @@ function BusinessDashboard() {
         </div>
       </div>
         </>
+      )}
+
+      {/* Operations — MCC control room + links to full work-area screens */}
+      {dashboardTab === 'operations' && showMccOpsDashboard && currentAccount?.account_id && (
+        <div className="space-y-6">
+          <MccManagerDashboardSection
+            accountId={currentAccount.account_id}
+            today={managerToday}
+            last7={managerLast7}
+            loading={managerOpsLoading}
+            refreshKey={refreshKey}
+            periodKey={period}
+            rangeDateFrom={dateRange.date_from}
+            rangeDateTo={dateRange.date_to}
+          />
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide mb-3">Work areas</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {MCC_OPERATIONS_SUB_PANELS.map(({ href, label, description }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  className="group flex flex-col rounded-sm border border-gray-200 bg-white p-5 shadow-sm transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
+                >
+                  <span className="text-base font-semibold text-gray-900 group-hover:text-[var(--primary)]">
+                    {label}
+                  </span>
+                  <span className="text-sm text-gray-600 mt-2 flex-1">{description}</span>
+                  <span className="text-xs font-medium text-[var(--primary)] mt-3 inline-flex items-center gap-1">
+                    Open
+                    <Icon icon={faArrowRight} size="xs" />
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Sales tab */}

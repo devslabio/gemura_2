@@ -315,7 +315,7 @@ export default function RegisterPage() {
           <div className="mt-12 text-center">
             <p className="text-xs text-gray-500 mb-2">© 2020–{new Date().getFullYear()} Gemura</p>
             <p className="text-xs text-gray-500">
-              Milk collection services platform
+              Milk operations platform
             </p>
           </div>
         </div>

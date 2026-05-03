@@ -193,6 +193,36 @@ export default function CollectionDetailsPage() {
               </div>
             </div>
 
+            {(collection.mcc_collection_context ||
+              collection.mcc_gate_delivery_id ||
+              collection.mcc_manifest_line_id) && (
+              <div className="bg-white border border-emerald-100 rounded-sm p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-3">MCC traceability</h2>
+                <p className="text-sm text-gray-700 mb-2">
+                  {collection.mcc_collection_context === 'direct_gate' &&
+                    'This collection is linked to a direct farmer gate arrival.'}
+                  {collection.mcc_collection_context === 'umucunda_manifest_line' &&
+                    'This collection is linked to an accepted Umucunda manifest line (per-farmer).'}
+                  {!collection.mcc_collection_context &&
+                    'This collection has MCC link fields set; open notes or admin tools for full detail.'}
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  {collection.mcc_gate_delivery_id && (
+                    <div>
+                      <span className="text-gray-500">Gate delivery</span>
+                      <p className="font-mono text-gray-900 break-all">{collection.mcc_gate_delivery_id}</p>
+                    </div>
+                  )}
+                  {collection.mcc_manifest_line_id && (
+                    <div>
+                      <span className="text-gray-500">Manifest line</span>
+                      <p className="font-mono text-gray-900 break-all">{collection.mcc_manifest_line_id}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Supplier & Customer Information */}
             <div className="bg-white border border-gray-200 rounded-sm p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Parties</h2>

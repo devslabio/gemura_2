@@ -57,6 +57,9 @@ const PERMISSIONS_FALLBACK = [
   { code: 'view_inventory', name: 'View Inventory' },
   { code: 'manage_inventory', name: 'Manage Inventory' },
   { code: 'view_analytics', name: 'View Analytics' },
+  { code: 'mcc_view_operations', name: 'View MCC operations' },
+  { code: 'mcc_manage_operations', name: 'Manage MCC operations' },
+  { code: 'mcc_accept_manifests', name: 'Accept MCC manifests' },
 ];
 
 export default function EditUserPage() {

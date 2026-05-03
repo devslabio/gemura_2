@@ -20,6 +20,9 @@ import Icon, {
   faCheck,
 } from './Icon';
 
+/** Set true to show the header account dropdown again. */
+const SHOW_ACCOUNT_SWITCHER = false;
+
 interface HeaderProps {
   sidebarOpen: boolean;
   sidebarCollapsed: boolean;
@@ -155,8 +158,8 @@ export default function Header({
         {/* Spacer */}
         <div className="flex-1"></div>
 
-        {/* Account Switcher */}
-        {accounts.length > 0 && (
+        {/* Account Switcher (hidden until product-ready) */}
+        {SHOW_ACCOUNT_SWITCHER && accounts.length > 0 && (
           <div className="relative flex-shrink-0 min-w-0" ref={accountSwitcherRef}>
             <button
               type="button"

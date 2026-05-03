@@ -10,12 +10,22 @@ import { useClientPagination } from '@/hooks/useClientPagination';
 import Modal from '@/app/components/Modal';
 import Pagination from '@/app/components/Pagination';
 import Icon, { faPlus, faTrash } from '@/app/components/Icon';
+import FilterBar, { FilterBarGroup, FilterBarActions, FilterBarApply, FilterBarExport } from '@/app/components/FilterBar';
 
 const FILTER_INPUT =
   'input h-9 min-h-[2.25rem] !py-1.5 !px-3 text-sm w-full min-w-0 sm:max-w-[11rem] text-gray-900';
 
+const INPUT_FULL =
+  'input h-9 min-h-[2.25rem] !py-1.5 !px-3 text-sm w-full text-gray-900';
+
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
+}
+
+function defaultManifestFrom() {
+  const x = new Date();
+  x.setUTCDate(x.getUTCDate() - 14);
+  return isoDate(x);
 }
 
 type DraftLine = { farmer_supplier_account_id: string; declared_litres: string; container_id: string };
@@ -49,11 +59,7 @@ export default function OperationsManifestsPage() {
   const [rejectManifest, setRejectManifest] = useState<MccManifestRow | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [saving, setSaving] = useState(false);
-  const [from, setFrom] = useState(() => {
-    const x = new Date();
-    x.setUTCDate(x.getUTCDate() - 14);
-    return isoDate(x);
-  });
+  const [from, setFrom] = useState(defaultManifestFrom);
   const [to, setTo] = useState(() => isoDate(new Date()));
 
   const [gateId, setGateId] = useState('');
@@ -218,6 +224,11 @@ export default function OperationsManifestsPage() {
     setEditLines((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
 
+  const handleClearFilters = () => {
+    setFrom(defaultManifestFrom());
+    setTo(isoDate(new Date()));
+  };
+
   const renderLineEditors = (
     rows: DraftLine[],
     onChange: (index: number, patch: Partial<DraftLine>) => void,
@@ -284,35 +295,81 @@ export default function OperationsManifestsPage() {
 
   return (
     <div className="space-y-4 w-full min-w-0">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Manifests</h1>
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
-          <div className="flex flex-col gap-1 min-w-0 sm:min-w-[9rem]">
-            <span className="text-xs font-medium text-gray-600">From</span>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={FILTER_INPUT} />
-          </div>
-          <div className="flex flex-col gap-1 min-w-0 sm:min-w-[9rem]">
-            <span className="text-xs font-medium text-gray-600">To</span>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={FILTER_INPUT} />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => load()} className="btn btn-secondary">
-              Apply
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold text-gray-900">Manifests</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 shrink-0 justify-end">
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              disabled={gatesWithoutManifest.length === 0}
+              className="btn btn-primary"
+            >
+              <Icon icon={faPlus} size="sm" className="mr-2" />
+              New manifest
             </button>
-            {canManage && (
-              <button
-                type="button"
-                onClick={() => setCreateOpen(true)}
-                disabled={gatesWithoutManifest.length === 0}
-                className="btn btn-primary"
-              >
-                <Icon icon={faPlus} size="sm" className="mr-2" />
-                New manifest
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
+
+      <FilterBar>
+        <FilterBarGroup label="Date From">
+          <input
+            type="date"
+            value={from}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setFrom(e.target.value)}
+            className={INPUT_FULL}
+          />
+        </FilterBarGroup>
+        <FilterBarGroup label="Date To">
+          <input
+            type="date"
+            value={to}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setTo(e.target.value)}
+            className={INPUT_FULL}
+          />
+        </FilterBarGroup>
+        <FilterBarActions onClear={handleClearFilters} />
+        <FilterBarApply onApply={() => void load()} />
+        <FilterBarExport<MccManifestRow>
+          data={manifests}
+          exportFilename="mcc-manifests"
+          exportColumns={[
+            { key: 'manifest_ref', label: 'Manifest ref' },
+            { key: 'status', label: 'Status' },
+            {
+              key: 'gate_arrived',
+              label: 'Gate arrived',
+              getValue: (m) => new Date(m.gate_delivery.arrived_at).toLocaleString(),
+            },
+            {
+              key: 'umucunda_supplier',
+              label: 'Umucunda supplier',
+              getValue: (m) => m.umucunda_supplier?.name || m.umucunda_supplier?.code || '',
+            },
+            {
+              key: 'lines_count',
+              label: 'Farmer lines',
+              getValue: (m) => String(m.lines?.length ?? 0),
+            },
+            {
+              key: 'submitted_at',
+              label: 'Submitted',
+              getValue: (m) => (m.submitted_at ? new Date(m.submitted_at).toLocaleString() : ''),
+            },
+            {
+              key: 'accepted_at',
+              label: 'Accepted',
+              getValue: (m) => (m.accepted_at ? new Date(m.accepted_at).toLocaleString() : ''),
+            },
+          ]}
+          disabled={loading || !accountId || manifests.length === 0}
+        />
+      </FilterBar>
 
       {accountId && gatesWithoutManifest.length === 0 && !loading && canManage && (
         <div className="bg-amber-50 border border-amber-200 rounded-sm p-3">
@@ -457,11 +514,6 @@ export default function OperationsManifestsPage() {
               ))}
             </select>
           </div>
-          {selectedGate && (
-            <p className="text-xs text-gray-500">
-              Umucunda supplier is fixed to this gate: {selectedGate.source_account?.name || selectedGate.source_account?.code}.
-            </p>
-          )}
           <div>
             <p className="text-sm font-medium text-gray-800 mb-2">Farmer lines</p>
             {renderLineEditors(
@@ -484,11 +536,6 @@ export default function OperationsManifestsPage() {
 
       <Modal open={!!editManifest} onClose={() => !saving && setEditManifest(null)} title="Edit draft lines" maxWidth="max-w-2xl">
         <div className="space-y-4">
-          {editManifest && (
-            <p className="text-sm text-gray-600">
-              {editManifest.manifest_ref} — only <span className="font-medium">draft</span> manifests can be edited.
-            </p>
-          )}
           {renderLineEditors(
             editLines,
             updateEditLine,
@@ -508,9 +555,6 @@ export default function OperationsManifestsPage() {
 
       <Modal open={!!rejectManifest} onClose={() => !saving && setRejectManifest(null)} title="Reject manifest" maxWidth="max-w-md">
         <div className="space-y-3">
-          <p className="text-sm text-gray-600">
-            {rejectManifest?.manifest_ref} ({rejectManifest?.status})
-          </p>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
             <textarea

@@ -24,7 +24,6 @@ import {
   faClipboardList,
   faHandHoldingDollar,
   faTag,
-  faIdCard,
   faList,
   faTruck,
   faEye,
@@ -223,7 +222,6 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
   { icon: faHandHoldingDollar, label: 'Loans', href: '/loans', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
   { icon: faChartLine, label: 'Finance', href: '/finance', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
   { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
-  { icon: faIdCard, label: 'IMMIS', href: '/immis', section: 'operations', navGroup: 'System' },
   { icon: faCog, label: 'Settings', href: '/settings', section: 'operations', navGroup: 'System' },
 ];
 

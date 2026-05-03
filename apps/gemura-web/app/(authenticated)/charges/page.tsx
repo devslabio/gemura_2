@@ -178,15 +178,10 @@ export default function ChargesPage() {
         </div>
       )}
 
-      <p className="text-sm text-gray-600">
-        Charges are applied to suppliers when you generate payroll. Use one-time for single deductions or recurring for every run.
-      </p>
-
       {charges.length === 0 ? (
         <div className="bg-white border border-gray-200 rounded-sm p-12 text-center">
           <Icon icon={faTag} className="text-gray-300 mx-auto mb-4" size="2x" />
           <p className="text-gray-600 font-medium">No charges yet</p>
-          <p className="text-sm text-gray-500 mt-1">Create a charge to deduct from supplier payroll (e.g. transport fee, membership).</p>
           <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary mt-4 inline-flex">
             New charge
           </button>

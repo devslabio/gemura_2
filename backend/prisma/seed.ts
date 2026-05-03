@@ -18,10 +18,10 @@ async function main() {
   console.log('👤 Creating main user account...');
   const mainAccount = await prisma.account.upsert({
     where: { code: 'ACC_MAIN_001' },
-    update: {},
+    update: { name: 'Nyabihu Cooperative MCC' },
     create: {
       code: 'ACC_MAIN_001',
-      name: 'Main MCC Account',
+      name: 'Nyabihu Cooperative MCC',
       type: 'tenant',
       status: 'active',
       legacy_id: BigInt(1),
@@ -555,7 +555,9 @@ async function main() {
   console.log(`📦 Collections: ${collections.length}`);
   console.log(`📦 Products: 3`);
   console.log(`🐄 Animals: ${animalsCreated}`);
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🚛 MCC Operations (gate, manifests, shifts, tests): npm run seed:mcc-gate-demo');
+  console.log('   Uses realistic week-spread demo on ACC_MAIN_001; safe to re-run (idempotent).\n');
   console.log('🧪 Test the API:');
   console.log('1. Login: POST http://159.198.65.38:3004/api/auth/login');
   console.log(`   Body: { "identifier": "250788606765", "password": "${SEED_DEMO_PASSWORD}" }`);

@@ -3,6 +3,8 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiBadReque
 import { Response } from 'express';
 import { CustomersService } from './customers.service';
 import { TokenGuard } from '../../common/guards/token.guard';
+import { PermissionGuard } from '../../common/guards/permission.guard';
+import { RequireAnyPermission, RequirePermission } from '../../common/decorators/permission.decorator';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { User } from '@prisma/client';
 import { CreateCustomerDto } from './dto/create-customer.dto';
@@ -11,12 +13,13 @@ import { BulkCreateCustomersDto } from './dto/bulk-create-customers.dto';
 
 @ApiTags('Customers')
 @Controller('customers')
-@UseGuards(TokenGuard)
+@UseGuards(TokenGuard, PermissionGuard)
 @ApiBearerAuth()
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Post()
+  @RequireAnyPermission(['create_customers', 'update_customers'])
   @ApiOperation({
     summary: 'Create or update customer',
     description: 'Create a new customer relationship or update an existing one. If customer exists (by phone/email/nid), updates the relationship. Otherwise, creates new user, account, and wallet.',
@@ -85,6 +88,7 @@ export class CustomersController {
   }
 
   @Get('template')
+  @RequirePermission('view_customers')
   @ApiOperation({
     summary: 'Download customers CSV template',
     description: 'Returns a CSV file with header row and one example row for bulk import.',
@@ -113,6 +117,7 @@ export class CustomersController {
   }
 
   @Post('bulk')
+  @RequireAnyPermission(['create_customers', 'update_customers'])
   @ApiOperation({
     summary: 'Bulk create or update customers',
     description: 'Create or update multiple customers from an array. Each row uses the same validation as single create. Returns success count and per-row errors.',
@@ -139,6 +144,7 @@ export class CustomersController {
   }
 
   @Post('get')
+  @RequirePermission('view_customers')
   @HttpCode(200)
   @ApiOperation({
     summary: 'Get all customers',
@@ -194,6 +200,7 @@ export class CustomersController {
   }
 
   @Get('by-id/:id')
+  @RequirePermission('view_customers')
   @ApiOperation({
     summary: 'Get customer details by ID',
     description: 'Retrieve detailed information about a specific customer by account ID (UUID). Returns customer account details, user information, and relationship data. The customer must be associated with the user\'s default account.',
@@ -280,6 +287,7 @@ export class CustomersController {
   }
 
   @Get(':code')
+  @RequirePermission('view_customers')
   @ApiOperation({
     summary: 'Get customer details by code',
     description: 'Retrieve details of a specific customer by account code. Returns customer information and relationship details.',
@@ -344,6 +352,7 @@ export class CustomersController {
   }
 
   @Put('update')
+  @RequirePermission('update_customers')
   @ApiOperation({
     summary: 'Update customer',
     description: 'Update customer details including name, contact info, price per liter, and relationship status.',
@@ -415,6 +424,7 @@ export class CustomersController {
   }
 
   @Delete(':code')
+  @RequirePermission('update_customers')
   @ApiOperation({
     summary: 'Delete customer relationship',
     description: 'Delete (deactivate) a customer relationship. This sets the relationship status to inactive.',

@@ -1,5 +1,8 @@
 import { apiClient } from './client';
 
+/** Set when this milk sale is linked to MCC gate or manifest trace data. */
+export type MccCollectionContext = 'umucunda_manifest_line' | 'direct_gate' | null;
+
 export interface Collection {
   id: string;
   quantity: number;
@@ -11,6 +14,9 @@ export interface Collection {
   notes?: string;
   created_at: string;
   updated_at?: string;
+  mcc_gate_delivery_id?: string | null;
+  mcc_manifest_line_id?: string | null;
+  mcc_collection_context?: MccCollectionContext;
   supplier_account: {
     id: string;
     code: string;
@@ -33,6 +39,8 @@ export interface Collection {
 }
 
 export interface CollectionsFilters {
+  /** Exact supplier account id (preferred over supplier_name when using dropdown filter). */
+  supplier_account_id?: string;
   supplier_name?: string;
   status?: string;
   date_from?: string;
@@ -52,6 +60,10 @@ export interface CreateCollectionData {
   notes?: string;
   payment_status?: 'paid' | 'unpaid';
   rejection_reason?: string;
+  /** Direct farmer at gate; mutually exclusive with mcc_manifest_line_id. */
+  mcc_gate_delivery_id?: string;
+  /** Accepted manifest farmer line (Umucunda); mutually exclusive with mcc_gate_delivery_id. */
+  mcc_manifest_line_id?: string;
 }
 
 export interface UpdateCollectionData {
@@ -98,6 +110,7 @@ export const collectionsApi = {
   getCollections: async (filters?: CollectionsFilters, accountId?: string): Promise<CollectionsResponse> => {
     const params = new URLSearchParams();
     if (accountId) params.append('account_id', accountId);
+    if (filters?.supplier_account_id) params.append('supplier_account_id', filters.supplier_account_id);
     if (filters?.supplier_name) params.append('supplier_name', filters.supplier_name);
     if (filters?.status) params.append('status', filters.status);
     if (filters?.date_from) params.append('date_from', filters.date_from);

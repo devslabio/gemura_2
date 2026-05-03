@@ -127,8 +127,7 @@ export default function PayrollPage() {
 
       {/* Date range + Run name (same row) */}
       <div className="bg-white border border-gray-200 rounded-sm p-4">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">Date Range</h2>
-        <p className="text-sm text-gray-500 mb-3">Select the period for milk sales to include in this payroll.</p>
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">Date Range</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">From</label>

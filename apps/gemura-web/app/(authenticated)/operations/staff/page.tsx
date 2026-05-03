@@ -1,22 +1,19 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   mccOperationsApi,
   type MccShiftRow,
   type MccStaffOption,
 } from '@/lib/api/mcc-operations';
-import { employeesApi } from '@/lib/api/employees';
+import { employeesApi, type RoleOption } from '@/lib/api/employees';
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
 import { usePermission } from '@/hooks/usePermission';
-import { useClientPagination } from '@/hooks/useClientPagination';
 import Icon, { faClock, faSpinner, faUserPlus } from '@/app/components/Icon';
 import Modal from '@/app/components/Modal';
-import Pagination from '@/app/components/Pagination';
-import FilterBar, { FilterBarGroup, FilterBarActions, FilterBarApply, FilterBarExport } from '@/app/components/FilterBar';
 import SearchableSelect from '@/app/components/SearchableSelect';
+import FilterBar, { FilterBarGroup, FilterBarActions, FilterBarApply, FilterBarExport } from '@/app/components/FilterBar';
 
 type TeamAccessGroup = 'general_access' | 'limited_access';
 type InviteProfileKey = 'manager' | 'accountant' | 'milk_receptionist' | 'veterinary';
@@ -58,29 +55,12 @@ const INVITE_ROLE_SELECT_OPTIONS = INVITE_PROFILE_KEYS.map((key) => ({
   label: INVITE_ROLE_PROFILES[key].label,
 }));
 
-function toRoleLabel(role: string): string {
-  return role
-    .replace(/_/g, ' ')
-    .trim()
-    .replace(/\b\w/g, (m) => m.toUpperCase());
-}
-
-function roleBadgeClass(role: string): string {
-  const normalized = (role || '').toLowerCase();
-  const palette: Record<string, string> = {
-    manager: 'bg-blue-50 text-blue-700 border-blue-200',
-    accountant: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    collector: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    agent: 'bg-cyan-50 text-cyan-700 border-cyan-200',
-    casual_laborer: 'bg-amber-50 text-amber-700 border-amber-200',
-    veterinary_officer: 'bg-violet-50 text-violet-700 border-violet-200',
-    leadership: 'bg-slate-100 text-slate-700 border-slate-200',
-    regulator: 'bg-rose-50 text-rose-700 border-rose-200',
-    viewer: 'bg-gray-100 text-gray-700 border-gray-200',
-    umucunda_a: 'bg-sky-50 text-sky-700 border-sky-200',
-    umucunda_b: 'bg-sky-50 text-sky-700 border-sky-200',
-  };
-  return palette[normalized] || 'bg-gray-100 text-gray-700 border-gray-200';
+function staffRoleSelectOptions(roleOptions: RoleOption[], currentCode: string) {
+  const mapped = roleOptions.map((o) => ({ value: o.code, label: o.name }));
+  if (!mapped.some((o) => o.value === currentCode)) {
+    return [{ value: currentCode, label: currentCode.replace(/_/g, ' ') }, ...mapped];
+  }
+  return mapped;
 }
 
 const INPUT_FULL =
@@ -94,10 +74,6 @@ function defaultStaffStatsFrom() {
   const x = new Date();
   x.setUTCDate(x.getUTCDate() - 13);
   return isoDate(x);
-}
-
-function sanitizeDateParam(value: string | null, fallback: string) {
-  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback;
 }
 
 type StaffExportRow = {
@@ -126,61 +102,53 @@ function shiftSummaryForUser(shifts: MccShiftRow[], userId: string) {
 }
 
 export default function OperationsStaffPage() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { currentAccount, user } = useAuthStore();
   const { hasAnyPermission, canManageUsers } = usePermission();
   const toast = useToastStore();
   const accountId = currentAccount?.account_id ?? '';
   const canViewOps = hasAnyPermission(['mcc_view_operations', 'view_collections']);
-  const canManageShifts = hasAnyPermission([
-    'mcc_manage_operations',
-    'mcc_manage_own_operations',
-    'mcc_floor_operations',
-  ]);
+  const canManageShifts = hasAnyPermission(['mcc_manage_operations', 'update_collections']);
   const canManageTeam = canManageUsers();
   const roleLower = (currentAccount?.role ?? '').toLowerCase();
   const canStartShiftForOthers = ['manager', 'system_admin', 'admin', 'owner'].includes(roleLower);
 
   const [staff, setStaff] = useState<MccStaffOption[]>([]);
   const [shifts, setShifts] = useState<MccShiftRow[]>([]);
+  const [roleOptions, setRoleOptions] = useState<RoleOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
-  const [from, setFrom] = useState(() => sanitizeDateParam(searchParams.get('from'), defaultStaffStatsFrom()));
-  const [to, setTo] = useState(() => sanitizeDateParam(searchParams.get('to'), isoDate(new Date())));
+  const [from, setFrom] = useState(defaultStaffStatsFrom);
+  const [to, setTo] = useState(() => isoDate(new Date()));
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteSaving, setInviteSaving] = useState(false);
   const [inviteForm, setInviteForm] = useState({
-    firstName: '',
-    lastName: '',
+    name: '',
     email: '',
     phone: '',
     password: '',
     profileKey: 'milk_receptionist' as InviteProfileKey,
   });
 
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set('from', from);
-    params.set('to', to);
-    const current = searchParams.toString();
-    const next = params.toString();
-    if (next !== current) {
-      router.replace(`${pathname}?${next}`, { scroll: false });
-    }
-  }, [from, to, pathname, router, searchParams]);
-
   const load = useCallback(async () => {
     if (!accountId || !canViewOps) return;
     setLoading(true);
     try {
-      const [stRes, shRes] = await Promise.all([
+      const promises: Promise<unknown>[] = [
         mccOperationsApi.staffOptions(accountId),
         mccOperationsApi.listShifts(accountId, from, to),
-      ]);
+      ];
+      if (canManageTeam) {
+        promises.push(employeesApi.getRoles(accountId));
+      }
+      const results = await Promise.all(promises);
+      const stRes = results[0] as { data?: MccStaffOption[] };
+      const shRes = results[1] as { data?: MccShiftRow[] };
       setStaff(stRes.data ?? []);
       setShifts(shRes.data ?? []);
+      if (canManageTeam && results[2]) {
+        const r = results[2] as { code?: number; data?: { roles: RoleOption[] } };
+        if (r.code === 200 && r.data?.roles) setRoleOptions(r.data.roles);
+      }
     } catch (e: unknown) {
       toast.error(
         (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to load staff',
@@ -188,7 +156,7 @@ export default function OperationsStaffPage() {
     } finally {
       setLoading(false);
     }
-  }, [accountId, canViewOps, from, to, toast]);
+  }, [accountId, canViewOps, canManageTeam, from, to, toast]);
 
   useEffect(() => {
     load();
@@ -197,15 +165,6 @@ export default function OperationsStaffPage() {
   const sortedStaff = useMemo(() => {
     return [...staff].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
   }, [staff]);
-  const {
-    page: staffPage,
-    setPage: setStaffPage,
-    paginatedItems: paginatedStaff,
-    totalPages: staffTotalPages,
-    totalItems: staffTotalItems,
-    startIndex: staffStartIndex,
-    pageSize: staffPageSize,
-  } = useClientPagination(sortedStaff, { resetKey: `${from}-${to}` });
 
   const staffExportData = useMemo((): StaffExportRow[] => {
     return sortedStaff.map((s) => {
@@ -268,8 +227,8 @@ export default function OperationsStaffPage() {
       toast.error('Email or phone is required');
       return;
     }
-    if (!inviteForm.firstName.trim() || !inviteForm.lastName.trim()) {
-      toast.error('First and last name are required');
+    if (!inviteForm.name.trim()) {
+      toast.error('Name is required');
       return;
     }
     if (!accountId) return;
@@ -277,8 +236,7 @@ export default function OperationsStaffPage() {
     try {
       const selected = INVITE_ROLE_PROFILES[inviteForm.profileKey];
       const res = await employeesApi.inviteEmployee({
-        first_name: inviteForm.firstName.trim(),
-        last_name: inviteForm.lastName.trim(),
+        name: inviteForm.name.trim(),
         email: inviteForm.email.trim() || undefined,
         phone: inviteForm.phone.trim() || undefined,
         password: inviteForm.password.trim() || undefined,
@@ -290,8 +248,7 @@ export default function OperationsStaffPage() {
         toast.success('Team member added.');
         setInviteOpen(false);
         setInviteForm({
-          firstName: '',
-          lastName: '',
+          name: '',
           email: '',
           phone: '',
           password: '',
@@ -307,6 +264,26 @@ export default function OperationsStaffPage() {
       );
     } finally {
       setInviteSaving(false);
+    }
+  };
+
+  const onRoleChange = async (userAccountId: string, role: string) => {
+    if (!accountId) return;
+    setBusyUserId(userAccountId);
+    try {
+      const res = await employeesApi.updateEmployee(userAccountId, { role }, accountId);
+      if (res.code === 200) {
+        toast.success('Role updated.');
+        await load();
+      } else {
+        toast.error((res as { message?: string }).message ?? 'Update failed');
+      }
+    } catch (e: unknown) {
+      toast.error(
+        (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Update failed',
+      );
+    } finally {
+      setBusyUserId(null);
     }
   };
 
@@ -389,7 +366,6 @@ export default function OperationsStaffPage() {
             <table className="w-full text-sm min-w-[720px]">
               <thead>
                 <tr className="border-b border-gray-200 text-left text-gray-600 bg-gray-50/80">
-                  <th className="py-2.5 px-3 sm:px-4 font-medium w-10 text-right tabular-nums">#</th>
                   <th className="py-2.5 px-3 sm:px-4 font-medium">Name</th>
                   <th className="py-2.5 px-4 font-medium">Role</th>
                   <th className="py-2.5 px-4 font-medium hidden md:table-cell">Phone</th>
@@ -401,7 +377,7 @@ export default function OperationsStaffPage() {
                 </tr>
               </thead>
               <tbody>
-                {paginatedStaff.map((row, index) => {
+                {sortedStaff.map((row) => {
                   const agg = shiftSummaryForUser(shifts, row.user_id);
                   const inactive = (row.status || '').toLowerCase() === 'inactive';
                   const isSelf = user?.id === row.user_id;
@@ -417,7 +393,6 @@ export default function OperationsStaffPage() {
                       key={row.user_account_id}
                       className={`border-b border-gray-100 last:border-0 ${inactive ? 'opacity-60' : ''}`}
                     >
-                      <td className="py-2.5 px-3 sm:px-4 text-right tabular-nums text-gray-500">{staffStartIndex + index + 1}</td>
                       <td className="py-2.5 px-3 sm:px-4 text-gray-900 font-medium">
                         {row.name}
                         {isSelf ? (
@@ -425,9 +400,23 @@ export default function OperationsStaffPage() {
                         ) : null}
                       </td>
                       <td className="py-2.5 px-4 text-gray-800">
-                        <span className={`inline-flex rounded-sm border px-2 py-0.5 text-xs font-semibold ${roleBadgeClass(row.role)}`}>
-                          {toRoleLabel(row.role)}
-                        </span>
+                        {canManageTeam && roleOptions.length > 0 ? (
+                          <SearchableSelect
+                            id={`staff-role-${row.user_account_id}`}
+                            ariaLabel={`Role for ${row.name}`}
+                            options={staffRoleSelectOptions(roleOptions, row.role)}
+                            value={row.role}
+                            disabled={busyUserId === row.user_account_id || inactive}
+                            onChange={(v) => onRoleChange(row.user_account_id, v)}
+                            placeholder="Role"
+                            className="max-w-[11rem]"
+                            triggerClassName="!py-1.5 !text-xs pr-8 min-h-[2.25rem]"
+                            portalDropdown
+                            maxListHeight={220}
+                          />
+                        ) : (
+                          <span className="capitalize">{row.role.replace(/_/g, ' ')}</span>
+                        )}
                       </td>
                       <td className="py-2.5 px-4 text-gray-600 hidden md:table-cell">{row.phone || '—'}</td>
                       <td className="py-2.5 px-4">
@@ -489,16 +478,6 @@ export default function OperationsStaffPage() {
           </div>
         )}
       </div>
-      {!loading && sortedStaff.length > 0 && (
-        <Pagination
-          currentPage={staffPage}
-          totalPages={staffTotalPages}
-          totalItems={staffTotalItems}
-          pageSize={staffPageSize}
-          itemLabel="staff"
-          onPageChange={setStaffPage}
-        />
-      )}
 
       <Modal open={inviteOpen} onClose={() => !inviteSaving && setInviteOpen(false)} title="Invite member" maxWidth="max-w-md">
         <p className="text-sm text-gray-600 mb-4">
@@ -526,29 +505,16 @@ export default function OperationsStaffPage() {
             />
           </div>
           <p className="text-xs text-gray-500">At least one of email or phone.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">First name *</label>
-              <input
-                type="text"
-                value={inviteForm.firstName}
-                onChange={(e) => setInviteForm((f) => ({ ...f, firstName: e.target.value }))}
-                className="input w-full text-gray-900"
-                placeholder="Given name"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Last name *</label>
-              <input
-                type="text"
-                value={inviteForm.lastName}
-                onChange={(e) => setInviteForm((f) => ({ ...f, lastName: e.target.value }))}
-                className="input w-full text-gray-900"
-                placeholder="Family name"
-                required
-              />
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+            <input
+              type="text"
+              value={inviteForm.name}
+              onChange={(e) => setInviteForm((f) => ({ ...f, name: e.target.value }))}
+              className="input w-full text-gray-900"
+              placeholder="Full name"
+              required
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>

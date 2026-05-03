@@ -3,6 +3,24 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { User, LoginCredentials, RegisterData, UserAccount } from '@/types';
 import { authApi } from '@/lib/api/auth';
 
+/** Nest may put a string or a nested object in `message`. */
+function apiErrorMessage(error: unknown): string {
+  const err = error as { response?: { data?: { message?: unknown } }; code?: string; message?: string };
+  const raw = err?.response?.data?.message;
+  if (typeof raw === 'string' && raw.trim()) return raw;
+  if (raw && typeof raw === 'object' && 'message' in raw && typeof (raw as { message: unknown }).message === 'string') {
+    return String((raw as { message: string }).message);
+  }
+  if (err?.code === 'ERR_NETWORK' || err?.message === 'Network Error') {
+    return 'Cannot reach the API. Start the Gemura backend (default port 3004) and confirm NEXT_PUBLIC_API_URL in .env.local.';
+  }
+  if (err?.code === 'ECONNREFUSED') {
+    return 'Cannot reach the API (connection refused). Is the backend running on the configured port?';
+  }
+  if (typeof err?.message === 'string' && err.message.trim()) return err.message;
+  return 'Login failed. Please try again.';
+}
+
 interface AuthStore {
   user: User | null;
   token: string | null;
@@ -41,7 +59,14 @@ export const useAuthStore = create<AuthStore>()(
           const result = await authApi.login(credentials);
           
           if ('code' in result && result.code !== 200) {
-            return { error: result.message || 'Login failed' };
+            const m = result.message;
+            const msg =
+              typeof m === 'string'
+                ? m
+                : m && typeof m === 'object' && 'message' in m && typeof (m as { message: string }).message === 'string'
+                  ? (m as { message: string }).message
+                  : 'Login failed';
+            return { error: msg };
           }
 
           if ('data' in result) {
@@ -90,8 +115,8 @@ export const useAuthStore = create<AuthStore>()(
           }
 
           return { error: 'Login failed' };
-        } catch (error: any) {
-          return { error: error?.response?.data?.message || 'Login failed. Please try again.' };
+        } catch (error: unknown) {
+          return { error: apiErrorMessage(error) };
         }
       },
 

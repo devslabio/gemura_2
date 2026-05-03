@@ -18,10 +18,13 @@ class OverviewService {
       final Map<String, dynamic> requestData = {};
 
       if (dateFrom != null) {
-        requestData['dateFrom'] = dateFrom;
+        requestData['date_from'] = dateFrom;
       }
       if (dateTo != null) {
-        requestData['dateTo'] = dateTo;
+        requestData['date_to'] = dateTo;
+      }
+      if (dateFrom != null && dateTo != null) {
+        requestData['tz_offset_minutes'] = DateTime.now().timeZoneOffset.inMinutes;
       }
 
       print('📊 OverviewService: Fetching overview data');

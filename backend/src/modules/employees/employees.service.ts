@@ -121,6 +121,27 @@ export class EmployeesService {
     return resolved;
   }
 
+  /** Blocks assigning catalog roles marked `is_assignable: false` (e.g. system_admin, supplier). */
+  private async ensurePlatformRoleAssignable(roleSlug: string) {
+    await this.rbac.ensureCatalogFromConfig();
+    const slug = canonicalPlatformRoleSlug(roleSlug.trim().slice(0, 64));
+    const row = await this.prisma.platformRole.findUnique({ where: { slug } });
+    if (!row?.is_active) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Unknown or inactive role.',
+      });
+    }
+    if (!row.is_assignable) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'This role cannot be assigned from team management.',
+      });
+    }
+  }
+
   async createEmployee(user: User, createDto: CreateEmployeeDto) {
     const accountId = await this.ensureCanManageAccount(user, createDto.account_id);
 
@@ -142,6 +163,11 @@ export class EmployeesService {
 
     await this.rbac.ensureCatalogFromConfig();
     const roleSlug = canonicalPlatformRoleSlug(createDto.role.trim().slice(0, 64));
+    await this.ensurePlatformRoleAssignable(roleSlug);
+    if (createDto.platform_role_id) {
+      const pr = await this.prisma.platformRole.findUnique({ where: { id: createDto.platform_role_id } });
+      if (pr) await this.ensurePlatformRoleAssignable(pr.slug);
+    }
     const platformRoleId =
       createDto.platform_role_id || (await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug));
 
@@ -263,6 +289,15 @@ export class EmployeesService {
 
     const updateData: any = { updated_by: user.id };
     if (updateDto.role || updateDto.platform_role_id !== undefined) {
+      if (updateDto.role) {
+        await this.ensurePlatformRoleAssignable(updateDto.role);
+      }
+      if (updateDto.platform_role_id !== undefined) {
+        const pr = await this.prisma.platformRole.findUnique({
+          where: { id: updateDto.platform_role_id },
+        });
+        if (pr) await this.ensurePlatformRoleAssignable(pr.slug);
+      }
       const nextSlug = updateDto.role
         ? canonicalPlatformRoleSlug(updateDto.role.trim().slice(0, 64))
         : employee.role;
@@ -412,6 +447,11 @@ export class EmployeesService {
 
     await this.rbac.ensureCatalogFromConfig();
     const roleSlug = canonicalPlatformRoleSlug(dto.role.trim().slice(0, 64));
+    await this.ensurePlatformRoleAssignable(roleSlug);
+    if (dto.platform_role_id) {
+      const pr = await this.prisma.platformRole.findUnique({ where: { id: dto.platform_role_id } });
+      if (pr) await this.ensurePlatformRoleAssignable(pr.slug);
+    }
     let platformRoleId = dto.platform_role_id || (await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug));
 
     let permissionsStored: string | null = null;

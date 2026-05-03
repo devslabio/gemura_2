@@ -29,6 +29,7 @@
     "seed:manzi-charges-loans": "ts-node prisma/seed-manzi-charges-loans.ts",
     "seed:orora-mock-farms": "tsx prisma/seed-orora-mock-farms.ts",
     "seed:orora-dairy-cattle-demo": "tsx prisma/seed-orora-dairy-cattle-demo.ts",
+    "seed:mcc-gate-demo": "tsx prisma/seed-mcc-gate-demo.ts",
     "migrate": "ts-node src/migration/migrate.ts",
     "migrate:selective": "ts-node src/migration/migrate-selective.ts",
     "migrate:fix-default-accounts": "ts-node src/migration/fix-default-accounts.ts"
