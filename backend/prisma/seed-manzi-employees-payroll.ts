@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { composeUserFullName, splitIntoFirstLast } from './user-name-shared';
 
 const prisma = new PrismaClient();
 
@@ -80,10 +81,15 @@ async function main() {
       throw new Error(`User code ${row.code} is taken by another phone; adjust seed codes.`);
     }
 
+    const empParts = splitIntoFirstLast(row.name);
+    const empName = composeUserFullName(empParts.first_name, empParts.last_name) || row.name.trim();
+
     const user = await prisma.user.upsert({
       where: { phone: row.phone },
       update: {
-        name: row.name,
+        first_name: empParts.first_name,
+        last_name: empParts.last_name,
+        name: empName,
         code: row.code,
         password_hash: pwd,
         status: 'active',
@@ -92,7 +98,9 @@ async function main() {
         token: `${tokenBase}_${i}`,
       },
       create: {
-        name: row.name,
+        first_name: empParts.first_name,
+        last_name: empParts.last_name,
+        name: empName,
         phone: row.phone,
         code: row.code,
         email: `employee.${row.code.toLowerCase().replace(/[^a-z0-9]/g, '')}@gemura.local`,

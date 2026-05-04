@@ -11,6 +11,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RbacService } from '../rbac/rbac.service';
 import { canonicalPlatformRoleSlug } from '../admin/roles-permissions.config';
+import { composeUserFullName } from '../../common/utils/user-name.util';
 
 @Injectable()
 export class AuthService {
@@ -119,7 +120,7 @@ export class AuthService {
 
     // Calculate profile completion (same fields as PHP)
     const profileFields = [
-      'name',
+      'first_name',
       'email',
       'phone',
       'province',
@@ -165,6 +166,8 @@ export class AuthService {
       data: {
         user: {
           id: user.id,
+          first_name: user.first_name,
+          last_name: user.last_name,
           name: user.name,
           email: user.email,
           phone: user.phone,
@@ -186,7 +189,9 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto): Promise<any> {
-    const { name, phone, email, password, account_name, account_type, nid, role, permissions, wallet } = registerDto;
+    const { first_name, last_name, phone, email, password, account_name, account_type, nid, role, permissions, wallet } =
+      registerDto;
+    const displayName = composeUserFullName(first_name, last_name);
 
     // Normalize phone
     const normalizedPhone = phone.replace(/\D/g, '');
@@ -194,9 +199,8 @@ export class AuthService {
     
     // Extract account name: use business name (account_name) if provided and not empty,
     // otherwise extract from full name (name)
-    const finalAccountName = (account_name && account_name.trim().length > 0) 
-      ? account_name.trim() 
-      : name.trim();
+    const finalAccountName =
+      account_name && account_name.trim().length > 0 ? account_name.trim() : displayName;
 
     // Check if user exists
     const existingUser = await this.prisma.user.findFirst({
@@ -235,7 +239,9 @@ export class AuthService {
         const updatedUser = await tx.user.update({
           where: { id: existingUser.id },
           data: {
-            name: name.trim(),
+            first_name: first_name.trim(),
+            last_name: last_name.trim(),
+            name: displayName,
             email: normalizedEmail || existingUser.email,
             phone: normalizedPhone,
             nid: nid?.trim() || existingUser.nid,
@@ -350,6 +356,8 @@ export class AuthService {
         data: {
           user: {
             code: result.user.code,
+            first_name: result.user.first_name,
+            last_name: result.user.last_name,
             name: result.user.name,
             email: result.user.email,
             phone: result.user.phone,
@@ -394,7 +402,9 @@ export class AuthService {
       const user = await tx.user.create({
         data: {
           code: userCode,
-          name: name.trim(),
+          first_name: first_name.trim(),
+          last_name: last_name.trim(),
+          name: displayName,
           email: normalizedEmail,
           phone: normalizedPhone,
           nid: nid?.trim() || null,
@@ -459,6 +469,8 @@ export class AuthService {
       data: {
         user: {
           code: result.user.code,
+          first_name: result.user.first_name,
+          last_name: result.user.last_name,
           name: result.user.name,
           email: result.user.email,
           phone: result.user.phone,
@@ -498,6 +510,8 @@ export class AuthService {
       },
       select: {
         code: true,
+        first_name: true,
+        last_name: true,
         name: true,
         email: true,
         phone: true,
@@ -545,6 +559,8 @@ export class AuthService {
       where: phone && email ? { OR: [{ phone: where.phone }, { email: where.email }] } : where,
       select: {
         id: true,
+        first_name: true,
+        last_name: true,
         name: true,
         phone: true,
         email: true,

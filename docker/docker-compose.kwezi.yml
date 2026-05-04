@@ -21,6 +21,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-gemura_jwt_secret_production_2026}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3006,http://localhost:3015,http://209.74.80.195:3006,http://209.74.80.195:3011,http://209.74.80.195:3021,https://app.gemura.rw,https://app.orora.rw,https://admin.gemura.rw}
+      RBAC_RESET_ROLE_PERMISSIONS: ${RBAC_RESET_ROLE_PERMISSIONS:-0}
     ports:
       - "3007:3004"
     networks:

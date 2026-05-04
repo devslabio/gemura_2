@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { User, LoginCredentials, RegisterData, UserAccount } from '@/types';
-import { authApi } from '@/lib/api/auth';
+import { authApi, type LoginResponseData, type RegisterResponseData } from '@/lib/api/auth';
 
 /** Nest may put a string or a nested object in `message`. */
 function apiErrorMessage(error: unknown): string {
@@ -86,13 +86,13 @@ export const useAuthStore = create<AuthStore>()(
                 localStorage.setItem('gemura-auth-token', token);
               }
 
-              // Map backend user to frontend User type
-              const nameParts = user.name.split(' ');
+              const backendUser = user as LoginResponseData['user'];
+              const nameParts = (backendUser.name || '').split(/\s+/);
               const frontendUser: User = {
                 id: user.id,
                 email: user.email || '',
-                firstName: nameParts[0] || user.name,
-                lastName: nameParts.slice(1).join(' ') || '',
+                firstName: (backendUser.first_name ?? nameParts[0] ?? '').trim() || nameParts[0] || '',
+                lastName: (backendUser.last_name ?? nameParts.slice(1).join(' ') ?? '').trim(),
                 role: user.account_type as any, // This will be updated from accounts
                 phone: user.phone || '',
                 createdAt: new Date().toISOString(),
@@ -145,13 +145,13 @@ export const useAuthStore = create<AuthStore>()(
                 localStorage.setItem('gemura-auth-token', token);
               }
 
-              // Map backend user to frontend User type
-              const nameParts = user.name.split(' ');
+              const regUser = user as RegisterResponseData['user'];
+              const regParts = (regUser.name || '').split(/\s+/);
               const frontendUser: User = {
                 id: '', // Register response doesn't include id, will be set after login
                 email: user.email || '',
-                firstName: nameParts[0] || user.name,
-                lastName: nameParts.slice(1).join(' ') || '',
+                firstName: (regUser.first_name ?? regParts[0] ?? '').trim() || regParts[0] || '',
+                lastName: (regUser.last_name ?? regParts.slice(1).join(' ') ?? '').trim(),
                 role: user.account_type as any,
                 phone: user.phone || '',
                 createdAt: new Date().toISOString(),

@@ -2,6 +2,8 @@ import { apiClient } from './client';
 
 export interface ProfileUser {
   id: string;
+  first_name?: string;
+  last_name?: string;
   name: string;
   email: string | null;
   phone: string | null;
@@ -38,7 +40,8 @@ export interface GetProfileResponse {
 }
 
 export interface UpdateProfilePayload {
-  name?: string;
+  first_name?: string;
+  last_name?: string;
   email?: string;
   phone?: string;
   nid?: string;

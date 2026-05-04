@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { composeUserFullName, splitIntoFirstLast } from './user-name-shared';
 
 const prisma = new PrismaClient();
 
@@ -27,6 +28,10 @@ async function main() {
   console.log(`✅ Account: ${account.name} (${account.code})`);
 
   // 2. Create user for Reponse
+  const reponseDisplay = 'Reponse Iradukunda';
+  const reponseParts = splitIntoFirstLast(reponseDisplay);
+  const reponseName = composeUserFullName(reponseParts.first_name, reponseParts.last_name) || reponseDisplay;
+
   const user = await prisma.user.upsert({
     where: { code: USER_CODE },
     update: {
@@ -35,7 +40,9 @@ async function main() {
     },
     create: {
       code: USER_CODE,
-      name: 'Reponse Iradukunda',
+      first_name: reponseParts.first_name,
+      last_name: reponseParts.last_name,
+      name: reponseName,
       // Local phone 0783349295 → international format 250783349295
       phone: '250783349295',
       email: 'reponse.iradukunda+seed@gemura.local',

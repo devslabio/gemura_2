@@ -10,6 +10,7 @@ import { TransactionsService } from '../accounting/transactions/transactions.ser
 import { TransactionType } from '../accounting/transactions/dto/create-transaction.dto';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
+import { composeUserFullName, splitIntoFirstLast } from '../../common/utils/user-name.util';
 
 @Injectable()
 export class InventoryService {
@@ -1118,10 +1119,21 @@ export class InventoryService {
         } else {
           // Create new user
           const userCode = `U_${randomBytes(3).toString('hex').toUpperCase()}`;
+          let { first_name: uFirst, last_name: uLast } = splitIntoFirstLast(
+            (createSaleDto.buyer_name ?? '').trim(),
+          );
+          let userDisplayName = composeUserFullName(uFirst, uLast) || (createSaleDto.buyer_name ?? '').trim();
+          if (!userDisplayName) {
+            uFirst = 'Customer';
+            uLast = '';
+            userDisplayName = 'Customer';
+          }
           newUser = await this.prisma.user.create({
             data: {
               code: userCode,
-              name: createSaleDto.buyer_name,
+              first_name: uFirst,
+              last_name: uLast,
+              name: userDisplayName,
               phone: normalizedPhone,
               password_hash: passwordHash,
               token,

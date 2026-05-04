@@ -13,7 +13,8 @@ class OnboardUserScreen extends ConsumerStatefulWidget {
 
 class _OnboardUserScreenState extends ConsumerState<OnboardUserScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _locationController = TextEditingController();
@@ -22,7 +23,8 @@ class _OnboardUserScreenState extends ConsumerState<OnboardUserScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
     _locationController.dispose();
@@ -128,15 +130,27 @@ class _OnboardUserScreenState extends ConsumerState<OnboardUserScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Name Field
         _buildTextField(
-          controller: _nameController,
-          label: 'Full Name',
-          hint: 'Enter full name',
+          controller: _firstNameController,
+          label: 'First name',
+          hint: 'Given name',
           icon: Icons.person,
           validator: (value) {
             if (value == null || value.trim().isEmpty) {
-              return 'Name is required';
+              return 'First name is required';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: AppTheme.spacing16),
+        _buildTextField(
+          controller: _lastNameController,
+          label: 'Last name',
+          hint: 'Family name',
+          icon: Icons.person_outline,
+          validator: (value) {
+            if (value == null || value.trim().isEmpty) {
+              return 'Last name is required';
             }
             return null;
           },
@@ -386,7 +400,8 @@ class _OnboardUserScreenState extends ConsumerState<OnboardUserScreen> {
   void _onboardUser() {
     if (_formKey.currentState!.validate()) {
       ref.read(onboardUserProvider.notifier).onboardUser(
-        name: _nameController.text.trim(),
+        firstName: _firstNameController.text.trim(),
+        lastName: _lastNameController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
         password: _passwordController.text,
         email: _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : null,

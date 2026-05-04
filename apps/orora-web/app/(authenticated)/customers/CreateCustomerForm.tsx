@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { fullNameFromParts } from '@/lib/utils/name';
 import { ENTITY_TYPE_OPTIONS } from '@/lib/constants/entity-types';
 import { customersApi, CreateCustomerData } from '@/lib/api/customers';
 import { useToastStore } from '@/store/toast';
@@ -16,7 +15,7 @@ interface CreateCustomerFormProps {
 export default function CreateCustomerForm({ onSuccess, onCancel }: CreateCustomerFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [formData, setFormData] = useState<Omit<CreateCustomerData, 'name'> & { firstName: string; lastName: string; price_per_liter: number; type: string }>({
+  const [formData, setFormData] = useState<Omit<CreateCustomerData, 'first_name' | 'last_name'> & { firstName: string; lastName: string; price_per_liter: number; type: string }>({
     firstName: '',
     lastName: '',
     phone: '',
@@ -67,7 +66,8 @@ export default function CreateCustomerForm({ onSuccess, onCancel }: CreateCustom
     setLoading(true);
     try {
       const finalData: CreateCustomerData = {
-        name: fullNameFromParts(formData.firstName, formData.lastName),
+        first_name: formData.firstName.trim(),
+        last_name: formData.lastName.trim(),
         phone: formData.phone,
         email: formData.email || undefined,
         nid: formData.nid || undefined,

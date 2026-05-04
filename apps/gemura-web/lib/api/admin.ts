@@ -83,7 +83,8 @@ export interface UsersResponse {
 }
 
 export interface CreateUserData {
-  name: string;
+  first_name: string;
+  last_name: string;
   email?: string;
   phone?: string;
   password: string;
@@ -98,7 +99,8 @@ export interface CreateUserData {
 }
 
 export interface UpdateUserData {
-  name?: string;
+  first_name?: string;
+  last_name?: string;
   email?: string;
   phone?: string;
   password?: string;

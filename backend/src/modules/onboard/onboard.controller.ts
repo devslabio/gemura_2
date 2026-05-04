@@ -43,7 +43,8 @@ export class OnboardController {
       minimalUser: {
         summary: 'Create user with minimal info',
         value: {
-          name: 'John Doe',
+          first_name: 'John',
+          last_name: 'Doe',
           phone_number: '+250788123456',
           password: 'SecurePassword123!',
         },
@@ -51,7 +52,8 @@ export class OnboardController {
       fullUser: {
         summary: 'Create user with all fields',
         value: {
-          name: 'Jane Smith',
+          first_name: 'Jane',
+          last_name: 'Smith',
           phone_number: '+250788654321',
           email: 'jane@example.com',
           location: 'Kigali, Rwanda',
@@ -90,7 +92,7 @@ export class OnboardController {
     example: {
       code: 400,
       status: 'error',
-      message: 'Token, name, and phone_number are required.',
+      message: 'Token, first_name, last_name, and phone_number are required.',
     },
   })
   @ApiUnauthorizedResponse({

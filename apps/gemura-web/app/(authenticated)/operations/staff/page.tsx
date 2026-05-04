@@ -126,7 +126,8 @@ export default function OperationsStaffPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteSaving, setInviteSaving] = useState(false);
   const [inviteForm, setInviteForm] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
     password: '',
@@ -231,8 +232,8 @@ export default function OperationsStaffPage() {
       toast.error('Email or phone is required');
       return;
     }
-    if (!inviteForm.name.trim()) {
-      toast.error('Name is required');
+    if (!inviteForm.firstName.trim() || !inviteForm.lastName.trim()) {
+      toast.error('First and last name are required');
       return;
     }
     if (!accountId) return;
@@ -240,7 +241,8 @@ export default function OperationsStaffPage() {
     try {
       const selected = INVITE_ROLE_PROFILES[inviteForm.profileKey];
       const res = await employeesApi.inviteEmployee({
-        name: inviteForm.name.trim(),
+        first_name: inviteForm.firstName.trim(),
+        last_name: inviteForm.lastName.trim(),
         email: inviteForm.email.trim() || undefined,
         phone: inviteForm.phone.trim() || undefined,
         password: inviteForm.password.trim() || undefined,
@@ -252,7 +254,8 @@ export default function OperationsStaffPage() {
         toast.success('Team member added.');
         setInviteOpen(false);
         setInviteForm({
-          name: '',
+          firstName: '',
+          lastName: '',
           email: '',
           phone: '',
           password: '',
@@ -509,16 +512,29 @@ export default function OperationsStaffPage() {
             />
           </div>
           <p className="text-xs text-gray-500">At least one of email or phone.</p>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-            <input
-              type="text"
-              value={inviteForm.name}
-              onChange={(e) => setInviteForm((f) => ({ ...f, name: e.target.value }))}
-              className="input w-full text-gray-900"
-              placeholder="Full name"
-              required
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">First name *</label>
+              <input
+                type="text"
+                value={inviteForm.firstName}
+                onChange={(e) => setInviteForm((f) => ({ ...f, firstName: e.target.value }))}
+                className="input w-full text-gray-900"
+                placeholder="Given name"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Last name *</label>
+              <input
+                type="text"
+                value={inviteForm.lastName}
+                onChange={(e) => setInviteForm((f) => ({ ...f, lastName: e.target.value }))}
+                className="input w-full text-gray-900"
+                placeholder="Family name"
+                required
+              />
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>

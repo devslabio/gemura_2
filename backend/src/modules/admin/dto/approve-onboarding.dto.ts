@@ -14,11 +14,19 @@ export class ApproveOnboardingDto {
 
   @ApiPropertyOptional({
     description:
-      'Link an existing Gemura user (phone must match submission manager phone). Skips user creation; creates account + wallet + system_admin UserAccount link.',
+      'Link an existing Gemura user (phone must match submission manager phone when linkExistingAccountId is omitted). Skips user creation; creates account + wallet + system_admin UserAccount link.',
   })
   @IsOptional()
   @IsUUID()
   linkExistingUserId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'When set with linkExistingUserId: approve as KYC only — link submission to this tenant/branch account. No new account, wallet, or membership is created; phone match is not required (admin-verified).',
+  })
+  @IsOptional()
+  @IsUUID()
+  linkExistingAccountId?: string;
 
   @ApiPropertyOptional({ description: 'Optional internal notes stored on the submission.' })
   @IsOptional()

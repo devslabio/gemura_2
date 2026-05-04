@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
+import { composeUserFullName, splitIntoFirstLast } from './user-name-shared';
 
 const prisma = new PrismaClient();
 
@@ -139,7 +140,12 @@ async function resolveCustomerAccountId(
   });
 
   if (existing) {
-    await prisma.user.update({ where: { id: existing.id }, data: { name } });
+    const { first_name: fn, last_name: ln } = splitIntoFirstLast(name);
+    const display = composeUserFullName(fn, ln) || name.trim();
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: { first_name: fn, last_name: ln, name: display },
+    });
     const ua = existing.user_accounts[0];
     if (ua) {
       await prisma.account.update({ where: { id: ua.account_id }, data: { name } });
@@ -148,10 +154,15 @@ async function resolveCustomerAccountId(
     return newAccountForCustomer(supplierId, existing.id, name, !existing.default_account_id);
   }
 
+  const { first_name: fn, last_name: ln } = splitIntoFirstLast(name);
+  const display = composeUserFullName(fn, ln) || name.trim();
+
   const user = await prisma.user.create({
     data: {
       code: `U_${hex()}`,
-      name,
+      first_name: fn,
+      last_name: ln,
+      name: display,
       phone,
       email: `${phone}+cust@gemura.local`,
       password_hash: pwdHash,

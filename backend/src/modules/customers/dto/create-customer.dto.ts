@@ -1,13 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, IsEmail, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsEmail, Min, IsNotEmpty, MaxLength } from 'class-validator';
 
 export class CreateCustomerDto {
-  @ApiProperty({
-    description: 'Customer name',
-    example: 'John Doe',
-  })
+  @ApiProperty({ description: 'Given name', example: 'Marie' })
+  @IsNotEmpty()
   @IsString()
-  name: string;
+  @MaxLength(80)
+  first_name: string;
+
+  @ApiProperty({ description: 'Family name', example: 'Mukamana' })
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(80)
+  last_name: string;
 
   @ApiProperty({
     description: 'Phone number',
@@ -54,4 +59,3 @@ export class CreateCustomerDto {
   @Min(0)
   price_per_liter?: number;
 }
-

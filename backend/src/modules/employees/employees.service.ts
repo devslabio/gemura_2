@@ -12,6 +12,7 @@ import {
   type RoleCode,
 } from '../admin/roles-permissions.config';
 import { RbacService } from '../rbac/rbac.service';
+import { composeUserFullName } from '../../common/utils/user-name.util';
 
 // Updated: Include is_owner flag for account owners
 type AccessGroup = 'general_access' | 'limited_access' | 'milk_receptionist_access';
@@ -460,9 +461,13 @@ export class EmployeesService {
         });
       }
       const hashedPassword = await bcrypt.hash(dto.password, 10);
+      const fn = dto.first_name.trim();
+      const ln = dto.last_name.trim();
       targetUser = await this.prisma.user.create({
         data: {
-          name: dto.name.trim(),
+          first_name: fn,
+          last_name: ln,
+          name: composeUserFullName(fn, ln),
           email: normalizedEmail || null,
           phone: normalizedPhone || null,
           password_hash: hashedPassword,

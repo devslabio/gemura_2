@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Post, Delete, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Put, Post, Delete, Body, UseGuards, Param } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiBadRequestResponse, ApiUnauthorizedResponse } from '@nestjs/swagger';
 import { ProfileService } from './profile.service';
 import { TokenGuard } from '../../common/guards/token.guard';
@@ -58,6 +58,24 @@ export class ProfileController {
   })
   async getProfile(@CurrentUser() user: User) {
     return this.profileService.getProfile(user);
+  }
+
+  @Get('mcc-onboarding/:submissionId')
+  @ApiOperation({
+    summary: 'Get your linked MCC gate onboarding (KYC) submission',
+    description:
+      'Returns the onboarding wizard payload for a row where `linked_user_id` is the current user. Not available for arbitrary submission IDs.',
+  })
+  @ApiResponse({ status: 200, description: 'Submission returned' })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid or missing authentication token',
+    example: { code: 403, status: 'error', message: 'Unauthorized. Invalid token.' },
+  })
+  async getOwnMccOnboarding(
+    @CurrentUser() user: User,
+    @Param('submissionId') submissionId: string,
+  ) {
+    return this.profileService.getOwnLinkedMccOnboarding(user, submissionId);
   }
 
   @Put('update')

@@ -42,7 +42,13 @@ export class UserDto {
   @ApiProperty()
   id: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Given name' })
+  first_name: string;
+
+  @ApiProperty({ description: 'Family name' })
+  last_name: string;
+
+  @ApiProperty({ description: 'Full display name (first + last)' })
   name: string;
 
   @ApiProperty()

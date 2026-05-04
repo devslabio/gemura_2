@@ -28,6 +28,8 @@ export interface SupplierDetails {
   status: string;
   user: {
     id: string;
+    first_name?: string;
+    last_name?: string;
     name: string;
     phone: string;
     email?: string;
@@ -45,7 +47,8 @@ export interface SupplierDetails {
 }
 
 export interface CreateSupplierData {
-  name: string;
+  first_name: string;
+  last_name: string;
   phone: string;
   price_per_liter: number;
   email?: string;

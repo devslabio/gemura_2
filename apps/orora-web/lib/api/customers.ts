@@ -28,6 +28,8 @@ export interface CustomerDetails {
   status: string;
   user: {
     id: string;
+    first_name?: string;
+    last_name?: string;
     name: string;
     phone: string;
     email?: string;
@@ -45,7 +47,8 @@ export interface CustomerDetails {
 }
 
 export interface CreateCustomerData {
-  name: string;
+  first_name: string;
+  last_name: string;
   phone: string;
   email?: string;
   nid?: string;
@@ -55,7 +58,8 @@ export interface CreateCustomerData {
 
 export interface UpdateCustomerData {
   customer_account_code: string;
-  name?: string;
+  first_name?: string;
+  last_name?: string;
   phone?: string;
   email?: string;
   nid?: string;

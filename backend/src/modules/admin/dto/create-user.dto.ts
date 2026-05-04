@@ -3,9 +3,13 @@ import { IsString, IsEmail, IsOptional, IsEnum, IsObject, MinLength, MaxLength, 
 import { UserStatus, UserAccountType } from '@prisma/client';
 
 export class CreateUserDto {
-  @ApiProperty({ example: 'John Doe' })
+  @ApiProperty({ example: 'John' })
   @IsString()
-  name: string;
+  first_name: string;
+
+  @ApiProperty({ example: 'Doe' })
+  @IsString()
+  last_name: string;
 
   @ApiPropertyOptional({ example: 'john.doe@example.com' })
   @IsEmail()

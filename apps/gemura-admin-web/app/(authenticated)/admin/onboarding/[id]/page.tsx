@@ -208,6 +208,12 @@ export default function OnboardingSubmissionDetailPage() {
   const [needsNotes, setNeedsNotes] = useState('');
   const [acting, setActing] = useState(false);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [linkSaving, setLinkSaving] = useState(false);
+  const [linkUserSearch, setLinkUserSearch] = useState('');
+  const [linkUserLoading, setLinkUserLoading] = useState(false);
+  const [linkUserResults, setLinkUserResults] = useState<Array<{ id: string; name: string; phone: string }>>([]);
+  const [linkUserPickId, setLinkUserPickId] = useState<string | null>(null);
+  const [linkUserPickLabel, setLinkUserPickLabel] = useState('');
 
   useEffect(() => {
     if (!PermissionService.canManageUsers() && !PermissionService.isAdmin()) {
@@ -217,6 +223,7 @@ export default function OnboardingSubmissionDetailPage() {
     let cancelled = false;
     (async () => {
       setLoading(true);
+      setSubmission(null);
       setError('');
       try {
         const res = await adminApi.getOnboardingSubmission(id, currentAccount?.account_id);
@@ -234,6 +241,51 @@ export default function OnboardingSubmissionDetailPage() {
     };
   }, [id, currentAccount?.account_id, router]);
 
+  useEffect(() => {
+    if (!submission?.id) {
+      setLinkUserPickId(null);
+      setLinkUserPickLabel('');
+      return;
+    }
+    setLinkUserPickId(submission.linked_user_id ?? null);
+    const lu = submission.linked_user as { name?: string; phone?: string } | undefined;
+    setLinkUserPickLabel(lu?.name ? `${lu.name} · ${lu.phone || '—'}` : '');
+    setLinkUserSearch('');
+    setLinkUserResults([]);
+  }, [submission?.id, submission?.linked_user_id]);
+
+  useEffect(() => {
+    if (!currentAccount?.account_id || linkUserPickId) return;
+    const q = linkUserSearch.trim();
+    if (q.length < 2) {
+      setLinkUserResults([]);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      setLinkUserLoading(true);
+      adminApi
+        .getUsers(1, 15, q, currentAccount.account_id)
+        .then((res) => {
+          if (!cancelled && res.code === 200 && res.data?.users) {
+            setLinkUserResults(
+              res.data.users.map((u) => ({ id: u.id, name: u.name, phone: u.phone || '—' })),
+            );
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setLinkUserResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setLinkUserLoading(false);
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [linkUserSearch, linkUserPickId, currentAccount?.account_id]);
+
   const refresh = async () => {
     const res = await adminApi.getOnboardingSubmission(id, currentAccount?.account_id);
     if (res.code === 200 && res.data) setSubmission(res.data as Submission);
@@ -241,8 +293,8 @@ export default function OnboardingSubmissionDetailPage() {
 
   const onApprove = async () => {
     if (!submission) return;
-    if (submission.review_status === 'approved' && submission.linked_user_id) {
-      useToastStore.getState().error('Already approved.');
+    if (submission.review_status === 'approved') {
+      useToastStore.getState().error('This submission is already approved.');
       return;
     }
     setActing(true);
@@ -266,6 +318,31 @@ export default function OnboardingSubmissionDetailPage() {
       useToastStore.getState().error(e?.response?.data?.message || e?.message || 'Approve failed');
     } finally {
       setActing(false);
+    }
+  };
+
+  const onSaveLink = async () => {
+    if (!linkUserPickId) {
+      useToastStore.getState().error('Search and select a user to link.');
+      return;
+    }
+    setLinkSaving(true);
+    try {
+      const res = await adminApi.linkOnboardingSubmission(
+        id,
+        { linkUserId: linkUserPickId },
+        currentAccount?.account_id,
+      );
+      if (res.code === 200) {
+        useToastStore.getState().success(res.message || 'Link saved');
+        await refresh();
+      } else {
+        useToastStore.getState().error((res as { message?: string }).message || 'Save failed');
+      }
+    } catch (e: any) {
+      useToastStore.getState().error(e?.response?.data?.message || e?.message || 'Save failed');
+    } finally {
+      setLinkSaving(false);
     }
   };
 
@@ -405,6 +482,77 @@ export default function OnboardingSubmissionDetailPage() {
           <code className="font-mono bg-white px-2 py-0.5 rounded border">{tempPassword}</code>
         </div>
       )}
+
+      <Card title="Link to existing user">
+        <div className="max-w-md space-y-2 relative">
+          {linkUserPickId ? (
+            <div className="flex items-center justify-between gap-3 rounded-sm border border-gray-200 bg-gray-50/80 px-3 py-2.5 text-sm">
+              <span className="text-gray-900 truncate" title={linkUserPickLabel || linkUserPickId}>
+                {linkUserPickLabel || linkUserPickId}
+              </span>
+              <button
+                type="button"
+                className="text-xs font-medium text-[var(--primary)] hover:underline shrink-0"
+                onClick={() => {
+                  setLinkUserPickId(null);
+                  setLinkUserPickLabel('');
+                  setLinkUserSearch('');
+                  setLinkUserResults([]);
+                }}
+                disabled={linkSaving}
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                className="w-full border border-gray-200 rounded-sm px-3 py-2.5 text-sm placeholder:text-gray-400"
+                placeholder="Search name or phone…"
+                aria-label="Search users by name or phone"
+                value={linkUserSearch}
+                onChange={(e) => setLinkUserSearch(e.target.value)}
+                disabled={linkSaving}
+                autoComplete="off"
+              />
+              {linkUserLoading && <p className="text-xs text-gray-400">Searching…</p>}
+              {linkUserResults.length > 0 && (
+                <ul className="absolute z-20 left-0 right-0 top-full mt-1 max-h-44 overflow-auto rounded-sm border border-gray-200 bg-white shadow-sm divide-y divide-gray-100">
+                  {linkUserResults.map((u) => (
+                    <li key={u.id}>
+                      <button
+                        type="button"
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                        onClick={() => {
+                          setLinkUserPickId(u.id);
+                          setLinkUserPickLabel(`${u.name} · ${u.phone}`);
+                          setLinkUserSearch('');
+                          setLinkUserResults([]);
+                        }}
+                        disabled={linkSaving}
+                      >
+                        <span className="font-medium text-gray-900">{u.name}</span>
+                        <span className="text-gray-500 text-xs font-mono ml-2 tabular-nums">{u.phone}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </div>
+        <p className="text-xs text-gray-400 mt-3 max-w-md leading-relaxed">
+          Clears a tenant link on this row if one exists. Does not approve or reject.
+        </p>
+        <button
+          type="button"
+          className="btn btn-primary mt-3 w-full sm:w-auto min-w-[8.5rem]"
+          disabled={linkSaving || !linkUserPickId}
+          onClick={onSaveLink}
+        >
+          {linkSaving ? 'Saving…' : 'Save link'}
+        </button>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card title="Business & manager" step="B">
@@ -743,7 +891,8 @@ export default function OnboardingSubmissionDetailPage() {
           <div className="bg-white border border-gray-200 rounded-sm p-6 space-y-3">
             <h3 className="font-semibold text-gray-900">Approve</h3>
             <p className="text-xs text-gray-600">
-              Creates a tenant account + default wallet and an MCC user (or links an existing user if phone matches).
+              Creates a new tenant account, default wallet, and MCC user (or links an existing user when their phone
+              matches the manager phone — optional user UUID below).
             </p>
             <label className="block text-xs text-gray-600">Optional password (min 8 chars)</label>
             <input
@@ -758,7 +907,7 @@ export default function OnboardingSubmissionDetailPage() {
             <label className="block text-xs text-gray-600">Link existing user UUID (optional)</label>
             <input
               className="w-full border border-gray-200 rounded-sm px-3 py-2 text-xs font-mono"
-              placeholder="Same phone as manager required"
+              placeholder="Phone must match submission manager phone"
               value={linkUserId}
               onChange={(e) => setLinkUserId(e.target.value)}
               disabled={acting}

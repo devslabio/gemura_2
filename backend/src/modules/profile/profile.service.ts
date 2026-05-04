@@ -4,6 +4,7 @@ import { User } from '@prisma/client';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ImmisService } from '../immis/immis.service';
 import { RbacService } from '../rbac/rbac.service';
+import { composeUserFullName, splitIntoFirstLast } from '../../common/utils/user-name.util';
 
 @Injectable()
 export class ProfileService {
@@ -71,7 +72,7 @@ export class ProfileService {
 
     // Calculate profile completion
     const profileFields = [
-      'name',
+      'first_name',
       'email',
       'phone',
       'province',
@@ -94,6 +95,24 @@ export class ProfileService {
 
     const profileCompletion = Math.round((completedFields / profileFields.length) * 100);
 
+    const mccOnboardings = await this.prisma.mccOnboardingSubmission.findMany({
+      where: { linked_user_id: user.id },
+      orderBy: { updated_at: 'desc' },
+      select: {
+        id: true,
+        submission_code: true,
+        business_name: true,
+        common_name: true,
+        review_status: true,
+        final_decision: true,
+        pass_count: true,
+        created_at: true,
+        reviewed_at: true,
+        linked_account_id: true,
+        linked_account: { select: { id: true, name: true, code: true } },
+      },
+    });
+
     return {
       code: 200,
       status: 'success',
@@ -101,6 +120,8 @@ export class ProfileService {
       data: {
         user: {
           id: user.id,
+          first_name: user.first_name,
+          last_name: user.last_name,
           name: user.name,
           email: user.email,
           phone: user.phone,
@@ -119,7 +140,62 @@ export class ProfileService {
         accounts,
         total_accounts: accounts.length,
         profile_completion: profileCompletion,
+        mcc_onboardings: mccOnboardings,
       },
+    };
+  }
+
+  /**
+   * Full MCC gate onboarding row linked to this user (admin linked `linked_user_id`).
+   * Read-only; excludes internal google sheet fields from the default Prisma return shape is fine.
+   */
+  async getOwnLinkedMccOnboarding(user: User, submissionId: string) {
+    const row = await this.prisma.mccOnboardingSubmission.findFirst({
+      where: {
+        id: submissionId,
+        linked_user_id: user.id,
+      },
+      select: {
+        id: true,
+        submission_code: true,
+        business_name: true,
+        common_name: true,
+        manager_first_name: true,
+        manager_last_name: true,
+        manager_phone: true,
+        manager_id_number: true,
+        location_province_id: true,
+        location_district_id: true,
+        location_sector_id: true,
+        location_cell_id: true,
+        location_village_id: true,
+        final_decision: true,
+        pass_count: true,
+        section_payload: true,
+        review_status: true,
+        review_notes: true,
+        reviewed_at: true,
+        created_at: true,
+        updated_at: true,
+        linked_user_id: true,
+        linked_account_id: true,
+        linked_account: { select: { id: true, name: true, code: true, type: true } },
+      },
+    });
+
+    if (!row) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Onboarding record not found or not linked to your account.',
+      });
+    }
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Onboarding retrieved successfully.',
+      data: row,
     };
   }
 
@@ -128,7 +204,26 @@ export class ProfileService {
       updated_by: user.id,
     };
 
-    if (updateDto.name) updateData.name = updateDto.name;
+    if (updateDto.first_name !== undefined) updateData.first_name = updateDto.first_name.trim();
+    if (updateDto.last_name !== undefined) updateData.last_name = updateDto.last_name.trim();
+    if (
+      updateDto.name !== undefined &&
+      updateDto.first_name === undefined &&
+      updateDto.last_name === undefined
+    ) {
+      const sp = splitIntoFirstLast(updateDto.name);
+      updateData.first_name = sp.first_name;
+      updateData.last_name = sp.last_name;
+    }
+    if (
+      updateData.first_name !== undefined ||
+      updateData.last_name !== undefined ||
+      updateDto.name !== undefined
+    ) {
+      const fn = (updateData.first_name ?? user.first_name ?? '').toString().trim();
+      const ln = (updateData.last_name ?? user.last_name ?? '').toString().trim();
+      updateData.name = composeUserFullName(fn, ln);
+    }
     if (updateDto.email !== undefined) updateData.email = updateDto.email || null;
     if (updateDto.phone) {
       // Normalize phone (remove non-digits)
@@ -161,11 +256,13 @@ export class ProfileService {
     }
 
     // Validate required fields
-    if (!updateData.name || !updateData.phone) {
+    const resolvedFirst = (updateData.first_name ?? user.first_name ?? '').toString().trim();
+    const resolvedPhone = (updateData.phone ?? user.phone ?? '').toString().trim();
+    if (!resolvedFirst || !resolvedPhone) {
       throw new BadRequestException({
         code: 400,
         status: 'error',
-        message: 'Name and phone are required.',
+        message: 'First name and phone are required.',
       });
     }
 

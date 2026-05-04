@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { fullNameFromParts } from '@/lib/utils/name';
 import { adminApi, type RoleItem, type CreateUserData } from '@/lib/api/admin';
 import { selectPlatformRolesForAssignment } from '@/lib/utils/platform-roles-picker';
 import { useToastStore } from '@/store/toast';
@@ -39,15 +38,13 @@ export default function CreateUserPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [catalogRoles, setCatalogRoles] = useState<RoleItem[]>([]);
 
-  type FormShape = Omit<CreateUserData, 'role'> & {
+  type FormShape = Omit<CreateUserData, 'first_name' | 'last_name'> & {
     confirmPassword: string;
     firstName: string;
     lastName: string;
-    platform_role_id: string;
   };
 
   const [formData, setFormData] = useState<FormShape>({
-    name: '',
     email: '',
     phone: '',
     password: '',
@@ -112,11 +109,11 @@ export default function CreateUserPage() {
 
     setLoading(true);
     try {
-      const { confirmPassword, firstName, lastName, platform_role_id, ...rest } = formData;
+      const { confirmPassword, firstName, lastName, ...core } = formData;
       const userData: CreateUserData = {
-        ...rest,
-        name: fullNameFromParts(firstName, lastName),
-        platform_role_id,
+        ...core,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
       };
 
       const response = await adminApi.createUser(userData, currentAccount?.account_id);

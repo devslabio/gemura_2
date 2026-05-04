@@ -91,7 +91,8 @@ export interface UsersResponse {
 }
 
 export interface CreateUserData {
-  name: string;
+  first_name: string;
+  last_name: string;
   email?: string;
   phone?: string;
   password: string;
@@ -103,7 +104,8 @@ export interface CreateUserData {
 }
 
 export interface UpdateUserData {
-  name?: string;
+  first_name?: string;
+  last_name?: string;
   email?: string;
   phone?: string;
   password?: string;
@@ -437,9 +439,24 @@ export const adminApi = {
     return apiClient.get(`/admin/onboarding-submissions/${submissionId}`, { params });
   },
 
+  linkOnboardingSubmission: async (
+    submissionId: string,
+    body: { linkUserId: string; linkAccountId?: string },
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: Record<string, unknown> }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.post(`/admin/onboarding-submissions/${submissionId}/link`, body, { params });
+  },
+
   approveOnboardingSubmission: async (
     submissionId: string,
-    body: { password?: string; linkExistingUserId?: string; reviewNotes?: string },
+    body: {
+      password?: string;
+      linkExistingUserId?: string;
+      /** With linkExistingUserId: KYC-only — no new tenant; phone match not required. */
+      linkExistingAccountId?: string;
+      reviewNotes?: string;
+    },
     accountId?: string,
   ): Promise<{ code: number; status: string; message: string; data: Record<string, unknown> }> => {
     const params = accountId ? { account_id: accountId } : {};

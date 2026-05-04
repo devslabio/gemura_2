@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { composeUserFullName, splitIntoFirstLast } from './user-name-shared';
 
 const prisma = new PrismaClient();
 
@@ -14,6 +15,9 @@ const WALLET_CODE = process.env.MANZI_WALLET_CODE ?? 'W_MFZ';
 const DISPLAY_NAME = 'Manzi Fabrice';
 const PHONE = '250788000000';
 const EMAIL = 'manzi.fabrice+kwezi-test@gemura.local';
+
+const manziNameParts = splitIntoFirstLast(DISPLAY_NAME);
+const manziFullName = composeUserFullName(manziNameParts.first_name, manziNameParts.last_name) || DISPLAY_NAME;
 
 async function main() {
   const hashedPassword = await bcrypt.hash('Pass123!', 10);
@@ -49,7 +53,9 @@ async function main() {
       where: { id: byPhone.id },
       data: {
         code: USER_CODE,
-        name: DISPLAY_NAME,
+        first_name: manziNameParts.first_name,
+        last_name: manziNameParts.last_name,
+        name: manziFullName,
         email: EMAIL,
         password_hash: hashedPassword,
         token,
@@ -108,7 +114,9 @@ async function main() {
     user = await prisma.user.upsert({
       where: { code: USER_CODE },
       update: {
-        name: DISPLAY_NAME,
+        first_name: manziNameParts.first_name,
+        last_name: manziNameParts.last_name,
+        name: manziFullName,
         phone: PHONE,
         email: EMAIL,
         default_account_id: account.id,
@@ -118,7 +126,9 @@ async function main() {
       },
       create: {
         code: USER_CODE,
-        name: DISPLAY_NAME,
+        first_name: manziNameParts.first_name,
+        last_name: manziNameParts.last_name,
+        name: manziFullName,
         phone: PHONE,
         email: EMAIL,
         password_hash: hashedPassword,

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { PermissionService } from '@/lib/services/permission.service';
-import { fullNameFromParts, splitFullName } from '@/lib/utils/name';
+import { splitFullName } from '@/lib/utils/name';
 import { adminApi, type RoleItem, type UpdateUserData } from '@/lib/api/admin';
 import { selectPlatformRolesForAssignment } from '@/lib/utils/platform-roles-picker';
 import { useAuthStore } from '@/store/auth';
@@ -30,7 +30,7 @@ export default function EditUserPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [catalogRoles, setCatalogRoles] = useState<RoleItem[]>([]);
 
-  type FormShape = Omit<UpdateUserData, 'role'> & {
+  type FormShape = Omit<UpdateUserData, 'role' | 'first_name' | 'last_name'> & {
     confirmPassword: string;
     firstName: string;
     lastName: string;
@@ -38,7 +38,6 @@ export default function EditUserPage() {
   };
 
   const [formData, setFormData] = useState<FormShape>({
-    name: '',
     email: '',
     phone: '',
     password: '',
@@ -81,9 +80,10 @@ export default function EditUserPage() {
           const hit = rolesList.find((r) => r.code === slug || r.code === slugKey(slug));
           pid = hit?.id ?? '';
         }
-        const { firstName, lastName } = splitFullName(u.name || '');
+        const split = splitFullName(u.name || '');
+        const firstName = ((u as { first_name?: string }).first_name ?? split.firstName).trim();
+        const lastName = ((u as { last_name?: string }).last_name ?? split.lastName).trim();
         setFormData({
-          name: u.name || '',
           email: u.email || '',
           phone: u.phone || '',
           password: '',
@@ -130,7 +130,8 @@ export default function EditUserPage() {
       const { firstName, lastName, confirmPassword: _cp, platform_role_id, ...rest } = formData;
       const updateData: UpdateUserData = {
         ...rest,
-        name: fullNameFromParts(firstName, lastName),
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
         platform_role_id,
       };
       if (!updateData.password) delete updateData.password;

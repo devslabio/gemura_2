@@ -24,13 +24,15 @@ export class WalletDto {
 }
 
 export class RegisterDto {
-  @ApiProperty({
-    description: 'Full name of the user',
-    example: 'John Doe',
-  })
+  @ApiProperty({ description: 'Given name', example: 'John' })
   @IsString()
   @IsNotEmpty()
-  name: string;
+  first_name: string;
+
+  @ApiProperty({ description: 'Family name', example: 'Doe' })
+  @IsString()
+  @IsNotEmpty()
+  last_name: string;
 
   @ApiProperty({
     description: 'Phone number in Rwandan format (250XXXXXXXXX)',
@@ -59,7 +61,7 @@ export class RegisterDto {
   password: string;
 
   @ApiProperty({
-    description: 'Account name (optional, defaults to user name if not provided)',
+    description: 'Account name (optional, defaults to first + last name if not provided)',
     example: 'My Business Account',
     required: false,
   })

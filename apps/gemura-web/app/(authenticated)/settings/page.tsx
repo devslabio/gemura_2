@@ -3,13 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Icon, { faCog, faUser, faLock, faEnvelope, faPhone, faSpinner, faCheckCircle, faUserShield } from '@/app/components/Icon';
+import Icon, { faCog, faUser, faLock, faEnvelope, faPhone, faSpinner, faCheckCircle, faUserShield, faClipboardList } from '@/app/components/Icon';
 import { SkeletonBar } from '@/app/components/SkeletonLoader';
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
 import { usePermission } from '@/hooks/usePermission';
-import { fullNameFromParts, splitFullName } from '@/lib/utils/name';
-import { profileApi, UpdateProfilePayload } from '@/lib/api/profile';
+import { splitFullName } from '@/lib/utils/name';
+import { profileApi, type ProfileMccOnboardingSummary, UpdateProfilePayload } from '@/lib/api/profile';
 
 const ROLE_DEFINITIONS = [
   {
@@ -58,6 +58,7 @@ export default function SettingsPage() {
   });
   type TabId = 'profile' | 'password' | 'roles_permissions' | 'preferences';
   const [activeTab, setActiveTab] = useState<TabId>('profile');
+  const [mccOnboardings, setMccOnboardings] = useState<ProfileMccOnboardingSummary[]>([]);
 
   useEffect(() => {
     const role = (currentAccount?.role || '').toLowerCase();
@@ -82,13 +83,14 @@ export default function SettingsPage() {
       .then((res) => {
         if (res.code === 200 && res.data?.user) {
           const u = res.data.user;
-          const { firstName, lastName } = splitFullName(u.name || '');
+          const split = splitFullName(u.name || '');
           setProfile({
-            firstName,
-            lastName,
+            firstName: (u.first_name ?? split.firstName).trim(),
+            lastName: (u.last_name ?? split.lastName).trim(),
             email: u.email || '',
             phone: u.phone || '',
           });
+          setMccOnboardings(res.data.mcc_onboardings ?? []);
         }
       })
       .catch(() => {
@@ -109,18 +111,19 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       const payload: UpdateProfilePayload = {
-        name: fullNameFromParts(profile.firstName, profile.lastName) || undefined,
+        first_name: profile.firstName.trim() || undefined,
+        last_name: profile.lastName.trim() || undefined,
         email: profile.email.trim() || undefined,
         phone: profile.phone.trim() || undefined,
       };
       const res = await profileApi.updateProfile(payload);
       if (res.code === 200 && res.data?.user) {
         const u = res.data.user;
-        const parts = (u.name || '').split(' ');
+        const parts = (u.name || '').split(/\s+/);
         setUser({
           ...user!,
-          firstName: parts[0] || u.name || '',
-          lastName: parts.slice(1).join(' ') || '',
+          firstName: (u.first_name ?? parts[0] ?? '').trim() || parts[0] || '',
+          lastName: (u.last_name ?? parts.slice(1).join(' ') ?? '').trim(),
           email: u.email || '',
           phone: u.phone || '',
         });
@@ -169,6 +172,42 @@ export default function SettingsPage() {
         {/* Profile tab */}
         {activeTab === 'profile' && (
           <div className="p-6 sm:p-8">
+            {!loading && mccOnboardings.length > 0 && (
+              <div className="mb-8 rounded-lg border border-gray-200 bg-gray-50/80 p-4 sm:p-5">
+                <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 m-0 mb-3">
+                  <Icon icon={faClipboardList} size="sm" />
+                  MCC gate onboarding (KYC)
+                </h3>
+                <ul className="space-y-2">
+                  {mccOnboardings.map((m) => (
+                    <li key={m.id}>
+                      <Link
+                        href={`/settings/mcc-kyc/${m.id}`}
+                        className="block rounded-md border border-gray-200 bg-white px-3 py-2.5 text-sm hover:border-(--primary) transition-colors"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium text-gray-900">{m.business_name}</span>
+                          <span
+                            className={`text-xs font-medium rounded px-2 py-0.5 shrink-0 ${
+                              m.review_status === 'approved'
+                                ? 'bg-green-100 text-green-800'
+                                : m.review_status === 'rejected'
+                                  ? 'bg-red-100 text-red-800'
+                                  : m.review_status === 'needs_changes'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : 'bg-amber-100 text-amber-900'
+                            }`}
+                          >
+                            {m.review_status.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500 font-mono mt-1">{m.submission_code}</div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="mb-8">
               <h3 className="text-lg font-semibold text-gray-900 m-0">Profile information</h3>
             </div>
