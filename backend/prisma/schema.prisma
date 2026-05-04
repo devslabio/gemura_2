@@ -362,6 +362,9 @@ model User {
   id                   String           @id @default(uuid()) @db.Uuid
   legacy_id            BigInt?          @unique @map("legacy_id") // For migration reference
   code                 String?          @unique
+  first_name           String           @map("first_name")
+  last_name            String           @map("last_name")
+  /// Denormalized full display name; kept equal to trim(first_name + " " + last_name) on writes.
   name                 String
   phone                String?          @unique
   email                String?

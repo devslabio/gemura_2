@@ -34,6 +34,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { LinkUserImmisDto } from './dto/link-user-immis.dto';
 import { ApproveOnboardingDto } from './dto/approve-onboarding.dto';
+import { LinkOnboardingSubmissionDto } from './dto/link-onboarding-submission.dto';
 import { RejectOnboardingDto } from './dto/reject-onboarding.dto';
 import { NeedsChangesOnboardingDto } from './dto/needs-changes-onboarding.dto';
 import { CreatePlatformRoleDto } from './dto/create-platform-role.dto';
@@ -299,6 +300,24 @@ export class AdminController {
     @Param('submissionId') submissionId: string,
   ) {
     return this.adminService.getMccOnboardingSubmissionById(user, accountId, submissionId);
+  }
+
+  @Post('onboarding-submissions/:submissionId/link')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Link onboarding submission to an existing Gemura user',
+    description:
+      'Sets linked_user_id (required). Optionally sets linked_account_id when linkAccountId is provided and the user is an active member of that tenant/branch; otherwise linked_account_id is cleared. Allowed for any review_status.',
+  })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiBody({ type: LinkOnboardingSubmissionDto })
+  async linkOnboardingSubmission(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('submissionId') submissionId: string,
+    @Body() dto: LinkOnboardingSubmissionDto,
+  ) {
+    return this.adminService.linkMccOnboardingSubmission(user, accountId, submissionId, dto);
   }
 
   @Post('onboarding-submissions/:submissionId/approve')

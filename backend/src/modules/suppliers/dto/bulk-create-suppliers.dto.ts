@@ -8,8 +8,8 @@ export class BulkCreateSuppliersDto {
     description: 'Array of suppliers to create or update',
     type: [CreateSupplierDto],
     example: [
-      { name: 'Supplier One', phone: '250788111111', price_per_liter: 390 },
-      { name: 'Supplier Two', phone: '250788222222', price_per_liter: 400, email: 'two@example.com' },
+      { first_name: 'Supplier', last_name: 'One', phone: '250788111111', price_per_liter: 390, nid: '1199887766554433' },
+      { first_name: 'Supplier', last_name: 'Two', phone: '250788222222', price_per_liter: 400, email: 'two@example.com', nid: '1199887766554434' },
     ],
   })
   @IsArray()

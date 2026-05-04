@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { fullNameFromParts } from '@/lib/utils/name';
 import { ENTITY_TYPE_OPTIONS } from '@/lib/constants/entity-types';
 import { suppliersApi, CreateSupplierData } from '@/lib/api/suppliers';
 import { useToastStore } from '@/store/toast';
@@ -16,7 +15,7 @@ interface CreateSupplierFormProps {
 export default function CreateSupplierForm({ onSuccess, onCancel }: CreateSupplierFormProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [formData, setFormData] = useState<Omit<CreateSupplierData, 'name'> & { firstName: string; lastName: string; type: string }>({
+  const [formData, setFormData] = useState<Omit<CreateSupplierData, 'first_name' | 'last_name'> & { firstName: string; lastName: string; type: string }>({
     firstName: '',
     lastName: '',
     phone: '',
@@ -91,7 +90,8 @@ export default function CreateSupplierForm({ onSuccess, onCancel }: CreateSuppli
     try {
       const normalizedPhone = formData.phone.replace(/\D/g, '');
       const finalData: CreateSupplierData = {
-        name: fullNameFromParts(formData.firstName, formData.lastName),
+        first_name: formData.firstName.trim(),
+        last_name: formData.lastName.trim(),
         phone: normalizedPhone,
         price_per_liter: formData.price_per_liter,
         email: formData.email || undefined,

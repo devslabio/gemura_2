@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { customersApi, Customer } from '@/lib/api/customers';
+import { splitFullName } from '@/lib/utils/name';
 import { useAuthStore } from '@/store/auth';
 import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import DataTableWithPagination from '@/app/components/DataTableWithPagination';
@@ -216,14 +217,18 @@ export default function CustomersPage() {
         ]}
         onDownloadTemplate={() => customersApi.downloadTemplate()}
         onBulkCreate={(rows) => {
-          const data: import('@/lib/api/customers').CreateCustomerData[] = rows.map((row) => ({
-            name: String(row.name ?? ''),
-            phone: String(row.phone ?? ''),
-            email: row.email != null ? String(row.email) : undefined,
-            nid: row.nid != null ? String(row.nid) : undefined,
-            address: row.address != null ? String(row.address) : undefined,
-            price_per_liter: row.price_per_liter != null ? Number(row.price_per_liter) : undefined,
-          }));
+          const data: import('@/lib/api/customers').CreateCustomerData[] = rows.map((row) => {
+            const { firstName, lastName } = splitFullName(String(row.name ?? ''));
+            return {
+              first_name: firstName,
+              last_name: lastName,
+              phone: String(row.phone ?? ''),
+              email: row.email != null ? String(row.email) : undefined,
+              nid: row.nid != null ? String(row.nid) : undefined,
+              address: row.address != null ? String(row.address) : undefined,
+              price_per_liter: row.price_per_liter != null ? Number(row.price_per_liter) : undefined,
+            };
+          });
           return customersApi.bulkCreate(data).then((r) => r.data);
         }}
         mapRow={(row) => ({

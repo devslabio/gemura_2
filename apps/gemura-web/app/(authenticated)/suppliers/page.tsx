@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { suppliersApi, Supplier } from '@/lib/api/suppliers';
+import { splitFullName } from '@/lib/utils/name';
 import { useAuthStore } from '@/store/auth';
 import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import DataTableWithPagination from '@/app/components/DataTableWithPagination';
@@ -260,16 +261,20 @@ export default function SuppliersPage() {
         ]}
         onDownloadTemplate={() => suppliersApi.downloadTemplate()}
         onBulkCreate={(rows) => {
-          const data: import('@/lib/api/suppliers').CreateSupplierData[] = rows.map((row) => ({
-            name: String(row.name ?? ''),
-            phone: String(row.phone ?? ''),
-            price_per_liter: Number(row.price_per_liter) || 0,
-            email: row.email != null ? String(row.email) : undefined,
-            nid: row.nid != null ? String(row.nid) : undefined,
-            address: row.address != null ? String(row.address) : undefined,
-            bank_name: row.bank_name != null ? String(row.bank_name) : undefined,
-            bank_account_number: row.bank_account_number != null ? String(row.bank_account_number) : undefined,
-          }));
+          const data: import('@/lib/api/suppliers').CreateSupplierData[] = rows.map((row) => {
+            const { firstName, lastName } = splitFullName(String(row.name ?? ''));
+            return {
+              first_name: firstName,
+              last_name: lastName,
+              phone: String(row.phone ?? ''),
+              price_per_liter: Number(row.price_per_liter) || 0,
+              email: row.email != null ? String(row.email) : undefined,
+              nid: row.nid != null ? String(row.nid) : undefined,
+              address: row.address != null ? String(row.address) : undefined,
+              bank_name: row.bank_name != null ? String(row.bank_name) : undefined,
+              bank_account_number: row.bank_account_number != null ? String(row.bank_account_number) : undefined,
+            };
+          });
           return suppliersApi.bulkCreate(data).then((r) => r.data);
         }}
         mapRow={(row) => ({

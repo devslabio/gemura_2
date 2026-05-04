@@ -9,8 +9,18 @@ function isCredentialSubmissionRequest(config?: InternalAxiosRequestConfig): boo
 }
 
 // Same Nest backend and DB as Gemura Web; only the Next app host differs.
-// If NEXT_PUBLIC_API_URL is not set, default to same-origin `/api` (e.g. nginx proxies admin host to the API).
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api";
+// Nest uses global prefix `api`, so the browser must call `/api/...` on the API host.
+// If NEXT_PUBLIC_API_URL is unset, default to same-origin `/api` (see next.config.ts dev rewrites).
+function normalizeApiBaseUrl(raw: string): string {
+  const s = raw.trim();
+  if (!s) return "/api";
+  const base = s.replace(/\/+$/, "");
+  if (base === "/api" || base.endsWith("/api")) return base;
+  if (/^https?:\/\//i.test(base)) return `${base}/api`;
+  return base;
+}
+
+const API_BASE_URL = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_URL || "/api");
 
 class ApiClient {
   private client: AxiosInstance;

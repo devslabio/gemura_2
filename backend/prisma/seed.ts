@@ -1,7 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { composeUserFullName, splitIntoFirstLast } from './user-name-shared';
 
 const prisma = new PrismaClient();
+
+function userNameFields(display: string) {
+  const { first_name, last_name } = splitIntoFirstLast(display);
+  const name = composeUserFullName(first_name, last_name) || display.trim();
+  return { first_name, last_name, name };
+}
 
 /** Canonical demo password for seeded users (login identifier = phone). */
 const SEED_DEMO_PASSWORD = 'Pass123!';
@@ -34,7 +41,7 @@ async function main() {
   const mainUser = await prisma.user.upsert({
     where: { code: 'USER_MAIN_001' },
     update: {
-      name: 'System Admin',
+      ...userNameFields('System Admin'),
       email: 'system.admin@gemura.rw',
       password_hash: hashedPassword,
       token: authToken,
@@ -42,7 +49,7 @@ async function main() {
     },
     create: {
       code: 'USER_MAIN_001',
-      name: 'System Admin',
+      ...userNameFields('System Admin'),
       email: 'system.admin@gemura.rw',
       phone: '250788606765',
       password_hash: hashedPassword,
@@ -100,7 +107,7 @@ async function main() {
     const u = await prisma.user.upsert({
       where: { phone: row.phone },
       update: {
-        name: row.name,
+        ...userNameFields(row.name),
         code: row.code,
         email: row.email,
         password_hash: hashedPassword,
@@ -110,7 +117,7 @@ async function main() {
       },
       create: {
         code: row.code,
-        name: row.name,
+        ...userNameFields(row.name),
         phone: row.phone,
         email: row.email,
         password_hash: hashedPassword,
@@ -206,7 +213,7 @@ async function main() {
   const demoCustomerUser = await prisma.user.upsert({
     where: { phone: '250788409027' },
     update: {
-      name: 'Demo Customer',
+      ...userNameFields('Demo Customer'),
       code: 'U_ROLE_CUST',
       email: 'customer@gemura.rw',
       password_hash: hashedPassword,
@@ -216,7 +223,7 @@ async function main() {
     },
     create: {
       code: 'U_ROLE_CUST',
-      name: 'Demo Customer',
+      ...userNameFields('Demo Customer'),
       phone: '250788409027',
       email: 'customer@gemura.rw',
       password_hash: hashedPassword,
@@ -322,7 +329,7 @@ async function main() {
       },
       create: {
         code: supplier.user_code,
-        name: supplier.name,
+        ...userNameFields(supplier.name),
         email: supplier.email,
         phone: supplier.phone,
         password_hash: hashedPassword,

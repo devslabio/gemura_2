@@ -16,7 +16,8 @@ class AddCustomerScreen extends ConsumerStatefulWidget {
 
 class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
+  final _firstNameController = TextEditingController();
+  final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _addressController = TextEditingController();
@@ -26,12 +27,26 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
+    _firstNameController.dispose();
+    _lastNameController.dispose();
     _phoneController.dispose();
     _emailController.dispose();
     _addressController.dispose();
     _priceController.dispose();
     super.dispose();
+  }
+
+  void _applyDisplayNameFromContact(String? display) {
+    final t = (display ?? '').trim();
+    if (t.isEmpty) return;
+    final i = t.indexOf(' ');
+    if (i < 0) {
+      _firstNameController.text = t;
+      _lastNameController.text = '';
+    } else {
+      _firstNameController.text = t.substring(0, i).trim();
+      _lastNameController.text = t.substring(i + 1).trim();
+    }
   }
 
   Future<void> _pickContact() async {
@@ -66,9 +81,9 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
           final phone = selectedContact.phones!.first.value ?? '';
           setState(() {
             _phoneController.text = phone;
-            // Also populate name if it's empty
-            if (_nameController.text.trim().isEmpty) {
-              _nameController.text = selectedContact.displayName ?? '';
+            if (_firstNameController.text.trim().isEmpty &&
+                _lastNameController.text.trim().isEmpty) {
+              _applyDisplayNameFromContact(selectedContact.displayName);
             }
           });
         }
@@ -93,7 +108,8 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
 
       try {
         await ref.read(customersNotifierProvider.notifier).createCustomer(
-          name: _nameController.text.trim(),
+          firstName: _firstNameController.text.trim(),
+          lastName: _lastNameController.text.trim(),
           phone: _phoneController.text.trim(),
           email: _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
           address: _addressController.text.trim().isEmpty ? null : _addressController.text.trim(),
@@ -101,9 +117,11 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
         );
 
         if (mounted) {
+          final addedName =
+              '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}'.trim();
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Customer "${_nameController.text.trim()}" added successfully!'),
+              content: Text('Customer "$addedName" added successfully!'),
               backgroundColor: AppTheme.snackbarSuccessColor,
             ),
           );
@@ -144,13 +162,11 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
 
-              
-              // Name
               TextFormField(
-                controller: _nameController,
+                controller: _firstNameController,
                 style: AppTheme.bodyMedium,
                 decoration: InputDecoration(
-                  hintText: 'Customer Name',
+                  hintText: 'First name',
                   prefixIcon: const Icon(Icons.person),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
@@ -168,7 +184,35 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return 'Please enter customer name';
+                    return 'Please enter first name';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: AppTheme.spacing12),
+              TextFormField(
+                controller: _lastNameController,
+                style: AppTheme.bodyMedium,
+                decoration: InputDecoration(
+                  hintText: 'Last name',
+                  prefixIcon: const Icon(Icons.person_outline),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
+                    borderSide: BorderSide(color: AppTheme.thinBorderColor, width: AppTheme.thinBorderWidth),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
+                    borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
+                  ),
+                  filled: true,
+                  fillColor: AppTheme.surfaceColor,
+                ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter last name';
                   }
                   return null;
                 },

@@ -7,7 +7,7 @@ import { SkeletonBar } from '@/app/components/SkeletonLoader';
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
 import { usePermission } from '@/hooks/usePermission';
-import { fullNameFromParts, splitFullName } from '@/lib/utils/name';
+import { splitFullName } from '@/lib/utils/name';
 import { profileApi, UpdateProfilePayload } from '@/lib/api/profile';
 import { employeesApi, type EmployeeItem, type RoleOption } from '@/lib/api/employees';
 import Modal from '@/app/components/Modal';
@@ -42,7 +42,14 @@ export default function SettingsPage() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editEmployee, setEditEmployee] = useState<EmployeeItem | null>(null);
   const [deactivateEmployee, setDeactivateEmployee] = useState<EmployeeItem | null>(null);
-  const [inviteForm, setInviteForm] = useState({ name: '', email: '', phone: '', password: '', role: 'viewer' });
+  const [inviteForm, setInviteForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    password: '',
+    role: 'viewer',
+  });
   const [editRole, setEditRole] = useState('');
   type TabId = 'profile' | 'password' | 'team' | 'preferences';
   const [activeTab, setActiveTab] = useState<TabId>('profile');
@@ -93,10 +100,10 @@ export default function SettingsPage() {
       .then((res) => {
         if (res.code === 200 && res.data?.user) {
           const u = res.data.user;
-          const { firstName, lastName } = splitFullName(u.name || '');
+          const split = splitFullName(u.name || '');
           setProfile({
-            firstName,
-            lastName,
+            firstName: (u.first_name ?? split.firstName).trim(),
+            lastName: (u.last_name ?? split.lastName).trim(),
             email: u.email || '',
             phone: u.phone || '',
           });
@@ -120,18 +127,19 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       const payload: UpdateProfilePayload = {
-        name: fullNameFromParts(profile.firstName, profile.lastName) || undefined,
+        first_name: profile.firstName.trim() || undefined,
+        last_name: profile.lastName.trim() || undefined,
         email: profile.email.trim() || undefined,
         phone: profile.phone.trim() || undefined,
       };
       const res = await profileApi.updateProfile(payload);
       if (res.code === 200 && res.data?.user) {
         const u = res.data.user;
-        const parts = (u.name || '').split(' ');
+        const parts = (u.name || '').split(/\s+/);
         setUser({
           ...user!,
-          firstName: parts[0] || u.name || '',
-          lastName: parts.slice(1).join(' ') || '',
+          firstName: (u.first_name ?? parts[0] ?? '').trim() || parts[0] || '',
+          lastName: (u.last_name ?? parts.slice(1).join(' ') ?? '').trim(),
           email: u.email || '',
           phone: u.phone || '',
         });
@@ -152,14 +160,15 @@ export default function SettingsPage() {
       showToast('Email or phone is required', 'error');
       return;
     }
-    if (!inviteForm.name.trim()) {
-      showToast('Name is required', 'error');
+    if (!inviteForm.firstName.trim() || !inviteForm.lastName.trim()) {
+      showToast('First and last name are required', 'error');
       return;
     }
     setSaving(true);
     try {
       const res = await employeesApi.inviteEmployee({
-        name: inviteForm.name.trim(),
+        first_name: inviteForm.firstName.trim(),
+        last_name: inviteForm.lastName.trim(),
         email: inviteForm.email.trim() || undefined,
         phone: inviteForm.phone.trim() || undefined,
         password: inviteForm.password.trim() || undefined,
@@ -169,7 +178,7 @@ export default function SettingsPage() {
       if (res.code === 201 || res.code === 200) {
         showToast('Team member added successfully', 'success');
         setInviteOpen(false);
-        setInviteForm({ name: '', email: '', phone: '', password: '', role: 'viewer' });
+        setInviteForm({ firstName: '', lastName: '', email: '', phone: '', password: '', role: 'viewer' });
         loadEmployees();
       } else {
         showToast((res as any).message || 'Failed to add team member', 'error');
@@ -452,16 +461,29 @@ export default function SettingsPage() {
             />
           </div>
           <p className="text-xs text-gray-500">Provide at least one of email or phone.</p>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
-            <input
-              type="text"
-              value={inviteForm.name}
-              onChange={(e) => setInviteForm((f) => ({ ...f, name: e.target.value }))}
-              className="input w-full"
-              placeholder="Full name"
-              required
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">First name *</label>
+              <input
+                type="text"
+                value={inviteForm.firstName}
+                onChange={(e) => setInviteForm((f) => ({ ...f, firstName: e.target.value }))}
+                className="input w-full"
+                placeholder="Given name"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Last name *</label>
+              <input
+                type="text"
+                value={inviteForm.lastName}
+                onChange={(e) => setInviteForm((f) => ({ ...f, lastName: e.target.value }))}
+                className="input w-full"
+                placeholder="Family name"
+                required
+              />
+            </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>

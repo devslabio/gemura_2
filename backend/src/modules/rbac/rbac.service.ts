@@ -18,6 +18,12 @@ export class RbacService implements OnModuleInit {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /** When true, default role↔permission links are re-applied from code (matches fresh localhost). */
+  private shouldResetRolePermissionLinks(): boolean {
+    const v = (process.env.RBAC_RESET_ROLE_PERMISSIONS || '').trim().toLowerCase();
+    return v === '1' || v === 'true' || v === 'yes';
+  }
+
   async onModuleInit(): Promise<void> {
     try {
       await this.ensureCatalogFromConfig();
@@ -33,8 +39,18 @@ export class RbacService implements OnModuleInit {
    * **Role ↔ permission links** are seeded from ROLE_DEFAULT_PERMISSIONS only when a role has **no**
    * rows yet (`platform_role_permissions`). After that, admins assign permissions via
    * `PUT /admin/platform-roles/:roleId`; restarting the API does not wipe stored grants.
+   *
+   * Set **`RBAC_RESET_ROLE_PERMISSIONS=1`** for one boot to delete each role’s links and re-apply
+   * `ROLE_DEFAULT_PERMISSIONS` (same matrix as a new local API). Unset afterward so UAT/prod custom grants survive.
    */
   async ensureCatalogFromConfig(): Promise<void> {
+    const resetLinks = this.shouldResetRolePermissionLinks();
+    if (resetLinks) {
+      this.logger.warn(
+        'RBAC_RESET_ROLE_PERMISSIONS: re-applying default permission links from roles-permissions.config (unset after one successful boot to keep admin edits).',
+      );
+    }
+
     for (const p of PERMISSIONS) {
       const existing = await this.prisma.platformPermission.findUnique({ where: { code: p.code } });
       const id = existing?.id ?? randomUUID();
@@ -86,7 +102,11 @@ export class RbacService implements OnModuleInit {
       const linkCount = await this.prisma.platformRolePermission.count({
         where: { platform_role_id: roleRow.id },
       });
-      if (linkCount > 0) {
+      if (resetLinks && linkCount > 0) {
+        await this.prisma.platformRolePermission.deleteMany({
+          where: { platform_role_id: roleRow.id },
+        });
+      } else if (!resetLinks && linkCount > 0) {
         continue;
       }
 

@@ -54,7 +54,7 @@ export default function OnboardingSubmissionsPage() {
   const { canManageUsers, isAdmin } = usePermission();
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<Row[]>([]);
-  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [pendingCount, setPendingCount] = useState(0);
   const [statusFilter, setStatusFilter] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -214,135 +214,147 @@ export default function OnboardingSubmissionsPage() {
   if (loading && rows.length === 0) return <ListPageSkeleton />;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+    <div className="space-y-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold text-gray-900 flex items-center gap-2">
             <Icon icon={faClipboardList} />
             MCC onboarding
           </h1>
-          <p className="text-sm text-gray-600 mt-1">
-            Superadmin view for MCCs from the public onboarding wizard. Approve to create an account and link the applicant.
-            Rows come from the API database (<span className="font-mono text-xs">mcc_onboarding_submissions</span>
-            ); use <span className="font-medium">Status</span> to filter — default is <span className="font-medium">all</span>.
+          <p className="text-sm text-gray-500 mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span>Review and approve MCC applications from the public flow.</span>
+            {!loading && (
+              <span className="text-gray-400 tabular-nums whitespace-nowrap">
+                {pagination.total} {pagination.total === 1 ? 'row' : 'rows'}
+              </span>
+            )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {pendingCount > 0 && (
-            <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-900 px-3 py-1 text-sm font-medium">
+            <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-900 px-2.5 py-0.5 text-xs font-medium">
               {pendingCount} pending
             </span>
           )}
           <button
             type="button"
-            className="btn border border-gray-300 bg-white"
+            className="btn border border-gray-300 bg-white text-sm py-1.5"
             onClick={() => onExport('csv')}
             disabled={exporting !== null}
           >
-            {exporting === 'csv' ? 'Exporting CSV...' : 'Export CSV'}
+            {exporting === 'csv' ? 'Exporting CSV…' : 'Export CSV'}
           </button>
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-primary text-sm py-1.5"
             onClick={() => onExport('xlsx')}
             disabled={exporting !== null}
           >
-            {exporting === 'xlsx' ? 'Exporting Excel...' : 'Export Excel'}
+            {exporting === 'xlsx' ? 'Exporting Excel…' : 'Export Excel'}
           </button>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <form
-          className="flex items-center gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            setQuery(searchTerm.trim());
-            setPagination((p) => ({ ...p, page: 1 }));
-          }}
-        >
-          <input
-            className="border border-gray-200 rounded-sm px-3 py-2 text-sm bg-white w-72"
-            placeholder="Search business, manager, phone, or account code"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          <button type="submit" className="btn btn-primary">
-            Search
-          </button>
-          {query && (
-            <button
-              type="button"
-              className="btn border border-gray-300 bg-white"
-              onClick={() => {
-                setSearchTerm('');
-                setQuery('');
-                setPagination((p) => ({ ...p, page: 1 }));
-              }}
-            >
-              Clear
+      <div className="border-b border-gray-100 pb-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:gap-3">
+          <form
+            className="flex flex-1 min-w-0 items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setQuery(searchTerm.trim());
+              setPagination((p) => ({ ...p, page: 1 }));
+            }}
+          >
+            <input
+              className="border border-gray-200 rounded-sm px-3 py-1.5 text-sm bg-white flex-1 min-w-0 max-w-xl"
+              placeholder="Business, manager, phone, or account code"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            <button type="submit" className="btn btn-primary text-sm py-1.5 shrink-0">
+              Search
             </button>
-          )}
-        </form>
-        <label className="text-sm text-gray-600">Status</label>
-        <select
-          className="border border-gray-200 rounded-sm px-3 py-2 text-sm bg-white"
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setPagination((p) => ({ ...p, page: 1 }));
-          }}
-        >
-          {STATUS_OPTIONS.map((o) => (
-            <option key={o.value || 'all'} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        <label className="text-sm text-gray-600">Onboarded date</label>
-        <select
-          className="border border-gray-200 rounded-sm px-3 py-2 text-sm bg-white"
-          value={datePreset}
-          onChange={(e) => {
-            setDatePreset(e.target.value);
-            setPagination((p) => ({ ...p, page: 1 }));
-          }}
-        >
-          {DATE_PRESET_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-            </option>
-          ))}
-        </select>
-        {datePreset === 'custom' && (
-          <>
-            <input
-              type="date"
-              className="border border-gray-200 rounded-sm px-3 py-2 text-sm bg-white"
-              value={onboardedFrom}
-              onChange={(e) => {
-                setOnboardedFrom(e.target.value);
-                setPagination((p) => ({ ...p, page: 1 }));
-              }}
-            />
-            <span className="text-gray-500 text-sm">to</span>
-            <input
-              type="date"
-              className="border border-gray-200 rounded-sm px-3 py-2 text-sm bg-white"
-              value={onboardedTo}
-              onChange={(e) => {
-                setOnboardedTo(e.target.value);
-                setPagination((p) => ({ ...p, page: 1 }));
-              }}
-            />
-          </>
-        )}
-        {!loading && (
-          <span className="text-sm text-gray-500">
-            {pagination.total} total matching filter
-            {statusFilter === '' ? ' (all statuses)' : statusFilter === 'approved' ? ' (onboarded)' : ''}
-          </span>
-        )}
+            {query && (
+              <button
+                type="button"
+                className="btn border border-gray-300 bg-white text-sm py-1.5 shrink-0"
+                onClick={() => {
+                  setSearchTerm('');
+                  setQuery('');
+                  setPagination((p) => ({ ...p, page: 1 }));
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </form>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 lg:shrink-0">
+            <div className="flex items-center gap-2">
+              <label htmlFor="onboarding-status" className="text-xs font-medium text-gray-600 whitespace-nowrap">
+                Status
+              </label>
+              <select
+                id="onboarding-status"
+                className="border border-gray-200 rounded-sm px-2 py-1.5 text-sm bg-white w-[12rem]"
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                  setPagination((p) => ({ ...p, page: 1 }));
+                }}
+              >
+                {STATUS_OPTIONS.map((o) => (
+                  <option key={o.value || 'all'} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="onboarding-date" className="text-xs font-medium text-gray-600 whitespace-nowrap">
+                Onboarded
+              </label>
+              <select
+                id="onboarding-date"
+                className="border border-gray-200 rounded-sm px-2 py-1.5 text-sm bg-white w-[12rem]"
+                value={datePreset}
+                onChange={(e) => {
+                  setDatePreset(e.target.value);
+                  setPagination((p) => ({ ...p, page: 1 }));
+                }}
+              >
+                {DATE_PRESET_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {datePreset === 'custom' && (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="date"
+                  className="border border-gray-200 rounded-sm px-2 py-1.5 text-sm bg-white"
+                  value={onboardedFrom}
+                  onChange={(e) => {
+                    setOnboardedFrom(e.target.value);
+                    setPagination((p) => ({ ...p, page: 1 }));
+                  }}
+                />
+                <span className="text-gray-500 text-xs">–</span>
+                <input
+                  type="date"
+                  className="border border-gray-200 rounded-sm px-2 py-1.5 text-sm bg-white"
+                  value={onboardedTo}
+                  onChange={(e) => {
+                    setOnboardedTo(e.target.value);
+                    setPagination((p) => ({ ...p, page: 1 }));
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -354,35 +366,39 @@ export default function OnboardingSubmissionsPage() {
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-left text-gray-600">
               <tr>
-                <th className="px-4 py-3 font-medium">Business</th>
-                <th className="px-4 py-3 font-medium">Manager</th>
-                <th className="px-4 py-3 font-medium">Phone</th>
-                <th className="px-4 py-3 font-medium">Linked account</th>
-                <th className="px-4 py-3 font-medium">Review</th>
-                <th className="px-4 py-3 font-medium">Onboarded / Submitted</th>
-                <th className="px-4 py-3 font-medium w-24"></th>
+                <th className="px-3 py-2 font-medium w-10 text-right text-gray-500 tabular-nums">#</th>
+                <th className="px-3 py-2 font-medium">Business</th>
+                <th className="px-3 py-2 font-medium">Manager</th>
+                <th className="px-3 py-2 font-medium">Phone</th>
+                <th className="px-3 py-2 font-medium">Linked account</th>
+                <th className="px-3 py-2 font-medium">Review</th>
+                <th className="px-3 py-2 font-medium">Onboarded / submitted</th>
+                <th className="px-3 py-2 font-medium w-24"></th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                  <td colSpan={8} className="px-3 py-8 text-center text-gray-500">
                     No submissions found.
                   </td>
                 </tr>
               ) : (
-                rows.map((r) => (
+                rows.map((r, index) => (
                   <tr key={r.id} className="border-t border-gray-100 hover:bg-gray-50/80">
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2.5 text-right text-gray-500 tabular-nums text-xs w-10">
+                      {(pagination.page - 1) * pagination.limit + index + 1}
+                    </td>
+                    <td className="px-3 py-2.5">
                       <div className="font-medium text-gray-900">{r.business_name}</div>
                       {r.common_name && <div className="text-gray-500 text-xs">{r.common_name}</div>}
                       <div className="text-xs text-gray-400 font-mono">{r.submission_code}</div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2.5">
                       {r.manager_first_name} {r.manager_last_name}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs">{r.manager_phone}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2.5 font-mono text-xs">{r.manager_phone}</td>
+                    <td className="px-3 py-2.5">
                       {r.linked_account_id && r.linked_account ? (
                         <Link href={`/admin/accounts/${r.linked_account_id}`} className="text-primary hover:underline">
                           <span className="font-mono text-xs">{r.linked_account.code}</span>
@@ -392,7 +408,7 @@ export default function OnboardingSubmissionsPage() {
                         <span className="text-gray-400 text-xs">Not created yet</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2.5">
                       <span
                         className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
                           r.review_status === 'pending'
@@ -407,12 +423,12 @@ export default function OnboardingSubmissionsPage() {
                         {r.review_status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">
                       {r.review_status === 'approved' && r.reviewed_at
                         ? new Date(r.reviewed_at).toLocaleString()
                         : new Date(r.created_at).toLocaleString()}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-2.5">
                       <Link
                         href={`/admin/onboarding/${r.id}`}
                         className="inline-flex items-center gap-1 text-primary hover:underline text-sm font-medium"

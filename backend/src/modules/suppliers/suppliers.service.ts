@@ -7,6 +7,7 @@ import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
+import { composeUserFullName } from '../../common/utils/user-name.util';
 
 @Injectable()
 export class SuppliersService {
@@ -16,7 +17,10 @@ export class SuppliersService {
   ) {}
 
   async createOrUpdateSupplier(user: User, createDto: CreateSupplierDto) {
-    const { name, phone, price_per_liter, email, nid, address, bank_name, bank_account_number } = createDto;
+    const { phone, price_per_liter, email, nid, address, bank_name, bank_account_number } = createDto;
+    const fn = createDto.first_name.trim();
+    const ln = createDto.last_name.trim();
+    const userDisplayName = composeUserFullName(fn, ln);
     const normalizedBankName = bank_name?.trim() || null;
     const normalizedBankAccountNumber = bank_account_number?.trim() || null;
 
@@ -68,7 +72,7 @@ export class SuppliersService {
         const newAccount = await this.prisma.account.create({
           data: {
             code: accountCode,
-            name: existingUser.name || name,
+            name: existingUser.name || userDisplayName,
             bank_name: normalizedBankName,
             bank_account_number: normalizedBankAccountNumber,
             type: 'tenant',
@@ -125,7 +129,9 @@ export class SuppliersService {
       const newUser = await this.prisma.user.create({
         data: {
           code: userCode,
-          name,
+          first_name: fn,
+          last_name: ln,
+          name: userDisplayName,
           phone: normalizedPhone,
           email: email?.toLowerCase(),
           nid,
@@ -142,7 +148,7 @@ export class SuppliersService {
       const newAccount = await this.prisma.account.create({
         data: {
           code: accountCode,
-          name,
+          name: userDisplayName,
           bank_name: normalizedBankName,
           bank_account_number: normalizedBankAccountNumber,
           type: 'tenant',
@@ -184,7 +190,7 @@ export class SuppliersService {
 
       supplierAccountId = newAccount.id;
       supplierAccountCode = accountCode;
-      supplierName = name;
+      supplierName = userDisplayName;
     }
 
     if (normalizedBankName || normalizedBankAccountNumber) {

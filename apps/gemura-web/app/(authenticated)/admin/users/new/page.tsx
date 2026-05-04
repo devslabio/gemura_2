@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { fullNameFromParts } from '@/lib/utils/name';
 import { adminApi, CreateUserData } from '@/lib/api/admin';
 import { useToastStore } from '@/store/toast';
 import { useAuthStore } from '@/store/auth';
@@ -67,8 +66,12 @@ export default function CreateUserPage() {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [permissionList, setPermissionList] = useState<{ code: string; name: string }[]>(PERMISSIONS_FALLBACK);
-  const [formData, setFormData] = useState<CreateUserData & { confirmPassword: string; firstName: string; lastName: string }>({
-    name: '',
+  type AdminNewUserForm = Omit<CreateUserData, 'first_name' | 'last_name'> & {
+    firstName: string;
+    lastName: string;
+    confirmPassword: string;
+  };
+  const [formData, setFormData] = useState<AdminNewUserForm>({
     email: '',
     phone: '',
     password: '',
@@ -167,10 +170,11 @@ export default function CreateUserPage() {
     setLoading(true);
 
     try {
-      const { confirmPassword, firstName, lastName, ...rest } = formData;
+      const { confirmPassword, firstName, lastName, ...core } = formData;
       const userData: CreateUserData = {
-        ...rest,
-        name: fullNameFromParts(firstName, lastName),
+        ...core,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
       };
       const response = await adminApi.createUser(userData, currentAccount?.account_id);
 

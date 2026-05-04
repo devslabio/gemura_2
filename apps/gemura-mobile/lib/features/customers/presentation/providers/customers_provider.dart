@@ -38,7 +38,8 @@ class CustomersNotifier extends StateNotifier<AsyncValue<List<Customer>>> {
   }
 
   Future<void> createCustomer({
-    required String name,
+    required String firstName,
+    required String lastName,
     required String phone,
     String? email,
     String? nid,
@@ -48,7 +49,8 @@ class CustomersNotifier extends StateNotifier<AsyncValue<List<Customer>>> {
     try {
       // Create the customer via API
       await _customersService.createCustomer(
-        name: name,
+        firstName: firstName,
+        lastName: lastName,
         phone: phone,
         email: email,
         nid: nid,

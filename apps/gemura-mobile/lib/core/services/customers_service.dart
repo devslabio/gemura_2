@@ -62,7 +62,8 @@ class CustomersService {
 
   /// Create a new customer
   Future<void> createCustomer({
-    required String name,
+    required String firstName,
+    required String lastName,
     required String phone,
     String? email,
     String? nid,
@@ -73,7 +74,8 @@ class CustomersService {
       final response = await _dio.post(
         '/customers',
         data: {
-          'name': name,
+          'first_name': firstName,
+          'last_name': lastName,
           'phone': phone,
           'email': email,
           'nid': nid,

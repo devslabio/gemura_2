@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNumber, IsOptional, IsEmail, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsEmail, Min, MaxLength } from 'class-validator';
 
 export class UpdateCustomerDto {
   @ApiProperty({
@@ -9,8 +9,20 @@ export class UpdateCustomerDto {
   @IsString()
   customer_account_code: string;
 
+  @ApiProperty({ description: 'Given name', required: false })
+  @IsString()
+  @IsOptional()
+  @MaxLength(80)
+  first_name?: string;
+
+  @ApiProperty({ description: 'Family name', required: false })
+  @IsString()
+  @IsOptional()
+  @MaxLength(80)
+  last_name?: string;
+
   @ApiProperty({
-    description: 'Customer name',
+    description: 'Deprecated: full display name; split if first_name/last_name not sent',
     example: 'John Doe',
     required: false,
   })

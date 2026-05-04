@@ -22,6 +22,7 @@ import {
   isPlatformSuperAdminRole,
   type RoleCode,
 } from './roles-permissions.config';
+import { composeUserFullName, splitIntoFirstLast } from '../../common/utils/user-name.util';
 import * as ExcelJS from 'exceljs';
 import {
   buildCsvFromRows,
@@ -436,6 +437,8 @@ export class AdminService {
                 id: true,
                 code: true,
                 name: true,
+                type: true,
+                status: true,
               },
             },
           },
@@ -1397,9 +1400,13 @@ export class AdminService {
     const hashedPassword = await bcrypt.hash(createDto.password, 10);
 
     // Create user
+    const fn = createDto.first_name.trim();
+    const ln = createDto.last_name.trim();
     const newUser = await this.prisma.user.create({
       data: {
-        name: createDto.name,
+        first_name: fn,
+        last_name: ln,
+        name: composeUserFullName(fn, ln),
         email: createDto.email?.toLowerCase(),
         phone: createDto.phone,
         password_hash: hashedPassword,
@@ -1495,6 +1502,9 @@ export class AdminService {
       permissions: _dtoPermissions,
       platform_role_id: dtoPlatformRoleId,
       password: dtoPasswordField,
+      name: dtoLegacyName,
+      first_name: dtoFirst,
+      last_name: dtoLast,
       ...dtoForUserModel
     } = updateDto;
 
@@ -1503,6 +1513,19 @@ export class AdminService {
       ...dtoForUserModel,
       updated_by: user.id,
     };
+
+    if (dtoFirst !== undefined || dtoLast !== undefined || dtoLegacyName !== undefined) {
+      let first = dtoFirst !== undefined ? dtoFirst.trim() : targetUser.first_name;
+      let last = dtoLast !== undefined ? dtoLast.trim() : targetUser.last_name;
+      if (dtoLegacyName !== undefined && dtoFirst === undefined && dtoLast === undefined) {
+        const sp = splitIntoFirstLast(dtoLegacyName);
+        first = sp.first_name;
+        last = sp.last_name;
+      }
+      updateData.first_name = first;
+      updateData.last_name = last;
+      updateData.name = composeUserFullName(first, last);
+    }
 
     if (dtoPasswordField) {
       updateData.password_hash = await bcrypt.hash(dtoPasswordField, 10);
@@ -2567,7 +2590,7 @@ export class AdminService {
       include: {
         reviewed_by_user: { select: { id: true, name: true, email: true } },
         linked_user: { select: { id: true, name: true, email: true, phone: true } },
-        linked_account: { select: { id: true, code: true, name: true, status: true } },
+        linked_account: { select: { id: true, code: true, name: true, type: true, status: true } },
       },
     });
 
@@ -2586,6 +2609,98 @@ export class AdminService {
       status: 'success',
       message: 'Onboarding submission retrieved successfully.',
       data: { ...submission, location_labels },
+    };
+  }
+
+  async linkMccOnboardingSubmission(
+    user: User,
+    accountId: string,
+    submissionId: string,
+    dto: { linkUserId: string; linkAccountId?: string },
+  ) {
+    await this.checkAdminPermission(user, accountId);
+
+    const uid = dto.linkUserId.trim();
+    const aid = dto.linkAccountId?.trim();
+
+    const submission = await this.prisma.mccOnboardingSubmission.findUnique({ where: { id: submissionId } });
+    if (!submission) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Onboarding submission not found.',
+      });
+    }
+
+    const targetUser = await this.prisma.user.findUnique({ where: { id: uid } });
+    if (!targetUser) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'User not found.',
+      });
+    }
+
+    let linkedAccountId: string | null = null;
+
+    if (aid) {
+      const membership = await this.prisma.userAccount.findFirst({
+        where: {
+          user_id: uid,
+          account_id: aid,
+          status: 'active',
+        },
+        include: {
+          account: {
+            select: { id: true, code: true, name: true, type: true, status: true },
+          },
+        },
+      });
+
+      if (!membership?.account) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'That user is not an active member of the selected account.',
+        });
+      }
+
+      if (membership.account.status !== 'active') {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Account is not active.',
+        });
+      }
+
+      if (!['tenant', 'branch'].includes(membership.account.type)) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Only tenant or branch accounts can be linked for MCC onboarding.',
+        });
+      }
+
+      linkedAccountId = membership.account.id;
+    }
+
+    const updated = await this.prisma.mccOnboardingSubmission.update({
+      where: { id: submissionId },
+      data: {
+        linked_user_id: uid,
+        linked_account_id: linkedAccountId,
+      },
+      include: {
+        linked_user: { select: { id: true, name: true, email: true, phone: true } },
+        linked_account: { select: { id: true, code: true, name: true, type: true, status: true } },
+      },
+    });
+
+    return {
+      code: 200,
+      status: 'success',
+      message: linkedAccountId ? 'Submission linked to user and tenant.' : 'Submission linked to user.',
+      data: updated,
     };
   }
 
@@ -2898,12 +3013,9 @@ export class AdminService {
     user: User,
     accountId: string,
     submissionId: string,
-    dto: { password?: string; linkExistingUserId?: string; reviewNotes?: string },
+    dto: { password?: string; linkExistingUserId?: string; linkExistingAccountId?: string; reviewNotes?: string },
   ) {
     await this.checkAdminPermission(user, accountId);
-
-    const plainPassword =
-      dto.password && dto.password.length >= 8 ? dto.password : this.generateOnboardingTempPassword();
 
     const result = await this.prisma.$transaction(async (tx) => {
       const submission = await tx.mccOnboardingSubmission.findUnique({ where: { id: submissionId } });
@@ -2933,6 +3045,86 @@ export class AdminService {
           message: 'Only pending or needs_changes submissions can be approved.',
         });
       }
+
+      const linkExistingAccountId = dto.linkExistingAccountId?.trim();
+      if (linkExistingAccountId) {
+        const uid = dto.linkExistingUserId?.trim();
+        if (!uid) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'linkExistingUserId is required when linkExistingAccountId is set.',
+          });
+        }
+
+        const existingUser = await tx.user.findUnique({ where: { id: uid } });
+        if (!existingUser) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'Existing user not found.',
+          });
+        }
+
+        const membership = await tx.userAccount.findFirst({
+          where: {
+            user_id: uid,
+            account_id: linkExistingAccountId,
+            status: 'active',
+          },
+          include: {
+            account: {
+              select: { id: true, code: true, name: true, type: true, status: true },
+            },
+          },
+        });
+
+        if (!membership?.account) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'That user is not an active member of the selected account.',
+          });
+        }
+
+        if (membership.account.status !== 'active') {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'Account is not active.',
+          });
+        }
+
+        if (!['tenant', 'branch'].includes(membership.account.type)) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'Only tenant or branch accounts can be linked for MCC KYC.',
+          });
+        }
+
+        const updatedSubmission = await tx.mccOnboardingSubmission.update({
+          where: { id: submissionId },
+          data: {
+            review_status: MccOnboardingReviewStatus.approved,
+            review_notes: dto.reviewNotes ?? null,
+            reviewed_at: new Date(),
+            reviewed_by_user_id: user.id,
+            linked_user_id: existingUser.id,
+            linked_account_id: membership.account.id,
+          },
+        });
+
+        return {
+          flow: 'kyc_existing' as const,
+          updatedSubmission,
+          linkedUser: existingUser,
+          linkedAccount: membership.account,
+        };
+      }
+
+      const plainPassword =
+        dto.password && dto.password.length >= 8 ? dto.password : this.generateOnboardingTempPassword();
 
       const managerPhoneDigits = this.normalizePhoneDigits(submission.manager_phone);
       if (!managerPhoneDigits || managerPhoneDigits.length < 9) {
@@ -2974,10 +3166,14 @@ export class AdminService {
           });
         }
         const hashedPassword = await bcrypt.hash(plainPassword, 10);
-        const displayName = `${submission.manager_first_name} ${submission.manager_last_name}`.trim();
+        const fn = (submission.manager_first_name ?? '').trim();
+        const ln = (submission.manager_last_name ?? '').trim();
+        const displayName = composeUserFullName(fn, ln) || submission.business_name.trim();
         linkedUser = await tx.user.create({
           data: {
-            name: displayName || submission.business_name,
+            first_name: fn || displayName,
+            last_name: ln,
+            name: displayName,
             phone: managerPhoneDigits,
             email: null,
             nid: submission.manager_id_number,
@@ -3050,8 +3246,38 @@ export class AdminService {
         },
       });
 
-      return { updatedSubmission, linkedUser, newAccount, createdNewUser: !dto.linkExistingUserId };
+      return {
+        flow: 'create_tenant' as const,
+        updatedSubmission,
+        linkedUser,
+        newAccount,
+        createdNewUser: !dto.linkExistingUserId,
+        plainPassword,
+      };
     });
+
+    if (result.flow === 'kyc_existing') {
+      return {
+        code: 200,
+        status: 'success',
+        message: 'Submission approved and linked as KYC to the selected tenant.',
+        data: {
+          submission: result.updatedSubmission,
+          user: {
+            id: result.linkedUser.id,
+            name: result.linkedUser.name,
+            phone: result.linkedUser.phone,
+            email: result.linkedUser.email,
+          },
+          account: {
+            id: result.linkedAccount.id,
+            code: result.linkedAccount.code,
+            name: result.linkedAccount.name,
+          },
+          tempPassword: undefined,
+        },
+      };
+    }
 
     return {
       code: 200,
@@ -3070,7 +3296,7 @@ export class AdminService {
           code: result.newAccount.code,
           name: result.newAccount.name,
         },
-        tempPassword: result.createdNewUser ? plainPassword : undefined,
+        tempPassword: result.createdNewUser ? result.plainPassword : undefined,
       },
     };
   }

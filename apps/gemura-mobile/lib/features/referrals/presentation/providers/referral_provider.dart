@@ -199,7 +199,8 @@ class OnboardUserNotifier extends StateNotifier<OnboardUserState> {
   OnboardUserNotifier() : super(const OnboardUserState());
 
   Future<void> onboardUser({
-    required String name,
+    required String firstName,
+    required String lastName,
     required String phoneNumber,
     required String password,
     String? email,
@@ -209,7 +210,8 @@ class OnboardUserNotifier extends StateNotifier<OnboardUserState> {
     
     try {
       final response = await ReferralService.onboardUser(
-        name: name,
+        firstName: firstName,
+        lastName: lastName,
         phoneNumber: phoneNumber,
         password: password,
         email: email,

@@ -9,6 +9,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as mysql from 'mysql2/promise';
 import * as bcrypt from 'bcrypt';
+import { composeUserFullName, splitIntoFirstLast } from '../common/utils/user-name.util';
 
 @Injectable()
 export class MigrationService {
@@ -195,12 +196,18 @@ export class MigrationService {
           passwordHash = await bcrypt.hash('Pass123!', 10);
         }
 
+        const rawName = (v1User.name || `User ${v1User.id}`).trim();
+        const { first_name: migratedFirst, last_name: migratedLast } = splitIntoFirstLast(rawName);
+        const migratedDisplay = composeUserFullName(migratedFirst, migratedLast) || rawName;
+
         // Create user in V2
         await this.prisma.user.create({
           data: {
             legacy_id: BigInt(v1User.id),
             code: v1User.code || null,
-            name: v1User.name || `User ${v1User.id}`,
+            first_name: migratedFirst,
+            last_name: migratedLast,
+            name: migratedDisplay,
             email: v1User.email || null,
             phone: v1User.phone || null,
             password_hash: passwordHash,

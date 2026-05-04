@@ -4,6 +4,8 @@ import { LoginCredentials, RegisterData, User, UserAccount } from '@/types';
 export interface LoginResponseData {
   user: {
     id: string;
+    first_name?: string;
+    last_name?: string;
     name: string;
     email: string;
     phone: string;
@@ -20,6 +22,8 @@ export interface LoginResponseData {
 export interface RegisterResponseData {
   user: {
     code?: string;
+    first_name?: string;
+    last_name?: string;
     name: string;
     email: string;
     phone: string;
@@ -73,18 +77,17 @@ export const authApi = {
   },
 
   register: async (data: RegisterData): Promise<AuthResponse | ErrorResponse> => {
-    // Backend expects 'name' (full name), not firstName/lastName separately
-    // Also requires account_type and phone
     if (!data.phone) {
       throw new Error('Phone number is required');
     }
-    
+
     return apiClient.post('/auth/register', {
-      name: `${data.firstName} ${data.lastName}`.trim(),
+      first_name: data.firstName.trim(),
+      last_name: data.lastName.trim(),
       email: data.email,
       phone: data.phone,
       password: data.password,
-      account_type: 'mcc', // Default account type
+      account_type: 'mcc',
     });
   },
 

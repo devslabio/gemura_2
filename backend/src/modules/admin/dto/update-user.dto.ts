@@ -3,7 +3,17 @@ import { IsString, IsEmail, IsOptional, IsEnum, IsObject, MinLength, MaxLength, 
 import { UserStatus, UserAccountType } from '@prisma/client';
 
 export class UpdateUserDto {
-  @ApiPropertyOptional({ example: 'John Doe Updated' })
+  @ApiPropertyOptional({ example: 'John' })
+  @IsString()
+  @IsOptional()
+  first_name?: string;
+
+  @ApiPropertyOptional({ example: 'Doe' })
+  @IsString()
+  @IsOptional()
+  last_name?: string;
+
+  @ApiPropertyOptional({ description: 'Deprecated: prefer first_name + last_name' })
   @IsString()
   @IsOptional()
   name?: string;

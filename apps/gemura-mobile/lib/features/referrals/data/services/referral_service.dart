@@ -75,7 +75,8 @@ class ReferralService {
 
   /// Onboard a new user
   static Future<Map<String, dynamic>> onboardUser({
-    required String name,
+    required String firstName,
+    required String lastName,
     required String phoneNumber,
     required String password,
     String? email,
@@ -85,8 +86,9 @@ class ReferralService {
       final response = await _dio.post(
         '/onboard/create-user',
         data: {
-          'name': name,
-          'phoneNumber': phoneNumber,
+          'first_name': firstName,
+          'last_name': lastName,
+          'phone_number': phoneNumber,
           'password': password,
           if (email != null) 'email': email,
           if (location != null) 'location': location,

@@ -5,6 +5,7 @@
  */
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import { composeUserFullName, splitIntoFirstLast } from './user-name-shared';
 
 const prisma = new PrismaClient();
 
@@ -31,6 +32,10 @@ async function main() {
   console.log(`✅ Account: ${account.name} (${account.code})`);
 
   // 2. Create user for Gahengeri (for created_by on farm/animals)
+  const gahengeriDisplay = 'Gahengeri Admin';
+  const gahengeriParts = splitIntoFirstLast(gahengeriDisplay);
+  const gahengeriName = composeUserFullName(gahengeriParts.first_name, gahengeriParts.last_name) || gahengeriDisplay;
+
   const user = await prisma.user.upsert({
     where: { code: USER_CODE },
     update: {
@@ -39,7 +44,9 @@ async function main() {
     },
     create: {
       code: USER_CODE,
-      name: 'Gahengeri Admin',
+      first_name: gahengeriParts.first_name,
+      last_name: gahengeriParts.last_name,
+      name: gahengeriName,
       email: 'gahengeri@orora.rw',
       phone: '250788000002',
       password_hash: hashedPassword,

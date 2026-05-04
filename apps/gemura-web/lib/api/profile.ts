@@ -2,6 +2,8 @@ import { apiClient } from './client';
 
 export interface ProfileUser {
   id: string;
+  first_name?: string;
+  last_name?: string;
   name: string;
   email: string | null;
   phone: string | null;
@@ -17,6 +19,21 @@ export interface ProfileAccount {
   code: string;
   name: string;
   type: string;
+}
+
+/** MCC gate wizard rows linked to this user (admin sets `linked_user_id`). */
+export interface ProfileMccOnboardingSummary {
+  id: string;
+  submission_code: string;
+  business_name: string;
+  common_name: string | null;
+  review_status: string;
+  final_decision: string;
+  pass_count: number;
+  created_at: string;
+  reviewed_at: string | null;
+  linked_account_id: string | null;
+  linked_account: { id: string; name: string; code: string | null } | null;
 }
 
 export interface GetProfileResponse {
@@ -36,11 +53,20 @@ export interface GetProfileResponse {
     }>;
     total_accounts?: number;
     profile_completion?: number;
+    mcc_onboardings?: ProfileMccOnboardingSummary[];
   };
 }
 
+export type MccOnboardingDetailResponse = {
+  code: number;
+  status: string;
+  message?: string;
+  data?: Record<string, unknown>;
+};
+
 export interface UpdateProfilePayload {
-  name?: string;
+  first_name?: string;
+  last_name?: string;
   email?: string;
   phone?: string;
   nid?: string;
@@ -59,6 +85,9 @@ export interface UpdateProfilePayload {
 export const profileApi = {
   getProfile: (): Promise<GetProfileResponse> =>
     apiClient.get<GetProfileResponse>('/profile/get'),
+
+  getOwnMccOnboarding: (submissionId: string): Promise<MccOnboardingDetailResponse> =>
+    apiClient.get<MccOnboardingDetailResponse>(`/profile/mcc-onboarding/${submissionId}`),
 
   updateProfile: (data: UpdateProfilePayload): Promise<GetProfileResponse> =>
     apiClient.put<GetProfileResponse>('/profile/update', data),

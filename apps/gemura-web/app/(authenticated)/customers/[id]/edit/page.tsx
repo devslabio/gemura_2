@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { usePermission } from '@/hooks/usePermission';
 import { useAuthStore } from '@/store/auth';
-import { fullNameFromParts, splitFullName } from '@/lib/utils/name';
+import { splitFullName } from '@/lib/utils/name';
 import { ENTITY_TYPE_OPTIONS } from '@/lib/constants/entity-types';
 import { customersApi, UpdateCustomerData, CustomerDetails } from '@/lib/api/customers';
 import { useToastStore } from '@/store/toast';
@@ -29,7 +29,7 @@ export default function EditCustomerPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [customer, setCustomer] = useState<CustomerDetails | null>(null);
-  const [formData, setFormData] = useState<Omit<UpdateCustomerData, 'name'> & { firstName: string; lastName: string; type: string }>({
+  const [formData, setFormData] = useState<Omit<UpdateCustomerData, 'first_name' | 'last_name'> & { firstName: string; lastName: string; type: string }>({
     customer_account_code: '',
     firstName: '',
     lastName: '',
@@ -60,7 +60,9 @@ export default function EditCustomerPage() {
       if (response.code === 200 && response.data) {
         const customerData = response.data.customer;
         setCustomer(customerData);
-        const { firstName, lastName } = splitFullName(customerData.user.name || '');
+        const split = splitFullName(customerData.user.name || '');
+        const firstName = (customerData.user.first_name ?? split.firstName).trim();
+        const lastName = (customerData.user.last_name ?? split.lastName).trim();
         setFormData({
           customer_account_code: customerData.account_code,
           firstName,
@@ -134,7 +136,8 @@ export default function EditCustomerPage() {
       const { type: _type, ...rest } = formData;
       const finalData: UpdateCustomerData = {
         ...rest,
-        name: fullNameFromParts(formData.firstName, formData.lastName),
+        first_name: formData.firstName.trim(),
+        last_name: formData.lastName.trim(),
         email: formData.email || undefined,
         nid: formData.nid || undefined,
         address: formData.address || undefined,

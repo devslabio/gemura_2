@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../../prisma/prisma.service';
 import { User } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import { composeUserFullName } from '../../common/utils/user-name.util';
 import * as bcrypt from 'bcrypt';
 import { CreateAnimalDto } from './dto/create-animal.dto';
 import { UpdateAnimalDto } from './dto/update-animal.dto';
@@ -413,12 +414,16 @@ export class AnimalsService {
       if (!vetUser) {
         const userCode = `U_${randomBytes(3).toString('hex').toUpperCase()}`;
         const passwordHash = await bcrypt.hash('Pass123!', 10);
-        const name = [dto.vet_first_name, dto.vet_last_name].filter(Boolean).join(' ').trim() || 'Veterinary';
+        const fn = (dto.vet_first_name ?? '').trim();
+        const ln = (dto.vet_last_name ?? '').trim();
+        const displayName = composeUserFullName(fn, ln) || 'Veterinary';
 
         vetUser = await this.prisma.user.create({
           data: {
             code: userCode,
-            name,
+            first_name: fn || displayName,
+            last_name: ln,
+            name: displayName,
             phone: vetPhoneNormalized,
             password_hash: passwordHash,
             status: 'active',

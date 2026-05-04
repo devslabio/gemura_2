@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { PermissionService } from '@/lib/services/permission.service';
-import { fullNameFromParts, splitFullName } from '@/lib/utils/name';
+import { splitFullName } from '@/lib/utils/name';
 import { adminApi, UpdateUserData } from '@/lib/api/admin';
 import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
@@ -71,8 +71,8 @@ export default function EditUserPage() {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [permissionList, setPermissionList] = useState<{ code: string; name: string }[]>(PERMISSIONS_FALLBACK);
-  const [formData, setFormData] = useState<UpdateUserData & { confirmPassword: string; firstName: string; lastName: string }>({
-    name: '',
+  type AdminEditUserForm = UpdateUserData & { confirmPassword: string; firstName: string; lastName: string };
+  const [formData, setFormData] = useState<AdminEditUserForm>({
     email: '',
     phone: '',
     password: '',
@@ -124,9 +124,10 @@ export default function EditUserPage() {
           }
         }
 
-        const { firstName, lastName } = splitFullName(user.name || '');
+        const split = splitFullName(user.name || '');
+        const firstName = ((user as { first_name?: string }).first_name ?? split.firstName).trim();
+        const lastName = ((user as { last_name?: string }).last_name ?? split.lastName).trim();
         setFormData({
-          name: user.name || '',
           email: user.email || '',
           phone: user.phone || '',
           password: '',
@@ -212,7 +213,8 @@ export default function EditUserPage() {
       const { firstName, lastName, confirmPassword, ...rest } = formData;
       const updateData: UpdateUserData = {
         ...rest,
-        name: fullNameFromParts(firstName, lastName),
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
       };
       if (!updateData.password) {
         delete updateData.password;

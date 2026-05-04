@@ -17,6 +17,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-gemura_jwt_secret_uat_2026}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3024,http://localhost:3025}
+      # Set to 1 for one deploy/boot to re-apply ROLE_DEFAULT_PERMISSIONS (match fresh localhost). Default 0.
+      RBAC_RESET_ROLE_PERMISSIONS: ${RBAC_RESET_ROLE_PERMISSIONS:-0}
     ports:
       - "${API_UAT_PORT:-3025}:3004"
     networks:

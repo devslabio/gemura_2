@@ -38,7 +38,8 @@ class SuppliersNotifier extends StateNotifier<AsyncValue<List<Supplier>>> {
   }
 
   Future<void> createSupplier({
-    required String name,
+    required String firstName,
+    required String lastName,
     required String phone,
     String? email,
     String? nid,
@@ -48,7 +49,8 @@ class SuppliersNotifier extends StateNotifier<AsyncValue<List<Supplier>>> {
     try {
       // Create the supplier via API
       await _suppliersService.createSupplier(
-        name: name,
+        firstName: firstName,
+        lastName: lastName,
         phone: phone,
         email: email,
         nid: nid,

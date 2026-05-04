@@ -5,6 +5,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { SubmitMccOnboardingDto } from './dto/submit-mcc-onboarding.dto';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+import { composeUserFullName } from '../../common/utils/user-name.util';
 
 @Injectable()
 export class OnboardService {
@@ -159,11 +160,16 @@ export class OnboardService {
     const token = crypto.randomBytes(32).toString('hex');
 
     // Start transaction
+    const fn = createUserDto.first_name.trim();
+    const ln = createUserDto.last_name.trim();
+
     return await this.prisma.$transaction(async (tx) => {
       // Create new user
       const newUser = await tx.user.create({
         data: {
-          name: createUserDto.name,
+          first_name: fn,
+          last_name: ln,
+          name: composeUserFullName(fn, ln),
           phone: normalizedPhone,
           email: createUserDto.email,
           address: createUserDto.location,

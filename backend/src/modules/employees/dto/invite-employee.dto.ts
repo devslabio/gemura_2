@@ -2,9 +2,13 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsString, IsOptional, IsEnum, IsArray, MinLength, MaxLength, IsUUID } from 'class-validator';
 
 export class InviteEmployeeDto {
-  @ApiProperty({ description: 'Full name', example: 'Jane Doe' })
+  @ApiProperty({ description: 'Given name', example: 'Jane' })
   @IsString()
-  name: string;
+  first_name: string;
+
+  @ApiProperty({ description: 'Family name', example: 'Doe' })
+  @IsString()
+  last_name: string;
 
   @ApiProperty({ description: 'Email (required if no phone)', example: 'jane@example.com', required: false })
   @IsOptional()

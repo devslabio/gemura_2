@@ -62,7 +62,8 @@ class SuppliersService {
 
   /// Create a new supplier
   Future<void> createSupplier({
-    required String name,
+    required String firstName,
+    required String lastName,
     required String phone,
     String? email,
     String? nid,
@@ -73,7 +74,8 @@ class SuppliersService {
       final response = await _dio.post(
         '/suppliers/create',
         data: {
-          'name': name,
+          'first_name': firstName,
+          'last_name': lastName,
           'phone': phone,
           'email': email,
           'nid': nid,

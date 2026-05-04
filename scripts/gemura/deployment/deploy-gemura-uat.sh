@@ -9,6 +9,9 @@
 # Optional:
 #   UAT_PUBLIC_HOST=uat.gemura.rw UAT_PUBLIC_SCHEME=https ./scripts/gemura/deployment/deploy-gemura-uat.sh
 #   SKIP_PORT_CHECK=1 ./scripts/gemura/deployment/deploy-gemura-uat.sh
+#   SEED_UAT=1 … — after API is healthy, run `npx prisma db seed` in the UAT API container (demo users, same as local seed).
+#     Use once (or when UAT DB is empty). Re-running duplicates some sample rows (e.g. milk sales); safe for demo users upsert.
+#   Full copy of local Postgres → UAT DB: CONFIRM_REPLACE_UAT_DB=yes ./scripts/gemura/deployment/sync-local-db-to-gemura-uat.sh
 #
 # When users open https://uat.gemura.rw, you MUST set UAT_PUBLIC_HOST (or NEXT_PUBLIC bakes http://<IP>:3025
 # and the browser blocks API calls as mixed content — login appears as "Login failed").
@@ -178,6 +181,14 @@ for i in \$(seq 1 20); do
   [ "\$i" -eq 20 ] && echo "   ⚠️  gemura-uat-api not healthy yet, continuing anyway" || sleep 8
 done
 ENDSSH
+
+if [ "${SEED_UAT:-}" = "1" ]; then
+  echo ""
+  echo "🌱 Step 4a-seed: Running prisma db seed in gemura-uat-api (demo accounts)..."
+  ssh $SSH_OPTS -o ControlPath=$SSH_CONTROL_PATH $SERVER_USER@$SERVER_IP \
+    "docker exec gemura-uat-api npx prisma db seed"
+  echo "   ✅ UAT database seed finished (demo password is in seed output on server)"
+fi
 
 echo ""
 echo "🔨 Step 4b: Building and starting gemura-uat-ui..."

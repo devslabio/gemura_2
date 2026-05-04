@@ -8,8 +8,8 @@ export class BulkCreateCustomersDto {
     description: 'Array of customers to create or update',
     type: [CreateCustomerDto],
     example: [
-      { name: 'Customer One', phone: '250788111111', price_per_liter: 400 },
-      { name: 'Customer Two', phone: '250788222222', email: 'two@example.com' },
+      { first_name: 'Customer', last_name: 'One', phone: '250788111111', price_per_liter: 400 },
+      { first_name: 'Customer', last_name: 'Two', phone: '250788222222', email: 'two@example.com' },
     ],
   })
   @IsArray()

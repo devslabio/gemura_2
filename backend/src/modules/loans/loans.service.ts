@@ -7,6 +7,7 @@ import { RecordRepaymentDto } from './dto/record-repayment.dto';
 import { TransactionsService } from '../accounting/transactions/transactions.service';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
+import { composeUserFullName, splitIntoFirstLast } from '../../common/utils/user-name.util';
 
 @Injectable()
 export class LoansService {
@@ -513,6 +514,12 @@ export class LoansService {
    * Returns the account id to use as borrower_account_id.
    */
   private async findOrCreateAccountByPhone(createdBy: string, phone: string, name: string): Promise<string> {
+    let { first_name: fn, last_name: ln } = splitIntoFirstLast((name || '').trim());
+    if (!fn && !ln) {
+      fn = 'Borrower';
+    }
+    const displayName = composeUserFullName(fn, ln);
+
     const normalizedPhone = phone.replace(/\D/g, '');
     if (!normalizedPhone) {
       throw new BadRequestException({
@@ -589,7 +596,9 @@ export class LoansService {
     const newUser = await this.prisma.user.create({
       data: {
         code: userCode,
-        name,
+        first_name: fn,
+        last_name: ln,
+        name: displayName,
         phone: normalizedPhone,
         password_hash: passwordHash,
         token,
@@ -602,7 +611,7 @@ export class LoansService {
     const newAccount = await this.prisma.account.create({
       data: {
         code: accountCode,
-        name,
+        name: displayName,
         type: 'tenant',
         status: 'active',
         created_by: createdBy,

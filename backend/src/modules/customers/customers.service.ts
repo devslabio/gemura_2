@@ -5,13 +5,17 @@ import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import * as bcrypt from 'bcrypt';
 import { randomBytes } from 'crypto';
+import { composeUserFullName, splitIntoFirstLast } from '../../common/utils/user-name.util';
 
 @Injectable()
 export class CustomersService {
   constructor(private prisma: PrismaService) {}
 
   async createCustomer(user: User, createDto: CreateCustomerDto) {
-    const { name, phone, email, nid, address, price_per_liter } = createDto;
+    const { phone, email, nid, address, price_per_liter } = createDto;
+    const fn = createDto.first_name.trim();
+    const ln = createDto.last_name.trim();
+    const userDisplayName = composeUserFullName(fn, ln);
 
     // Check if user has a valid default account
     if (!user.default_account_id) {
@@ -61,7 +65,7 @@ export class CustomersService {
         const newAccount = await this.prisma.account.create({
           data: {
             code: accountCode,
-            name: existingUser.name || name,
+            name: existingUser.name || userDisplayName,
             type: 'tenant',
             status: 'active',
             created_by: user.id,
@@ -116,7 +120,9 @@ export class CustomersService {
       const newUser = await this.prisma.user.create({
         data: {
           code: userCode,
-          name,
+          first_name: fn,
+          last_name: ln,
+          name: userDisplayName,
           phone: normalizedPhone,
           email: email?.toLowerCase(),
           nid,
@@ -133,7 +139,7 @@ export class CustomersService {
       const newAccount = await this.prisma.account.create({
         data: {
           code: accountCode,
-          name,
+          name: userDisplayName,
           type: 'tenant',
           status: 'active',
           created_by: user.id,
@@ -173,7 +179,7 @@ export class CustomersService {
 
       customerAccountId = newAccount.id;
       customerAccountCode = accountCode;
-      customerName = name;
+      customerName = userDisplayName;
     }
 
     // Create or update supplier-customer relationship
@@ -590,19 +596,66 @@ export class CustomersService {
       });
     }
 
-    // Update account if name provided
-    if (updateDto.name) {
-      await this.prisma.account.update({
-        where: { id: customerAccount.id },
-        data: {
-          name: updateDto.name,
-          updated_by: user.id,
-        },
-      });
+    const customerUser = customerAccount.user_accounts[0]?.user;
+
+    const wantsIdentity =
+      updateDto.first_name !== undefined ||
+      updateDto.last_name !== undefined ||
+      updateDto.name !== undefined;
+
+    let touchedIdentity = false;
+    if (wantsIdentity) {
+      let fn = '';
+      let ln = '';
+      if (customerUser) {
+        fn =
+          updateDto.first_name !== undefined ? updateDto.first_name.trim() : customerUser.first_name;
+        ln =
+          updateDto.last_name !== undefined ? updateDto.last_name.trim() : customerUser.last_name;
+        if (
+          updateDto.name !== undefined &&
+          updateDto.first_name === undefined &&
+          updateDto.last_name === undefined
+        ) {
+          const sp = splitIntoFirstLast(updateDto.name);
+          fn = sp.first_name;
+          ln = sp.last_name;
+        }
+      } else {
+        if (updateDto.first_name !== undefined) fn = updateDto.first_name.trim();
+        if (updateDto.last_name !== undefined) ln = updateDto.last_name.trim();
+        if (
+          updateDto.name !== undefined &&
+          updateDto.first_name === undefined &&
+          updateDto.last_name === undefined
+        ) {
+          const sp = splitIntoFirstLast(updateDto.name);
+          fn = sp.first_name;
+          ln = sp.last_name;
+        }
+      }
+      const display = composeUserFullName(fn, ln);
+      if (display) {
+        await this.prisma.account.update({
+          where: { id: customerAccount.id },
+          data: { name: display, updated_by: user.id },
+        });
+        if (customerUser) {
+          await this.prisma.user.update({
+            where: { id: customerUser.id },
+            data: {
+              first_name: fn,
+              last_name: ln,
+              name: display,
+              updated_by: user.id,
+            },
+          });
+        }
+        touchedIdentity = true;
+      }
     }
 
-    // Update user if provided
-    const customerUser = customerAccount.user_accounts[0]?.user;
+    let touchedContact = false;
     if (customerUser) {
       const userUpdateData: any = {
         updated_by: user.id,
@@ -626,10 +679,10 @@ export class CustomersService {
           where: { id: customerUser.id },
           data: userUpdateData,
         });
+        touchedContact = true;
       }
     }
 
-    // Update relationship
     const relationshipUpdateData: any = {
       updated_by: user.id,
     };
@@ -642,8 +695,9 @@ export class CustomersService {
       relationshipUpdateData.relationship_status = updateDto.relationship_status as any;
     }
 
-    if (Object.keys(relationshipUpdateData).length === 1) {
-      // Only updated_by, no actual fields to update
+    const hasRelationshipPatch = Object.keys(relationshipUpdateData).length > 1;
+
+    if (!hasRelationshipPatch && !touchedIdentity && !touchedContact) {
       throw new BadRequestException({
         code: 400,
         status: 'error',
@@ -651,14 +705,30 @@ export class CustomersService {
       });
     }
 
-    const updatedRelationship = await this.prisma.supplierCustomer.update({
-      where: { id: relationship.id },
-      data: relationshipUpdateData,
-      include: {
-        supplier_account: true,
-        customer_account: true,
-      },
-    });
+    const updatedRelationship = hasRelationshipPatch
+      ? await this.prisma.supplierCustomer.update({
+          where: { id: relationship.id },
+          data: relationshipUpdateData,
+          include: {
+            supplier_account: true,
+            customer_account: true,
+          },
+        })
+      : await this.prisma.supplierCustomer.findUnique({
+          where: { id: relationship.id },
+          include: {
+            supplier_account: true,
+            customer_account: true,
+          },
+        });
+
+    if (!updatedRelationship) {
+      throw new InternalServerErrorException({
+        code: 500,
+        status: 'error',
+        message: 'Failed to load customer relationship after update.',
+      });
+    }
 
     return {
       code: 200,
