@@ -399,49 +399,55 @@ async function main() {
     console.log(`✅ Supplier created: ${supplier.name} (${supplier.code})`);
   }
 
-  // 6. Create sample milk collections
+  // 6. Create sample milk collections (rolling dates so week/month/quarter dashboards show data after seed)
   console.log('📦 Creating sample milk collections...');
+  const daysAgo = (days: number, hour = 8, minute = 0): Date => {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    d.setHours(hour, minute, 0, 0);
+    return d;
+  };
   const collections = [
     {
       supplier_code: 'A_SUP_001',
       quantity: 150.5,
       price: 400,
-      date: new Date('2025-01-01 08:00:00'),
+      date: daysAgo(8, 8, 0),
       status: 'accepted',
     },
     {
       supplier_code: 'A_SUP_001',
       quantity: 120.0,
       price: 400,
-      date: new Date('2025-01-02 08:00:00'),
+      date: daysAgo(7, 8, 15),
       status: 'accepted',
     },
     {
       supplier_code: 'A_SUP_002',
       quantity: 200.0,
       price: 390,
-      date: new Date('2025-01-01 08:30:00'),
+      date: daysAgo(5, 8, 30),
       status: 'accepted',
     },
     {
       supplier_code: 'A_SUP_002',
       quantity: 180.5,
       price: 390,
-      date: new Date('2025-01-02 08:30:00'),
+      date: daysAgo(4, 9, 0),
       status: 'accepted',
     },
     {
       supplier_code: 'A_SUP_003',
       quantity: 95.0,
       price: 410,
-      date: new Date('2025-01-01 09:00:00'),
+      date: daysAgo(2, 9, 0),
       status: 'accepted',
     },
     {
       supplier_code: 'A_SUP_003',
       quantity: 110.0,
       price: 410,
-      date: new Date('2025-01-02 09:00:00'),
+      date: daysAgo(1, 9, 30),
       status: 'pending',
     },
   ];
