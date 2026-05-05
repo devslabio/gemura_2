@@ -140,16 +140,16 @@ export default function AdminDashboardOverviewPage() {
           {...BLUE_ICON}
         />
         <StatCard
-          label="Total Sales"
-          value={stats.sales.total}
-          subtitle={`Accepted milk sales · ${periodLabel}`}
+          label="Collections"
+          value={`${Math.round(stats.sales.liters ?? 0)} L`}
+          subtitle={`${formatCurrency(stats.revenue?.total ?? 0)} · ${stats.sales.total} txns · ${periodLabel}`}
           icon={faReceipt}
           {...GREEN_ICON}
         />
         <StatCard
           label="Total Revenue"
           value={stats.revenue ? formatCurrency(stats.revenue.total) : '0'}
-          subtitle={`Accepted milk sales · ${periodLabel}`}
+          subtitle={`Collection value · ${periodLabel}`}
           icon={faDollarSign}
           {...GREEN_ICON}
         />

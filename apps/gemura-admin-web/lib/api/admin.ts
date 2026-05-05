@@ -11,6 +11,8 @@ export interface DashboardStats {
   };
   sales: {
     total: number;
+    /** Liters — accepted incoming milk for current account in selected dashboard period */
+    liters?: number;
     last30Days?: number;
     last7Days?: number;
     today?: number;
