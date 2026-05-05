@@ -32,12 +32,14 @@ class Overview {
 @JsonSerializable()
 class OverviewSummary {
   final OverviewCollection collection;
+  final OverviewRejections rejections;
   final OverviewSales sales;
   final OverviewSuppliers suppliers;
   final OverviewCustomers customers;
 
   OverviewSummary({
     required this.collection,
+    required this.rejections,
     required this.sales,
     required this.suppliers,
     required this.customers,
@@ -61,6 +63,23 @@ class OverviewCollection {
 
   factory OverviewCollection.fromJson(Map<String, dynamic> json) => _$OverviewCollectionFromJson(json);
   Map<String, dynamic> toJson() => _$OverviewCollectionToJson(this);
+}
+
+@JsonSerializable()
+class OverviewRejections {
+  final double liters;
+  final double value;
+  final int transactions;
+
+  OverviewRejections({
+    required this.liters,
+    required this.value,
+    required this.transactions,
+  });
+
+  factory OverviewRejections.fromJson(Map<String, dynamic> json) =>
+      _$OverviewRejectionsFromJson(json);
+  Map<String, dynamic> toJson() => _$OverviewRejectionsToJson(this);
 }
 
 @JsonSerializable()

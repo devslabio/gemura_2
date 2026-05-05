@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/auth';
 
 import StatCard from '@/app/components/StatCard';
 import { DashboardSkeleton } from '@/app/components/SkeletonLoader';
-import Icon, { faHandHoldingDollar, faReceipt, faTruck, faUserFriends } from '@/app/components/Icon';
+import Icon, { faHandHoldingDollar, faTriangleExclamation, faTruck, faUserFriends } from '@/app/components/Icon';
 
 import { useDashboardPeriod } from '../../dashboard-period-context';
 import { buildDummyStatsOverview } from '@/lib/dashboard/admin-dashboard-dummy-data';
@@ -18,7 +18,7 @@ const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
 const PURPLE_ICON = { iconBgColor: '#f5f3ff', iconColor: '#6d28d9' };
 const GREEN_ICON = { iconBgColor: '#dcfce7', iconColor: '#059669' };
-const BLUE_ICON = { iconBgColor: '#eff6ff', iconColor: '#1d4ed8' };
+const RED_ICON = { iconBgColor: '#fef2f2', iconColor: '#dc2626' };
 
 export default function AdminDashboardMilkPage() {
   const { currentAccount } = useAuthStore();
@@ -130,11 +130,11 @@ export default function AdminDashboardMilkPage() {
           {...GREEN_ICON}
         />
         <StatCard
-          label="Sales"
-          value={`${Math.round(summary.sales.liters)} L`}
-          subtitle={`${formatCurrency(summary.sales.value)} · ${summary.sales.transactions} txns · ${periodLabel}`}
-          icon={faReceipt}
-          {...BLUE_ICON}
+          label="Rejections"
+          value={`${Math.round(summary.rejections.liters)} L`}
+          subtitle={`${formatCurrency(summary.rejections.value)} · ${summary.rejections.transactions} txns · ${periodLabel}`}
+          icon={faTriangleExclamation}
+          {...RED_ICON}
         />
         <StatCard
           label="Suppliers"

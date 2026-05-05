@@ -47,8 +47,9 @@ export class StatsController {
         message: 'Overview data fetched successfully.',
         data: {
           summary: {
-            sales: { liters: 8500, value: 3315000, transactions: 120 },
             collection: { liters: 12500.5, value: 4375175, transactions: 150 },
+            rejections: { liters: 120, value: 46800, transactions: 2 },
+            sales: { liters: 8500, value: 3315000, transactions: 120 },
             suppliers: { active: 25, inactive: 5 },
             customers: { active: 45, inactive: 8 },
           },

@@ -2,6 +2,7 @@ import { apiClient } from './client';
 
 export interface OverviewSummary {
   collection: { liters: number; value: number; transactions: number };
+  rejections: { liters: number; value: number; transactions: number };
   sales: { liters: number; value: number; transactions: number };
   suppliers: { active: number; inactive: number };
   customers: { active: number; inactive: number };

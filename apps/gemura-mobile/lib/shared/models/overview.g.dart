@@ -36,6 +36,8 @@ OverviewSummary _$OverviewSummaryFromJson(Map<String, dynamic> json) =>
     OverviewSummary(
       collection: OverviewCollection.fromJson(
           json['collection'] as Map<String, dynamic>),
+      rejections: OverviewRejections.fromJson(
+          json['rejections'] as Map<String, dynamic>),
       sales: OverviewSales.fromJson(json['sales'] as Map<String, dynamic>),
       suppliers:
           OverviewSuppliers.fromJson(json['suppliers'] as Map<String, dynamic>),
@@ -46,6 +48,7 @@ OverviewSummary _$OverviewSummaryFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$OverviewSummaryToJson(OverviewSummary instance) =>
     <String, dynamic>{
       'collection': instance.collection,
+      'rejections': instance.rejections,
       'sales': instance.sales,
       'suppliers': instance.suppliers,
       'customers': instance.customers,
@@ -59,6 +62,20 @@ OverviewCollection _$OverviewCollectionFromJson(Map<String, dynamic> json) =>
     );
 
 Map<String, dynamic> _$OverviewCollectionToJson(OverviewCollection instance) =>
+    <String, dynamic>{
+      'liters': instance.liters,
+      'value': instance.value,
+      'transactions': instance.transactions,
+    };
+
+OverviewRejections _$OverviewRejectionsFromJson(Map<String, dynamic> json) =>
+    OverviewRejections(
+      liters: (json['liters'] as num).toDouble(),
+      value: (json['value'] as num).toDouble(),
+      transactions: (json['transactions'] as num).toInt(),
+    );
+
+Map<String, dynamic> _$OverviewRejectionsToJson(OverviewRejections instance) =>
     <String, dynamic>{
       'liters': instance.liters,
       'value': instance.value,
