@@ -96,16 +96,22 @@ export default function AdminDashboard() {
           {...BLUE_ICON}
         />
         <StatCard
-          label="Total Sales"
-          value={stats.sales.total}
-          subtitle={stats.sales.today != null ? `${stats.sales.today} today` : undefined}
+          label="Collections"
+          value={`${Math.round(stats.sales.liters ?? 0)} L`}
+          subtitle={
+            stats.sales.today != null
+              ? `${stats.sales.total} txns · ${stats.sales.today} today`
+              : `${stats.sales.total} txns`
+          }
           icon={faReceipt}
           {...GREEN_ICON}
         />
         <StatCard
           label="Total Revenue"
           value={stats.revenue ? formatCurrency(stats.revenue.total) : '0'}
-          subtitle={stats.revenue ? `Value of accepted milk sales · ${formatCurrency(stats.revenue.today)} today` : 'Value of accepted milk sales'}
+          subtitle={
+            stats.revenue ? `Collection value · ${formatCurrency(stats.revenue.today)} today` : 'Collection value'
+          }
           icon={faDollarSign}
           {...GREEN_ICON}
         />

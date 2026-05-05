@@ -11,6 +11,7 @@ export interface DashboardStats {
   };
   sales: {
     total: number;
+    liters?: number;
     last30Days?: number;
     last7Days?: number;
     today?: number;

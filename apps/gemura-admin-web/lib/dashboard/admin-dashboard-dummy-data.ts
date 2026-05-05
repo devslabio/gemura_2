@@ -47,6 +47,7 @@ export function buildDummyDashboardStats(dateFrom: string, dateTo: string): Dash
     accounts: { total: 42 },
     sales: {
       total: txnApprox,
+      liters: litersSum,
       last30Days: Math.round(txnApprox * 0.85),
       last7Days: Math.round(txnApprox * 0.22),
       today: 14 + (days % 7),

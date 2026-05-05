@@ -1949,42 +1949,41 @@ export class AdminService {
     rangeStartDate.setUTCHours(0, 0, 0, 0);
     rangeEndDate.setUTCHours(23, 59, 59, 999);
 
-    // Basic counts
+    /** Incoming milk to this account — matches stats/overview “collection” (non-deleted rows). */
+    const milkIncomingWhere = {
+      customer_account_id: accountId,
+      status: { not: 'deleted' as const },
+    };
+
+    // Basic counts (users/accounts remain platform-wide; milk + relationships scoped to current account)
     const [
       totalUsers,
       activeUsers,
       totalAccounts,
-      totalSales,
-      totalCollections,
+      lifetimeIncomingCount,
       totalSuppliers,
       totalCustomers,
     ] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.user.count({ where: { status: 'active' } }),
       this.prisma.account.count({ where: { status: 'active' } }),
-      this.prisma.milkSale.count({ where: { status: 'accepted' } }),
-      this.prisma.milkSale.count({ where: { status: 'accepted' } }),
-      this.prisma.supplierCustomer.count({ where: { relationship_status: 'active' } }),
-      this.prisma.supplierCustomer.count({ where: { relationship_status: 'active' } }),
+      this.prisma.milkSale.count({ where: milkIncomingWhere }),
+      this.prisma.supplierCustomer.count({
+        where: { customer_account_id: accountId, relationship_status: 'active' },
+      }),
+      this.prisma.supplierCustomer.count({
+        where: { supplier_account_id: accountId, relationship_status: 'active' },
+      }),
     ]);
 
-    // Get sales data for revenue calculations
     const allSales = await this.prisma.milkSale.findMany({
-      where: {
-        status: 'accepted',
-      },
+      where: milkIncomingWhere,
       select: {
         quantity: true,
         unit_price: true,
         sale_at: true,
       },
     });
-
-    // Calculate revenue metrics
-    const totalRevenue = allSales.reduce(
-      (sum, sale) => sum + Number(sale.quantity) * Number(sale.unit_price),
-      0,
-    );
 
     const salesLast30Days = allSales.filter(
       (sale) => new Date(sale.sale_at) >= last30Days,
@@ -2037,28 +2036,31 @@ export class AdminService {
       sales: day.sales,
     }));
 
-    // Compute range totals from the same accepted sales dataset.
-    const acceptedSalesInRange = allSales.filter((sale) => {
+    const incomingRowsInRange = allSales.filter((sale) => {
       const dt = new Date(sale.sale_at);
       return dt >= rangeStartDate && dt <= rangeEndDate;
     });
 
-    const salesInRange = acceptedSalesInRange.length;
-    const revenueInRange = acceptedSalesInRange.reduce(
+    const salesInRange = incomingRowsInRange.length;
+    const revenueInRange = incomingRowsInRange.reduce(
       (sum, sale) => sum + Number(sale.quantity) * Number(sale.unit_price),
       0,
     );
+    const litersInRange = incomingRowsInRange.reduce((sum, sale) => sum + Number(sale.quantity), 0);
 
-    // Get sales by status
     const salesByStatus = await this.prisma.milkSale.groupBy({
       by: ['status'],
+      where: {
+        customer_account_id: accountId,
+        status: { not: 'deleted' },
+      },
       _count: true,
     });
 
-    // Get recent sales (last 10)
     const recentSales = await this.prisma.milkSale.findMany({
       where: {
         status: { not: 'deleted' },
+        OR: [{ customer_account_id: accountId }, { supplier_account_id: accountId }],
       },
       take: 10,
       orderBy: { sale_at: 'desc' },
@@ -2092,12 +2094,13 @@ export class AdminService {
         },
         sales: {
           total: salesInRange,
+          liters: litersInRange,
           last30Days: salesLast30Days.length,
           last7Days: salesLast7Days.length,
           today: salesToday.length,
         },
         collections: {
-          total: totalCollections,
+          total: lifetimeIncomingCount,
         },
         suppliers: {
           total: totalSuppliers,
