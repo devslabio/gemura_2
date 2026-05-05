@@ -11,6 +11,8 @@ import { DashboardSkeleton } from '@/app/components/SkeletonLoader';
 import Icon, { faHandHoldingDollar, faReceipt, faTruck, faUserFriends } from '@/app/components/Icon';
 
 import { useDashboardPeriod } from '../../dashboard-period-context';
+import { buildDummyStatsOverview } from '@/lib/dashboard/admin-dashboard-dummy-data';
+import { useAdminDashboardDemo } from '@/hooks/useAdminDashboardDemo';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
@@ -21,14 +23,28 @@ const BLUE_ICON = { iconBgColor: '#eff6ff', iconColor: '#1d4ed8' };
 export default function AdminDashboardMilkPage() {
   const { currentAccount } = useAuthStore();
   const { dateRange, periodLabel } = useDashboardPeriod();
+  const demo = useAdminDashboardDemo();
 
-  const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<StatsOverviewData | null>(null);
+  const [loading, setLoading] = useState(!demo);
+  const [apiData, setApiData] = useState<StatsOverviewData | null>(null);
   const [error, setError] = useState('');
+
+  const dummyData = useMemo(
+    () => (demo ? buildDummyStatsOverview(dateRange.date_from, dateRange.date_to) : null),
+    [demo, dateRange.date_from, dateRange.date_to],
+  );
+
+  const data = demo ? dummyData : apiData;
 
   const tzOffsetMinutes = useMemo(() => -(typeof window !== 'undefined' ? new Date().getTimezoneOffset() : 0), []);
 
   useEffect(() => {
+    if (demo) {
+      setLoading(false);
+      setError('');
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     setError('');
@@ -44,7 +60,7 @@ export default function AdminDashboardMilkPage() {
       .postOverview(body)
       .then((res) => {
         if (cancelled) return;
-        if (res.code === 200 && res.data) setData(res.data);
+        if (res.code === 200 && res.data) setApiData(res.data);
         else setError(res.message || 'Failed to load milk overview');
       })
       .catch((err: unknown) => {
@@ -63,7 +79,7 @@ export default function AdminDashboardMilkPage() {
     return () => {
       cancelled = true;
     };
-  }, [currentAccount?.account_id, dateRange.date_from, dateRange.date_to, tzOffsetMinutes]);
+  }, [demo, currentAccount?.account_id, dateRange.date_from, dateRange.date_to, tzOffsetMinutes]);
 
   const formatCurrency = (amount: number) => {
     return `RF ${new Intl.NumberFormat('en-RW', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount)}`;
@@ -83,9 +99,9 @@ export default function AdminDashboardMilkPage() {
     [breakdownSlice],
   );
 
-  if (loading) return <DashboardSkeleton />;
+  if (!demo && loading) return <DashboardSkeleton />;
 
-  if (error) {
+  if (!demo && error) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-sm p-4">
         <p className="text-sm text-amber-900 font-medium">Could not load milk & collections</p>
@@ -100,6 +116,11 @@ export default function AdminDashboardMilkPage() {
 
   return (
     <div className="space-y-4">
+      {demo ? (
+        <div className="rounded-sm border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-950">
+          Demo data
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
           label="Collections"
