@@ -102,11 +102,6 @@ export default function AdminDashboardOverviewPage() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-600">
-        Platform snapshot and milk commerce KPIs. Charts below use <span className="font-medium text-gray-800">{periodLabel}</span>{' '}
-        where noted; some totals are lifetime aggregates — see labels on cards.
-      </p>
-
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total Users"

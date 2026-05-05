@@ -100,12 +100,6 @@ export default function AdminDashboardMilkPage() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-gray-600">
-        Milk sales and collections for the default account, scoped to <span className="font-medium text-gray-800">{periodLabel}</span>{' '}
-        ({data.date_range?.from ?? dateRange.date_from} → {data.date_range?.to ?? dateRange.date_to}). Supplier/customer counts reflect
-        relationships (not restricted to this window).
-      </p>
-
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
           label="Collections"
