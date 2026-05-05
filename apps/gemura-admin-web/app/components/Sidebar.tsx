@@ -71,7 +71,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     const items: Array<{ href: string; label: string; icon: any; badge?: number }> = [];
 
     if (canViewDashboard() || isAdmin()) {
-      items.push({ href: '/admin/dashboard', label: 'Dashboard', icon: faChartLine });
+      items.push({ href: '/admin/dashboard/overview', label: 'Dashboard', icon: faChartLine });
     }
 
     if (canManageUsers() || isAdmin()) {
@@ -145,7 +145,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
         {/* Logo */}
         <div className="p-4 sm:p-5 border-b border-[#031a3a] flex-shrink-0 mb-2 sm:mb-4">
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
-            <Link href="/admin/dashboard" className={`flex items-center gap-3 min-h-[44px] ${collapsed ? 'justify-center w-full' : 'w-auto'}`} onClick={handleLinkClick}>
+            <Link href="/admin/dashboard/overview" className={`flex items-center gap-3 min-h-[44px] ${collapsed ? 'justify-center w-full' : 'w-auto'}`} onClick={handleLinkClick}>
               <div className="relative flex-shrink-0 bg-transparent flex items-center justify-center overflow-hidden rounded-full">
                 <Image src="/logo.png" alt="Gemura" width={collapsed ? 32 : 40} height={collapsed ? 32 : 40} className="object-contain" priority />
               </div>
