@@ -12,6 +12,8 @@ import StatCard from '@/app/components/StatCard';
 import { DashboardSkeleton } from '@/app/components/SkeletonLoader';
 
 import { useDashboardPeriod } from '../../dashboard-period-context';
+import { buildDummyDashboardStats } from '@/lib/dashboard/admin-dashboard-dummy-data';
+import { useAdminDashboardDemo } from '@/hooks/useAdminDashboardDemo';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
@@ -21,10 +23,18 @@ const GREEN_ICON = { iconBgColor: '#dcfce7', iconColor: '#059669' };
 export default function AdminDashboardOverviewPage() {
   const { currentAccount } = useAuthStore();
   const { dateRange, periodLabel } = useDashboardPeriod();
+  const demo = useAdminDashboardDemo();
 
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(!demo);
+  const [apiStats, setApiStats] = useState<DashboardStats | null>(null);
   const [error, setError] = useState('');
+
+  const dummyStats = useMemo(
+    () => (demo ? buildDummyDashboardStats(dateRange.date_from, dateRange.date_to) : null),
+    [demo, dateRange.date_from, dateRange.date_to],
+  );
+
+  const stats = demo ? dummyStats : apiStats;
 
   const selectedDailyTrend = useMemo(() => stats?.trends?.daily ?? [], [stats?.trends?.daily]);
 
@@ -47,6 +57,12 @@ export default function AdminDashboardOverviewPage() {
   const chartTitleSuffix = selectedDailyTrend.length > lastN ? ` · last ${lastN} days` : '';
 
   useEffect(() => {
+    if (demo) {
+      setLoading(false);
+      setError('');
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     setError('');
@@ -58,7 +74,7 @@ export default function AdminDashboardOverviewPage() {
       })
       .then((res) => {
         if (cancelled) return;
-        if (res.code === 200 && res.data) setStats(res.data);
+        if (res.code === 200 && res.data) setApiStats(res.data);
         else setError('Failed to load dashboard');
       })
       .catch((err: unknown) => {
@@ -77,15 +93,15 @@ export default function AdminDashboardOverviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [currentAccount?.account_id, dateRange.date_from, dateRange.date_to]);
+  }, [demo, currentAccount?.account_id, dateRange.date_from, dateRange.date_to]);
 
   const formatCurrency = (amount: number) => {
     return `RF ${new Intl.NumberFormat('en-RW', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount)}`;
   };
 
-  if (loading) return <DashboardSkeleton />;
+  if (!demo && loading) return <DashboardSkeleton />;
 
-  if (error) {
+  if (!demo && error) {
     return (
       <div className="space-y-4">
         <div className="bg-red-50 border border-red-200 rounded-sm p-4">
@@ -102,6 +118,11 @@ export default function AdminDashboardOverviewPage() {
 
   return (
     <div className="space-y-4">
+      {demo ? (
+        <div className="rounded-sm border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-950">
+          Demo data
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total Users"
