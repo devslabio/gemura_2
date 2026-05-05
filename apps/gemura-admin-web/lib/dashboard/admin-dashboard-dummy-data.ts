@@ -151,6 +151,7 @@ export function buildDummyStatsOverview(dateFrom: string, dateTo: string): Stats
   return {
     summary: {
       collection: { liters: collL, value: collV, transactions: ct },
+      rejections: { liters: 185, value: 70650, transactions: 4 },
       sales: { liters: saleL, value: saleV, transactions: st },
       suppliers: { active: 47, inactive: 9 },
       customers: { active: 72, inactive: 14 },

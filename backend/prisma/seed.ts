@@ -450,6 +450,13 @@ async function main() {
       date: daysAgo(1, 9, 30),
       status: 'pending',
     },
+    {
+      supplier_code: 'A_SUP_002',
+      quantity: 62.0,
+      price: 395,
+      date: daysAgo(3, 11, 20),
+      status: 'rejected',
+    },
   ];
 
   for (const collection of collections) {

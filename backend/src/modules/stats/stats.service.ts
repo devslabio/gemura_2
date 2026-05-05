@@ -92,6 +92,22 @@ export class StatsService {
       0,
     );
 
+    const rejectionsWithValue = await this.prisma.milkSale.findMany({
+      where: baseWhere({
+        customer_account_id: accountId,
+        status: 'rejected',
+      }),
+      select: {
+        quantity: true,
+        unit_price: true,
+      },
+    });
+    const rejectionsTotalLiters = rejectionsWithValue.reduce((sum, sale) => sum + Number(sale.quantity), 0);
+    const rejectionsTotalValue = rejectionsWithValue.reduce(
+      (sum, sale) => sum + Number(sale.quantity) * Number(sale.unit_price),
+      0,
+    );
+
     // Get sales data (supplier perspective)
     const salesWithValue = await this.prisma.milkSale.findMany({
       where: baseWhere({
@@ -324,6 +340,11 @@ export class StatsService {
             liters: Number(collectionsAgg._sum.quantity) || 0,
             value: collectionsTotalValue,
             transactions: collectionsAgg._count || 0,
+          },
+          rejections: {
+            liters: rejectionsTotalLiters,
+            value: rejectionsTotalValue,
+            transactions: rejectionsWithValue.length,
           },
           sales: {
             liters: salesTotalQuantity,
