@@ -31,6 +31,7 @@ export interface StatsOverviewResponse {
 
 export const statsApi = {
   postOverview: async (body?: {
+    aggregate_all_accounts?: boolean;
     account_id?: string;
     date_from?: string;
     date_to?: string;

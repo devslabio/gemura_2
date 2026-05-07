@@ -559,6 +559,7 @@ export class AuthService {
       where: phone && email ? { OR: [{ phone: where.phone }, { email: where.email }] } : where,
       select: {
         id: true,
+        legacy_id: true,
         first_name: true,
         last_name: true,
         name: true,
@@ -607,7 +608,8 @@ export class AuthService {
       status: 'success',
       message: 'Reset code sent successfully.',
       data: {
-        user_id: parseInt(user.id) || 0, // Legacy compatibility - PHP uses int
+        user_id: user.id,
+        legacy_user_id: user.legacy_id ? Number(user.legacy_id) : null,
         sms_sent: smsSent,
         email_sent: emailSent,
         contact_info: {
@@ -620,14 +622,33 @@ export class AuthService {
 
   async resetPassword(resetPasswordDto: ResetPasswordDto): Promise<any> {
     const { user_id, reset_code, new_password } = resetPasswordDto;
+    const userIdText = String(user_id).trim();
+    const numericUserId = Number.parseInt(userIdText, 10);
+    const isUuidLike = userIdText.includes('-');
 
-    // Find user by legacy_id (PHP uses int) or UUID id
+    // Find user by UUID id first (modern) or legacy_id (old PHP integer id).
+    const userIdLookup: any[] = [];
+    if (isUuidLike) {
+      userIdLookup.push({ id: userIdText });
+    }
+    if (Number.isInteger(numericUserId) && numericUserId > 0) {
+      userIdLookup.push({ legacy_id: BigInt(numericUserId) });
+      if (!isUuidLike) {
+        userIdLookup.push({ id: userIdText });
+      }
+    }
+
+    if (userIdLookup.length === 0) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Invalid user_id format.',
+      });
+    }
+
     const user = await this.prisma.user.findFirst({
       where: {
-        OR: [
-          { legacy_id: BigInt(user_id) },
-          { id: user_id.toString() },
-        ],
+        OR: userIdLookup,
       },
     });
 

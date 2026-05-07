@@ -11,12 +11,13 @@ export interface DashboardStats {
   };
   sales: {
     total: number;
-    /** Liters — accepted incoming milk for current account in selected dashboard period */
+    /** Liters — platform-wide milk in selected dashboard period */
     liters?: number;
     last30Days?: number;
     last7Days?: number;
     today?: number;
   };
+  /** Milk transactions in the selected dashboard period (platform-wide; mirrors sales.total txns). */
   collections: {
     total: number;
   };
@@ -54,6 +55,115 @@ export interface DashboardStats {
     supplier: string;
     customer: string;
   }>;
+  overview?: {
+    pendingOnboarding: number;
+    collectionsByMcc: Array<{
+      mcc: string;
+      collections_liters: number;
+      sales_rf: number;
+    }>;
+    healthRows: Array<{
+      accountId?: string;
+      userId?: string;
+      mcc: string;
+      litersToday: string;
+      manifestPct: number;
+      rejectionPct: number;
+      tankPct: number;
+      alerts: number;
+      health: 'Excellent' | 'Good' | 'Moderate' | 'At risk' | 'Critical';
+    }>;
+    onboardingQueue: Array<{
+      id: string;
+      applicant: string;
+      region: string;
+      appliedOn: string;
+      status: string;
+      statusTone: 'pending' | 'review' | 'kyc';
+    }>;
+    alerts: Array<{
+      id: string;
+      severity: 'high' | 'medium' | 'info';
+      title: string;
+      when: string;
+    }>;
+    adoption: Array<{
+      accountId?: string;
+      userId?: string;
+      mcc: string;
+      milk: number;
+      finance: number;
+      usage: number;
+      inventory: number;
+      loans: number;
+    }>;
+    activity: Array<{
+      id: string;
+      label: string;
+      actor: string;
+      when: string;
+    }>;
+  };
+}
+
+export interface FinanceDashboardData {
+  summary: {
+    disbursements: { amount: number; count: number };
+    repayments: { amount: number; count: number };
+    payroll: { amount: number; runs: number };
+    milk_payments_recorded: { amount: number };
+    inventory_sales: { amount: number; count: number };
+    portfolio_active: { loan_count: number; principal_outstanding: number };
+  };
+  loans_by_status: Array<{ status: string; count: number }>;
+  breakdown: Array<{
+    date: string;
+    label: string;
+    disbursements: number;
+    repayments: number;
+    payroll: number;
+    inventory_sales: number;
+  }>;
+  recent_disbursements: Array<{
+    id: string;
+    principal: number;
+    status: string;
+    disbursement_date: string;
+    borrower_label: string;
+    lender_name: string | null;
+  }>;
+}
+
+export interface UsageDashboardData {
+  summary: {
+    users: {
+      active_platform_total: number;
+      last_login_in_period: number;
+      registered_in_period: number;
+    };
+    audit: {
+      events: number;
+      distinct_users: number;
+    };
+    milk: {
+      transactions: number;
+      distinct_operators: number;
+    };
+    mcc_gate_deliveries: number;
+    payroll_runs_created: number;
+    supplier_customer_links_created: number;
+    feed_posts_created: number;
+    inventory_sales_created: number;
+  };
+  breakdown: Array<{
+    date: string;
+    label: string;
+    audit_events: number;
+    audit_users: number;
+    milk_transactions: number;
+    milk_operators: number;
+    gate_deliveries: number;
+  }>;
 }
 
 export interface UserListItem {
@@ -69,6 +179,7 @@ export interface UserListItem {
   permissions: Record<string, boolean> | string[] | null;
   stats?: {
     accounts: number;
+    members: number;
     suppliers: number;
     customers: number;
     sales: number;
@@ -156,7 +267,7 @@ export interface UpdatePlatformRolePayload {
   is_assignable?: boolean;
 }
 
-export type UserActivityMetric = 'suppliers' | 'customers' | 'sales' | 'collections' | 'farms' | 'accounts';
+export type UserActivityMetric = 'suppliers' | 'customers' | 'sales' | 'collections' | 'farms' | 'accounts' | 'members';
 
 export type UserBusinessResource =
   | 'collections'
@@ -170,13 +281,38 @@ export type UserBusinessResource =
 export const adminApi = {
   getDashboardStats: async (
     accountId?: string,
-    params?: { date_from?: string; date_to?: string },
+    params?: { date_from?: string; date_to?: string; tz_offset_minutes?: number },
   ): Promise<{ code: number; status: string; message: string; data: DashboardStats }> => {
     const q: Record<string, unknown> = {};
     if (accountId) q.account_id = accountId;
     if (params?.date_from) q.date_from = params.date_from;
     if (params?.date_to) q.date_to = params.date_to;
+    if (params?.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
     return apiClient.get('/admin/dashboard/stats', { params: q });
+  },
+
+  getFinanceDashboardStats: async (
+    accountId?: string,
+    params?: { date_from?: string; date_to?: string; tz_offset_minutes?: number },
+  ): Promise<{ code: number; status: string; message: string; data: FinanceDashboardData }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    if (params?.date_from) q.date_from = params.date_from;
+    if (params?.date_to) q.date_to = params.date_to;
+    if (params?.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/dashboard/finance-stats', { params: q });
+  },
+
+  getUsageDashboardStats: async (
+    accountId?: string,
+    params?: { date_from?: string; date_to?: string; tz_offset_minutes?: number },
+  ): Promise<{ code: number; status: string; message: string; data: UsageDashboardData }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    if (params?.date_from) q.date_from = params.date_from;
+    if (params?.date_to) q.date_to = params.date_to;
+    if (params?.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/dashboard/usage-stats', { params: q });
   },
 
   getRoles: async (accountId?: string): Promise<{ code: number; status: string; message: string; data: { roles: RoleItem[] } }> => {

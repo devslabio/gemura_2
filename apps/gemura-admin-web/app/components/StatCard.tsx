@@ -27,18 +27,22 @@ export default function StatCard({
   iconColor = 'var(--primary)',
 }: StatCardProps) {
   const content = (
-    <div className="bg-white rounded-sm border border-gray-200 p-6 min-h-[120px] hover:border-gray-300 transition-colors">
-      <div className="flex items-start justify-between gap-3">
+    <div
+      className={`rounded-sm border border-gray-200 bg-white transition-colors hover:border-gray-300 ${
+        subtitle ? 'min-h-[104px] p-5' : 'p-4'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2.5">
         <div className="min-w-0 flex-1">
-          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{label}</div>
-          <div className="text-2xl font-bold text-gray-900">{value}</div>
-          {subtitle && <div className="text-xs text-gray-600 mt-1.5">{subtitle}</div>}
+          <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">{label}</div>
+          <div className="text-xl font-bold text-gray-900 sm:text-2xl">{value}</div>
+          {subtitle && <div className="mt-1.5 text-xs text-gray-600">{subtitle}</div>}
         </div>
         <div
-          className="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg sm:h-11 sm:w-11"
           style={{ backgroundColor: iconBgColor, color: iconColor }}
         >
-          <Icon icon={icon} size="lg" />
+          <Icon icon={icon} size="sm" />
         </div>
       </div>
     </div>
@@ -54,4 +58,3 @@ export default function StatCard({
 
   return content;
 }
-

@@ -12,6 +12,7 @@ const TABS: Array<{ href: string; label: string; segment: string }> = [
   { href: '/admin/dashboard/overview', label: 'Overview', segment: 'overview' },
   { href: '/admin/dashboard/milk', label: 'Milk & collections', segment: 'milk' },
   { href: '/admin/dashboard/finance', label: 'Finance', segment: 'finance' },
+  { href: '/admin/dashboard/usage', label: 'Usage', segment: 'usage' },
 ];
 
 function PeriodToolbar() {
@@ -23,17 +24,19 @@ function PeriodToolbar() {
         value={period}
         onChange={(e) => setPeriodPreset(e.target.value as typeof period)}
         title={periodLabel}
-        className="min-w-0 w-[120px] border border-gray-300 rounded py-0.5 pl-1.5 pr-6 text-xs text-gray-900 bg-white focus:ring-1 focus:ring-[var(--primary)] focus:border-[var(--primary)]"
+        aria-label="Period"
+        className="min-w-0 w-[128px] rounded border border-gray-300 bg-white py-0.5 pl-1.5 pr-6 text-xs text-gray-900 focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] focus:outline-none"
       >
         <option value="day">Day</option>
         <option value="week">Week</option>
         <option value="month">Month</option>
         <option value="quarter">Quarter</option>
+        <option value="year">Year</option>
         <option value="custom">Custom</option>
       </select>
 
       {period === 'custom' && (
-        <div className="absolute top-full right-0 z-10 mt-0.5 py-1.5 px-1.5 bg-white border border-gray-200 rounded shadow-lg flex items-center gap-1.5">
+        <div className="absolute top-full right-0 z-10 mt-0.5 flex items-center gap-1.5 rounded border border-gray-200 bg-white px-1.5 py-1.5 shadow-lg">
           <input
             type="date"
             value={customFrom}
@@ -62,10 +65,10 @@ function DashboardChrome({ children }: { children: ReactNode }) {
   const suffix = qs ? `?${qs}` : '';
 
   return (
-    <div className="-mt-1 space-y-4">
-      <div className="mb-3 pb-3 border-b-2 border-gray-200">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-1 min-w-0 gap-1 overflow-x-auto">
+    <div className="-mt-1 space-y-3">
+      <div className="mb-2 border-b-2 border-gray-200 pb-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
             {TABS.map((tab) => {
               const active = pathname === tab.href || pathname.startsWith(`${tab.href}/`);
               return (
@@ -73,12 +76,11 @@ function DashboardChrome({ children }: { children: ReactNode }) {
                   key={tab.segment}
                   href={`${tab.href}${suffix}`}
                   className={`
-                  flex items-center gap-1.5 py-2 px-4 rounded-t border-b-2 border-transparent
-                  text-[13px] font-medium whitespace-nowrap transition-all duration-200
+                  flex items-center gap-1.5 rounded-t border-b-2 border-transparent px-3 py-1.5 text-[13px] font-medium whitespace-nowrap transition-all duration-200
                   ${
                     active
-                      ? 'text-[var(--primary)] border-b-2 border-[var(--primary)] bg-[var(--primary)]/5 font-semibold'
-                      : 'text-gray-500 border-b-2 border-transparent bg-transparent hover:text-[var(--primary)] hover:bg-[var(--primary)]/5'
+                      ? 'border-[var(--primary)] bg-[var(--primary)]/5 font-semibold text-[var(--primary)]'
+                      : 'border-transparent bg-transparent text-gray-500 hover:bg-[var(--primary)]/5 hover:text-[var(--primary)]'
                   }
                 `}
                 >

@@ -1,4 +1,4 @@
-import type { DashboardStats } from '@/lib/api/admin';
+import type { DashboardStats, FinanceDashboardData, UsageDashboardData } from '@/lib/api/admin';
 import type { StatsOverviewData } from '@/lib/api/stats';
 
 function enumerateDates(from: string, to: string, maxDays = 42): string[] {
@@ -161,5 +161,129 @@ export function buildDummyStatsOverview(dateFrom: string, dateTo: string): Stats
     chart_period: 'demo',
     breakdown,
     date_range: { from: dateFrom, to: dateTo },
+  };
+}
+
+export function buildDummyFinanceDashboard(dateFrom: string, dateTo: string): FinanceDashboardData {
+  const dates = enumerateDates(dateFrom, dateTo, 45);
+  let disb = 0;
+  let rep = 0;
+  let pay = 0;
+  let inv = 0;
+
+  const breakdown = dates.map((date, i) => {
+    const disbursements = Math.round(180_000 + Math.sin(i * 0.51) * 95_000 + (i % 4) * 12_000);
+    const repayments = Math.round(125_000 + Math.cos(i * 0.47) * 72_000 + (i % 5) * 9_000);
+    const payroll = Math.round(420_000 + Math.sin(i * 0.39) * 110_000 + (i % 3) * 25_000);
+    const inventory_sales = Math.round(35_000 + Math.cos(i * 0.61) * 18_000 + (i % 6) * 4_000);
+    disb += disbursements;
+    rep += repayments;
+    pay += payroll;
+    inv += inventory_sales;
+    return {
+      date,
+      label: weekdayShort(date),
+      disbursements,
+      repayments,
+      payroll,
+      inventory_sales,
+    };
+  });
+
+  const lastIso = dates[dates.length - 1] ?? dateTo;
+
+  return {
+    summary: {
+      disbursements: { amount: disb, count: Math.max(3, Math.round(dates.length * 1.4)) },
+      repayments: { amount: rep, count: Math.max(5, Math.round(dates.length * 2.2)) },
+      payroll: { amount: pay, runs: Math.max(1, Math.ceil(dates.length / 12)) },
+      milk_payments_recorded: { amount: Math.round(pay * 0.42) },
+      inventory_sales: { amount: inv, count: Math.max(4, Math.round(dates.length * 1.8)) },
+      portfolio_active: { loan_count: 38, principal_outstanding: 12_400_000 },
+    },
+    loans_by_status: [
+      { status: 'active', count: 38 },
+      { status: 'closed', count: 6 },
+    ],
+    breakdown,
+    recent_disbursements: [
+      {
+        id: 'demo-loan-1',
+        principal: 2_400_000,
+        status: 'active',
+        disbursement_date: `${lastIso}T14:20:00.000Z`,
+        borrower_label: 'Nyagatare Farmers Union',
+        lender_name: 'Gemura MCC',
+      },
+      {
+        id: 'demo-loan-2',
+        principal: 980_000,
+        status: 'active',
+        disbursement_date: `${lastIso}T11:05:00.000Z`,
+        borrower_label: 'Kirehe Dairy Co-op',
+        lender_name: 'Gemura MCC',
+      },
+      {
+        id: 'demo-loan-3',
+        principal: 650_000,
+        status: 'active',
+        disbursement_date: `${lastIso}T09:40:00.000Z`,
+        borrower_label: 'Rwamagana Collectors',
+        lender_name: 'Gemura MCC',
+      },
+    ],
+  };
+}
+
+export function buildDummyUsageDashboard(dateFrom: string, dateTo: string): UsageDashboardData {
+  const dates = enumerateDates(dateFrom, dateTo, 45);
+  let auditEv = 0;
+  let milkT = 0;
+  let gate = 0;
+
+  const breakdown = dates.map((date, i) => {
+    const audit_events = Math.round(120 + Math.sin(i * 0.41) * 55 + (i % 4) * 12);
+    const audit_users = Math.round(28 + Math.cos(i * 0.38) * 12 + (i % 3) * 3);
+    const milk_transactions = Math.round(180 + Math.sin(i * 0.52) * 70 + (i % 5) * 15);
+    const milk_operators = Math.round(22 + Math.cos(i * 0.44) * 9 + (i % 4) * 2);
+    const gate_deliveries = Math.round(35 + Math.sin(i * 0.35) * 18 + (i % 3) * 5);
+    auditEv += audit_events;
+    milkT += milk_transactions;
+    gate += gate_deliveries;
+    return {
+      date,
+      label: weekdayShort(date),
+      audit_events,
+      audit_users,
+      milk_transactions,
+      milk_operators,
+      gate_deliveries,
+    };
+  });
+
+  const days = Math.max(1, dates.length);
+
+  return {
+    summary: {
+      users: {
+        active_platform_total: 248,
+        last_login_in_period: Math.min(231, 140 + days * 6),
+        registered_in_period: Math.max(2, Math.round(days * 1.2)),
+      },
+      audit: {
+        events: auditEv || Math.round(days * 420),
+        distinct_users: Math.min(180, 52 + days * 8),
+      },
+      milk: {
+        transactions: milkT || Math.round(days * 245),
+        distinct_operators: Math.min(120, 38 + days * 5),
+      },
+      mcc_gate_deliveries: gate || Math.round(days * 42),
+      payroll_runs_created: Math.max(1, Math.ceil(days / 14)),
+      supplier_customer_links_created: Math.max(3, Math.round(days * 2.4)),
+      feed_posts_created: Math.round(days * 6.5),
+      inventory_sales_created: Math.round(days * 4.2),
+    },
+    breakdown,
   };
 }
