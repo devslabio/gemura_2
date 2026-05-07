@@ -1,10 +1,19 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsUUID, Matches, Max, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsBoolean, IsInt, IsOptional, IsUUID, Matches, Max, Min } from 'class-validator';
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 export class GetOverviewDto {
+  @ApiPropertyOptional({
+    description:
+      'When true, aggregates milk KPIs across all tenants (Gemura Admin). Requires manage_users or platform admin on the request membership context. Ignores account_id for milk scope.',
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  aggregate_all_accounts?: boolean;
+
   @ApiPropertyOptional({
     description: 'Account ID to get overview for. Uses user default account when omitted.',
   })

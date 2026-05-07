@@ -1,4 +1,4 @@
-export type PeriodKey = 'day' | 'week' | 'month' | 'quarter' | 'custom';
+export type PeriodKey = 'day' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
 
 export function toYYYYMMDD(d: Date): string {
   const y = d.getFullYear();
@@ -38,6 +38,10 @@ export function getPeriodRange(
       end = new Date(now.getFullYear(), q * 3, 0);
       break;
     }
+    case 'year':
+      start = new Date(now.getFullYear(), 0, 1);
+      end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      break;
     default:
       start = new Date(now.getFullYear(), now.getMonth(), 1);
       end = new Date(now);
@@ -58,7 +62,7 @@ export function getEffectiveDateRange(
   return getPeriodRange(period, customFrom || undefined, customTo || undefined);
 }
 
-const PERIOD_SET = new Set<PeriodKey>(['day', 'week', 'month', 'quarter', 'custom']);
+const PERIOD_SET = new Set<PeriodKey>(['day', 'week', 'month', 'quarter', 'year', 'custom']);
 
 export function parsePeriodFromSearchParams(searchParams: URLSearchParams): {
   period: PeriodKey;
@@ -81,5 +85,6 @@ export function periodLabel(period: PeriodKey, customFrom: string, customTo: str
   if (period === 'week') return 'Last 7 days';
   if (period === 'month') return 'This month';
   if (period === 'quarter') return 'This quarter';
+  if (period === 'year') return 'This year';
   return 'Selected range';
 }

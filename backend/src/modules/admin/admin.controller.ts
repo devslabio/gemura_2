@@ -62,12 +62,24 @@ export class AdminController {
       status: 'success',
       message: 'Dashboard statistics retrieved successfully.',
       data: {
-        total_users: 1250,
-        active_users: 980,
-        total_accounts: 850,
-        active_accounts: 720,
-        total_transactions: 15000,
-        recent_activity: [],
+        users: { total: 1250, active: 980, inactive: 270 },
+        accounts: { total: 850 },
+        sales: { total: 15000, liters: 658420 },
+        collections: { total: 15000 },
+        suppliers: { total: 18642 },
+        customers: { total: 19420 },
+        revenue: { total: 278500000, last30Days: 512000000, last7Days: 125000000, today: 20100000 },
+        trends: { daily: [] },
+        salesByStatus: [{ status: 'accepted', count: 14910 }],
+        recentSales: [],
+        overview: {
+          collectionsByMcc: [],
+          healthRows: [],
+          onboardingQueue: [],
+          alerts: [],
+          adoption: [],
+          activity: [],
+        },
       },
     },
   })
@@ -87,13 +99,117 @@ export class AdminController {
       message: 'Insufficient permissions. dashboard.view permission required.',
     },
   })
+  @ApiQuery({
+    name: 'tz_offset_minutes',
+    required: false,
+    description:
+      'Fixed offset east of UTC for interpreting date_from/date_to calendar days (same as `-Date.getTimezoneOffset()` in JavaScript). Matches POST /stats/overview.',
+  })
   async getDashboardStats(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
     @Query('date_from') dateFrom?: string,
     @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
   ) {
-    return this.adminService.getDashboardStats(user, accountId, dateFrom, dateTo);
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    return this.adminService.getDashboardStats(user, accountId, dateFrom, dateTo, tzOffsetMinutes);
+  }
+
+  @Get('dashboard/finance-stats')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({
+    summary: 'Admin finance dashboard statistics',
+    description:
+      'Platform-wide loans disbursed/repaid, completed payroll runs, milk amount_paid recorded, inventory sales, and active-loan portfolio snapshot. Uses the same `date_from`, `date_to`, and `tz_offset_minutes` semantics as GET /admin/dashboard/stats.',
+  })
+  @ApiQuery({ name: 'date_from', required: false })
+  @ApiQuery({ name: 'date_to', required: false })
+  @ApiQuery({
+    name: 'tz_offset_minutes',
+    required: false,
+    description:
+      'Fixed offset east of UTC for interpreting date_from/date_to calendar days (same as GET /admin/dashboard/stats).',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid or missing authentication token',
+    example: {
+      code: 401,
+      status: 'error',
+      message: 'Access denied. Token is required.',
+    },
+  })
+  @ApiForbiddenResponse({
+    description: 'Insufficient permissions - requires dashboard.view permission',
+    example: {
+      code: 403,
+      status: 'error',
+      message: 'Insufficient permissions. dashboard.view permission required.',
+    },
+  })
+  async getFinanceDashboardStats(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    return this.adminService.getFinanceDashboardStats(user, accountId, dateFrom, dateTo, tzOffsetMinutes);
+  }
+
+  @Get('dashboard/usage-stats')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({
+    summary: 'Admin usage & adoption statistics',
+    description:
+      'Platform-wide engagement proxies: users (login/registration), audit_log volume, milk & gate activity, payroll runs created, relationships, feed and inventory. Same `date_from`, `date_to`, `tz_offset_minutes` as other admin dashboard endpoints.',
+  })
+  @ApiQuery({ name: 'date_from', required: false })
+  @ApiQuery({ name: 'date_to', required: false })
+  @ApiQuery({
+    name: 'tz_offset_minutes',
+    required: false,
+    description:
+      'Fixed offset east of UTC for interpreting date_from/date_to calendar days (same as GET /admin/dashboard/stats).',
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid or missing authentication token',
+    example: {
+      code: 401,
+      status: 'error',
+      message: 'Access denied. Token is required.',
+    },
+  })
+  @ApiForbiddenResponse({
+    description: 'Insufficient permissions - requires dashboard.view permission',
+    example: {
+      code: 403,
+      status: 'error',
+      message: 'Insufficient permissions. dashboard.view permission required.',
+    },
+  })
+  async getUsageDashboardStats(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    return this.adminService.getUsageDashboardStats(user, accountId, dateFrom, dateTo, tzOffsetMinutes);
   }
 
   @Get('roles')
@@ -577,7 +693,7 @@ export class AdminController {
   @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Get user activity list by metric',
-    description: 'Returns user-scoped activity rows for one metric: suppliers, customers, sales, collections, farms, or accounts.',
+    description: 'Returns user-scoped activity rows for one metric: suppliers, customers, sales, collections, farms, accounts, or members.',
   })
   @ApiParam({
     name: 'id',
@@ -588,7 +704,7 @@ export class AdminController {
     name: 'metric',
     required: true,
     description: 'Activity metric',
-    enum: ['suppliers', 'customers', 'sales', 'collections', 'farms', 'accounts'],
+    enum: ['suppliers', 'customers', 'sales', 'collections', 'farms', 'accounts', 'members'],
   })
   async getUserActivity(
     @CurrentUser() user: User,
@@ -610,7 +726,7 @@ export class AdminController {
   @ApiQuery({
     name: 'resource',
     required: true,
-    enum: ['collections', 'sales', 'suppliers', 'customers', 'farms', 'accounts'],
+    enum: ['collections', 'sales', 'suppliers', 'customers', 'farms', 'accounts', 'members'],
   })
   @ApiQuery({ name: 'operational_account_id', required: false, description: 'Required except for resource=accounts' })
   @ApiQuery({ name: 'status', required: false })

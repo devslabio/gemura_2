@@ -1,0 +1,25 @@
+services:
+  gemura-admin-uat-ui:
+    build:
+      context: ../apps/gemura-admin-web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL_ADMIN_UAT:-https://uat.gemura.rw/api}
+    container_name: gemura-admin-uat-ui
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3005
+      TZ: Africa/Kigali
+      HOSTNAME: 0.0.0.0
+    ports:
+      - "${ADMIN_UAT_PORT:-3027}:3005"
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3005/auth/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+

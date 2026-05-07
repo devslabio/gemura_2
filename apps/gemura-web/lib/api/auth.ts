@@ -50,6 +50,22 @@ export interface ErrorResponse {
   message: string;
 }
 
+export interface ForgotPasswordResponse {
+  code: number;
+  status: string;
+  message: string;
+  data: {
+    user_id: string;
+    legacy_user_id?: number | null;
+    sms_sent: boolean;
+    email_sent: boolean;
+    contact_info: {
+      phone?: string | null;
+      email?: string | null;
+    };
+  };
+}
+
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<AuthResponse | ErrorResponse> => {
     // Validate credentials before sending
@@ -95,11 +111,15 @@ export const authApi = {
     return apiClient.post('/auth/verify', { token });
   },
 
-  forgotPassword: async (email: string): Promise<{ code: number; status: string; message: string }> => {
-    return apiClient.post('/auth/forgot-password', { email });
+  forgotPassword: async (payload: { phone?: string; email?: string }): Promise<ForgotPasswordResponse> => {
+    return apiClient.post('/auth/forgot-password', payload);
   },
 
-  resetPassword: async (token: string, password: string): Promise<{ code: number; status: string; message: string }> => {
-    return apiClient.post('/auth/reset-password', { token, password });
+  resetPassword: async (payload: {
+    user_id: string;
+    reset_code: string;
+    new_password: string;
+  }): Promise<{ code: number; status: string; message: string }> => {
+    return apiClient.post('/auth/reset-password', payload);
   },
 };

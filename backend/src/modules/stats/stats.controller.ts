@@ -4,6 +4,7 @@ import { StatsService } from './stats.service';
 import { TokenGuard } from '../../common/guards/token.guard';
 import { PermissionGuard } from '../../common/guards/permission.guard';
 import { RequirePermission } from '../../common/decorators/permission.decorator';
+import { CurrentAccount } from '../../common/decorators/account.decorator';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { User } from '@prisma/client';
 import { GetOverviewDto } from './dto/get-overview.dto';
@@ -20,7 +21,8 @@ export class StatsController {
   @HttpCode(200)
   @ApiOperation({
     summary: 'Get overview statistics',
-    description: 'Retrieve dashboard overview for the authenticated user\'s default account: summary (sales, collections, suppliers, customers), daily breakdown for charts, and recent milk sales/collections. Optional body: account_id (UUID), date_from (YYYY-MM-DD), date_to (YYYY-MM-DD). Used by the dashboard Overview tab.',
+    description:
+      'Retrieve dashboard overview: summary (sales, collections, suppliers, customers), daily breakdown, recent milk movements. Optional body: account_id (UUID), date_from, date_to, tz_offset_minutes, aggregate_all_accounts (platform-wide milk + relationships; requires manage_users or platform admin on the request membership context).',
   })
   @ApiBody({
     type: GetOverviewDto,
@@ -74,8 +76,23 @@ export class StatsController {
     description: 'Invalid or missing authentication token',
     schema: { example: { code: 401, status: 'error', message: 'Access denied. Token is required.' } },
   })
-  async getOverview(@CurrentUser() user: User, @Body() dto?: GetOverviewDto) {
-    return this.statsService.getOverview(user, dto?.account_id, dto?.date_from, dto?.date_to, dto?.tz_offset_minutes);
+  async getOverview(
+    @CurrentUser() user: User,
+    @CurrentAccount() membershipAccountId: string,
+    @Body() dto?: GetOverviewDto,
+  ) {
+    const opts =
+      dto?.aggregate_all_accounts === true
+        ? { aggregateAllAccounts: true as const, membershipAccountId }
+        : undefined;
+    return this.statsService.getOverview(
+      user,
+      dto?.account_id,
+      dto?.date_from,
+      dto?.date_to,
+      dto?.tz_offset_minutes,
+      opts,
+    );
   }
 
   @Post()

@@ -15,12 +15,19 @@ import Icon, {
   faWarehouse,
   faBuilding,
   faChartLine,
-  faUser,
   faClipboardList,
+  faReceipt,
+  faHandHoldingDollar,
+  faChartBar,
 } from './Icon';
 import { adminApi } from '@/lib/api/admin';
 import { PermissionService } from '@/lib/services/permission.service';
 import type { CSSProperties } from 'react';
+import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
+
+type NavSection = { kind: 'section'; label: string };
+type NavLink = { kind: 'link'; href: string; label: string; icon: IconDefinition; badge?: number };
+type NavEntry = NavSection | NavLink;
 
 interface SidebarProps {
   isOpen: boolean;
@@ -67,39 +74,77 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     };
   }, [currentAccount?.account_id]);
 
-  const menuItems = useMemo(() => {
-    const items: Array<{ href: string; label: string; icon: any; badge?: number }> = [];
+  const navEntries = useMemo((): NavEntry[] => {
+    const entries: NavEntry[] = [];
 
     if (canViewDashboard() || isAdmin()) {
-      items.push({ href: '/admin/dashboard/overview', label: 'Dashboard', icon: faChartLine });
+      entries.push({ kind: 'section', label: 'Dashboards' });
+      entries.push({
+        kind: 'link',
+        href: '/admin/dashboard/overview',
+        label: 'Overview',
+        icon: faChartLine,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/dashboard/milk',
+        label: 'Milk & collections',
+        icon: faReceipt,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/dashboard/finance',
+        label: 'Finance',
+        icon: faHandHoldingDollar,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/dashboard/usage',
+        label: 'Usage',
+        icon: faChartBar,
+      });
     }
 
     if (canManageUsers() || isAdmin()) {
-      items.push({ href: '/admin/users', label: 'Users', icon: faUsers });
-      items.push({
+      entries.push({ kind: 'section', label: 'Administration' });
+      entries.push({ kind: 'link', href: '/admin/users', label: 'Users', icon: faUsers });
+      entries.push({
+        kind: 'link',
         href: '/admin/onboarding',
         label: 'MCC onboarding',
         icon: faClipboardList,
         badge: onboardingPending > 0 ? onboardingPending : undefined,
       });
-      items.push({ href: '/admin/roles', label: 'Roles', icon: faUserShield });
-      items.push({ href: '/admin/permissions', label: 'Permissions', icon: faLock });
+      entries.push({ kind: 'link', href: '/admin/roles', label: 'Roles', icon: faUserShield });
+      entries.push({ kind: 'link', href: '/admin/permissions', label: 'Permissions', icon: faLock });
     }
 
-    // IMMIS is visible to any authenticated admin-portal user.
-    items.push({ href: '/admin/immis', label: 'IMMIS', icon: faUsers });
+    entries.push({ kind: 'section', label: 'Platform' });
+    entries.push({ kind: 'link', href: '/admin/immis', label: 'IMMIS', icon: faUsers });
+    entries.push({ kind: 'link', href: '/admin/farms', label: 'Farms', icon: faWarehouse });
+    entries.push({ kind: 'link', href: '/admin/accounts', label: 'Accounts', icon: faBuilding });
 
-    // Farms & accounts are token-guarded; keep visible for quick switching.
-    items.push({ href: '/admin/farms', label: 'Farms', icon: faWarehouse });
-    items.push({ href: '/admin/accounts', label: 'Accounts', icon: faBuilding });
-
-    return items;
+    return entries;
   }, [canManageUsers, isAdmin, canViewDashboard, onboardingPending]);
 
-  const isActive = (href: string) => {
+  const linkIsActive = (href: string) => {
     if (!href) return false;
-    return pathname === href || pathname.startsWith(href + '/');
+    if (href.startsWith('/admin/dashboard/')) {
+      const segment = href.replace('/admin/dashboard/', '');
+      if (!segment) return false;
+      return pathname === href || pathname.startsWith(`${href}/`);
+    }
+    return pathname === href || pathname.startsWith(`${href}/`);
   };
+
+  const userInitials = useMemo(() => {
+    const f = user?.firstName?.trim()?.charAt(0);
+    const l = user?.lastName?.trim()?.charAt(0);
+    if (f && l) return `${f}${l}`.toUpperCase();
+    if (f) return f.toUpperCase();
+    if (userEmail) return userEmail.charAt(0).toUpperCase();
+    return '?';
+  }, [user?.firstName, user?.lastName, userEmail]);
 
   const handleCollapseToggle = useCallback(() => {
     onCollapsedChange(!collapsed);
@@ -181,46 +226,41 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
           </div>
         </div>
 
-        {/* User block */}
-        <div className={`flex-shrink-0 flex flex-col items-center gap-3 p-4 sm:p-6 ${collapsed ? 'lg:px-3' : ''} mb-2 sm:mb-4`}>
-          <div className="rounded-full flex items-center justify-center text-white bg-black/20 border-2 border-white/30 hover:bg-black/30 hover:border-white/50 active:scale-105 w-14 h-14 sm:w-20 sm:h-20 transition-all duration-300 ease-in-out">
-            <Icon icon={faUser} className="text-white" size={collapsed ? 'sm' : '2x'} />
-          </div>
-          {!collapsed && (
-            <div className="text-center w-full min-w-0">
-              <div className="text-sm font-semibold text-white mb-0.5 truncate">{userName}</div>
-              {userEmail && <div className="text-xs text-gray-300 truncate max-w-[200px] mx-auto">{userEmail}</div>}
-              <div className="text-xs text-white/80 font-medium uppercase tracking-wide mt-0.5">{userRole}</div>
-            </div>
-          )}
-        </div>
-
         {/* Navigation */}
         <nav className="flex-1 py-0 overflow-y-auto min-h-0">
           <ul className="list-none p-0 m-0 flex flex-col gap-0">
-            {menuItems.map((item) => {
-              const active = isActive(item.href);
+            {navEntries.map((entry, idx) => {
+              if (entry.kind === 'section') {
+                if (collapsed) return null;
+                return (
+                  <li key={`section-${entry.label}-${idx}`} className="mt-3 mb-1 first:mt-0 px-5 md:px-7">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">{entry.label}</span>
+                  </li>
+                );
+              }
+
+              const active = linkIsActive(entry.href);
               const rowClass = `
                 flex items-center gap-3 min-h-[44px] px-4 py-3 sm:px-5 md:px-7 w-full text-left
                 transition-all duration-200
                 ${collapsed ? 'justify-center px-3' : ''}
                 ${
                   active
-                    ? 'bg-[#031a3a] text-white border-l-4 border-white/30'
+                    ? 'bg-[#031a3a] text-white border-l-4 border-[var(--primary)]'
                     : 'text-gray-300 hover:bg-[#031a3a] hover:text-white active:bg-[#031a3a]'
                 }
               `;
 
               return (
-                <li key={item.href} className="my-0.5">
-                  <Link href={item.href} onClick={handleLinkClick} className={rowClass} title={collapsed ? item.label : undefined}>
-                    <Icon icon={item.icon} className={active ? 'text-white' : 'text-gray-300'} size="sm" />
+                <li key={entry.href} className="my-0.5">
+                  <Link href={entry.href} onClick={handleLinkClick} className={rowClass} title={collapsed ? entry.label : undefined}>
+                    <Icon icon={entry.icon} className={active ? 'text-white' : 'text-gray-300'} size="sm" />
                     {!collapsed && (
                       <span className="text-sm font-medium flex-1 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-2 min-w-0">
-                        {item.label}
-                        {item.badge != null && item.badge > 0 && (
+                        {entry.label}
+                        {entry.badge != null && entry.badge > 0 && (
                           <span className="shrink-0 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-400 text-[#052a54] text-xs font-bold">
-                            {item.badge > 99 ? '99+' : item.badge}
+                            {entry.badge > 99 ? '99+' : entry.badge}
                           </span>
                         )}
                       </span>
@@ -232,6 +272,24 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
             })}
           </ul>
         </nav>
+
+        <div className={`flex-shrink-0 border-t border-[#031a3a] p-4 ${collapsed ? 'flex justify-center' : ''}`}>
+          <div className={`flex items-center gap-3 ${collapsed ? 'justify-center' : ''}`}>
+            <div
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black/25 text-xs font-semibold text-white ring-1 ring-white/20"
+              title={userName}
+            >
+              <span className={collapsed ? 'text-[11px]' : 'text-xs'}>{userInitials}</span>
+            </div>
+            {!collapsed && (
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold text-white">{userName}</div>
+                <div className="truncate text-xs text-white/60">{userRole}</div>
+                {userEmail && <div className="truncate text-[11px] text-white/45">{userEmail}</div>}
+              </div>
+            )}
+          </div>
+        </div>
       </aside>
     </>
   );

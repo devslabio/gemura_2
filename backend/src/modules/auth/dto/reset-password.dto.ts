@@ -1,14 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsInt, MinLength } from 'class-validator';
+import { IsString, IsNotEmpty, MinLength } from 'class-validator';
 
 export class ResetPasswordDto {
   @ApiProperty({
-    description: 'User ID',
-    example: 1,
+    description: 'User ID (legacy numeric ID or UUID)',
+    example: '550e8400-e29b-41d4-a716-446655440000',
   })
-  @IsInt()
+  @IsString()
   @IsNotEmpty()
-  user_id: number;
+  user_id: string;
 
   @ApiProperty({
     description: '6-digit reset code received via SMS/email',

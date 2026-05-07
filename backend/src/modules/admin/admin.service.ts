@@ -23,6 +23,7 @@ import {
   type RoleCode,
 } from './roles-permissions.config';
 import { composeUserFullName, splitIntoFirstLast } from '../../common/utils/user-name.util';
+import { saleAtBoundsUtcInclusive, utcCalendarDatesBetweenInclusive } from '../../common/utils/sale-at-bounds.util';
 import * as ExcelJS from 'exceljs';
 import {
   buildCsvFromRows,
@@ -41,7 +42,8 @@ export type UserActivityMetric =
   | 'sales'
   | 'collections'
   | 'farms'
-  | 'accounts';
+  | 'accounts'
+  | 'members';
 
 export type UserBusinessResource =
   | 'collections'
@@ -49,10 +51,13 @@ export type UserBusinessResource =
   | 'suppliers'
   | 'customers'
   | 'farms'
-  | 'accounts';
+  | 'accounts'
+  | 'members';
 
 @Injectable()
 export class AdminService {
+  private static readonly LOCATION_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
   private parseClientLocalDateToUtcBoundary(
     dateOnly: string,
     _tzOffsetMinutes: number,
@@ -80,6 +85,7 @@ export class AdminService {
     'collections',
     'farms',
     'accounts',
+    'members',
   ] as const;
 
   private static readonly USER_BUSINESS_RESOURCES: UserBusinessResource[] = [
@@ -89,6 +95,7 @@ export class AdminService {
     'customers',
     'farms',
     'accounts',
+    'members',
   ];
 
   private metadataValueFromNotes(notes: string | null | undefined, key: string): string | null {
@@ -102,10 +109,6 @@ export class AdminService {
     const shift = this.metadataValueFromNotes(notes, 'COLLECTION_SHIFT')?.toLowerCase();
     return shift === 'evening' ? 'evening' : 'morning';
   }
-
-  /** UUID v4 (and common variants) — used to tell `locations.id` from fallback text names. */
-  private static readonly LOCATION_UUID_RE =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   constructor(
     private prisma: PrismaService,
@@ -126,6 +129,7 @@ export class AdminService {
         id,
         {
           accounts: 0,
+          members: 0,
           suppliers: 0,
           customers: 0,
           sales: 0,
@@ -156,12 +160,21 @@ export class AdminService {
     }
 
     const [
+      membersByAccount,
       suppliersByCustomerAccount,
       customersBySupplierAccount,
       salesBySupplierAccount,
       collectionsByCustomerAccount,
       farmsByAccount,
     ] = await Promise.all([
+      this.prisma.userAccount.groupBy({
+        by: ['account_id'],
+        where: {
+          account_id: { in: accountIds },
+          status: 'active',
+        },
+        _count: true,
+      }),
       this.prisma.supplierCustomer.groupBy({
         by: ['customer_account_id'],
         where: {
@@ -206,6 +219,9 @@ export class AdminService {
     const suppliersByAccountId = new Map(
       suppliersByCustomerAccount.map((row) => [row.customer_account_id, this.normalizeGroupCount(row)]),
     );
+    const membersByAccountId = new Map(
+      membersByAccount.map((row) => [row.account_id, this.normalizeGroupCount(row)]),
+    );
     const customersByAccountId = new Map(
       customersBySupplierAccount.map((row) => [row.supplier_account_id, this.normalizeGroupCount(row)]),
     );
@@ -231,6 +247,7 @@ export class AdminService {
       empty[userId].accounts = accountSet.size;
 
       for (const linkedAccountId of accountSet) {
+        empty[userId].members += membersByAccountId.get(linkedAccountId) ?? 0;
         empty[userId].suppliers += suppliersByAccountId.get(linkedAccountId) ?? 0;
         empty[userId].customers += customersByAccountId.get(linkedAccountId) ?? 0;
         empty[userId].sales += salesByAccountId.get(linkedAccountId) ?? 0;
@@ -242,10 +259,43 @@ export class AdminService {
     return empty;
   }
 
+  private permissionSetFromPayload(raw: unknown): Set<string> {
+    if (!raw) return new Set<string>();
+    if (Array.isArray(raw)) {
+      return new Set(raw.map((p) => String(p)));
+    }
+    if (typeof raw === 'object') {
+      const entries = Object.entries(raw as Record<string, unknown>)
+        .filter(([, v]) => v === true)
+        .map(([k]) => k);
+      return new Set(entries);
+    }
+    return new Set<string>();
+  }
+
+  private async hasPlatformRolePermission(platformRoleId: string | null, permissionCode: string): Promise<boolean> {
+    if (!platformRoleId) return false;
+    const role = await this.prisma.platformRole.findUnique({
+      where: { id: platformRoleId },
+      include: {
+        permission_links: {
+          include: { permission: true },
+        },
+      },
+    });
+    if (!role) return false;
+    return role.permission_links.some((l) => l.permission.code === permissionCode);
+  }
+
   /**
-   * Check if user has admin permission
+   * Check if user has account access and required permission.
+   * Defaults to manage_users to preserve existing admin routes.
    */
-  private async checkAdminPermission(user: User, accountId: string): Promise<void> {
+  private async checkAdminPermission(
+    user: User,
+    accountId: string,
+    requiredPermission = 'manage_users',
+  ): Promise<void> {
     const userAccount = await this.prisma.userAccount.findFirst({
       where: {
         user_id: user.id,
@@ -267,40 +317,32 @@ export class AdminService {
       return;
     }
 
-    // Check for manage_users permission
-    let permissions: any = null;
+    let parsedPermissions: unknown = null;
     if (userAccount.permissions) {
       if (typeof userAccount.permissions === 'string') {
         try {
-          permissions = JSON.parse(userAccount.permissions);
+          parsedPermissions = JSON.parse(userAccount.permissions);
         } catch {
-          permissions = null;
+          parsedPermissions = null;
         }
       } else {
-        permissions = userAccount.permissions;
+        parsedPermissions = userAccount.permissions;
       }
     }
 
-    if (!permissions) {
-      throw new ForbiddenException({
-        code: 403,
-        status: 'error',
-        message: 'Insufficient permissions to manage users.',
-      });
-    }
+    const granted = this.permissionSetFromPayload(parsedPermissions);
+    const roleDefaults = ROLE_DEFAULT_PERMISSIONS[userAccount.role as RoleCode] ?? [];
+    let hasPermission = granted.has(requiredPermission) || roleDefaults.includes(requiredPermission);
 
-    let hasPermission = false;
-    if (Array.isArray(permissions)) {
-      hasPermission = permissions.includes('manage_users');
-    } else if (typeof permissions === 'object') {
-      hasPermission = permissions['manage_users'] === true;
+    if (!hasPermission) {
+      hasPermission = await this.hasPlatformRolePermission(userAccount.platform_role_id ?? null, requiredPermission);
     }
 
     if (!hasPermission) {
       throw new ForbiddenException({
         code: 403,
         status: 'error',
-        message: 'Insufficient permissions to manage users.',
+        message: `Insufficient permissions. ${requiredPermission} permission required.`,
       });
     }
   }
@@ -807,6 +849,62 @@ export class AdminService {
       };
     }
 
+    if (metric === 'members') {
+      const rows = await this.prisma.userAccount.findMany({
+        where: {
+          account_id: { in: linkedAccountIds },
+          status: 'active',
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              status: true,
+            },
+          },
+          account: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              status: true,
+              type: true,
+            },
+          },
+        },
+        orderBy: { created_at: 'desc' },
+        take: 1000,
+      });
+      return {
+        code: 200,
+        status: 'success',
+        message: 'User activity retrieved successfully.',
+        data: rows.map((row) => ({
+          id: `${row.user_id}:${row.account_id}`,
+          user_id: row.user_id,
+          account_id: row.account_id,
+          name: row.user?.name ?? null,
+          email: row.user?.email ?? null,
+          phone: row.user?.phone ?? null,
+          role: row.role ?? null,
+          status: row.user?.status ?? row.status,
+          relationship_status: row.status,
+          account: row.account
+            ? {
+                id: row.account.id,
+                code: row.account.code,
+                name: row.account.name,
+                type: row.account.type,
+                status: row.account.status,
+              }
+            : null,
+        })),
+      };
+    }
+
     if (metric === 'suppliers') {
       const rows = await this.prisma.supplierCustomer.findMany({
         where: {
@@ -1034,6 +1132,54 @@ export class AdminService {
         status: 'error',
         message: 'Target user has no active access to the given operational account.',
       });
+    }
+
+    if (resource === 'members') {
+      const rows = await this.prisma.userAccount.findMany({
+        where: {
+          account_id: opAccountId,
+          status: 'active',
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+              status: true,
+            },
+          },
+          account: { select: { id: true, code: true, name: true, type: true, status: true } },
+        },
+        orderBy: { created_at: 'desc' },
+      });
+
+      return {
+        code: 200,
+        status: 'success',
+        message: 'User business records retrieved successfully.',
+        data: rows.map((row) => ({
+          id: `${row.user_id}:${row.account_id}`,
+          user_id: row.user_id,
+          account_id: row.account_id,
+          name: row.user?.name ?? null,
+          email: row.user?.email ?? null,
+          phone: row.user?.phone ?? null,
+          role: row.role ?? null,
+          status: row.user?.status ?? row.status,
+          relationship_status: row.status,
+          account: row.account
+            ? {
+                id: row.account.id,
+                code: row.account.code,
+                name: row.account.name,
+                type: row.account.type,
+                status: row.account.status,
+              }
+            : null,
+        })),
+      };
     }
 
     if (resource === 'collections') {
@@ -1754,7 +1900,7 @@ export class AdminService {
 
     const statsByUserId = await this.getUserOperationalStats(users.map((u) => u.id));
 
-    const headers = ['Name', 'Email', 'Phone', 'Account Type', 'Role', 'Suppliers', 'Customers', 'Sales', 'Collections', 'Farms', 'Status', 'Created At'];
+    const headers = ['Name', 'Email', 'Phone', 'Account Type', 'Role', 'Members', 'Suppliers', 'Customers', 'Sales', 'Collections', 'Farms', 'Status', 'Created At'];
 
     const escape = (v: unknown): string => {
       if (v === null || v === undefined) return '';
@@ -1768,13 +1914,14 @@ export class AdminService {
     const csvRows = [
       headers.join(','),
       ...users.map((u) => {
-        const stats = statsByUserId[u.id] ?? { suppliers: 0, customers: 0, sales: 0, collections: 0, farms: 0 };
+        const stats = statsByUserId[u.id] ?? { members: 0, suppliers: 0, customers: 0, sales: 0, collections: 0, farms: 0 };
         return [
           escape(u.name),
           escape(u.email),
           escape(u.phone),
           escape(u.account_type),
           escape(u.user_accounts[0]?.role ?? ''),
+          escape(stats.members),
           escape(stats.suppliers),
           escape(stats.customers),
           escape(stats.sales),
@@ -1823,24 +1970,16 @@ export class AdminService {
     };
   }
 
-  /**
-   * Get dashboard statistics with comprehensive metrics
-   */
-  async getDashboardStats(user: User, accountId: string, dateFrom?: string, dateTo?: string) {
-    await this.checkAdminPermission(user, accountId);
-
-    // Get date ranges for trends
+  /** UTC-inclusive window shared by Overview / Milk / Finance admin dashboards (TZ-aligned dates). */
+  private resolveAdminDashboardPeriodBounds(
+    dateFrom?: string,
+    dateTo?: string,
+    tzOffsetMinutes?: number,
+  ): { gte: Date; lte: Date } {
     const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const last30Days = new Date(todayStart.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const last7Days = new Date(todayStart.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-    // For range-based trend calculations we must stay consistent with how we bucket days:
-    // we use `new Date(sale.sale_at).toISOString().split('T')[0]` which is UTC day-based.
-    // So we interpret `date_from`/`date_to` as UTC dates too (not local midnights).
     const todayStartUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    const todayEndUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
     const last30DaysUtc = new Date(todayStartUtc.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const last7DaysUtc = new Date(todayStartUtc.getTime() - 7 * 24 * 60 * 60 * 1000);
 
     const parseDateOnlyUTC = (s?: string): Date | null => {
       if (!s) return null;
@@ -1853,95 +1992,629 @@ export class AdminService {
       return Number.isNaN(dt.getTime()) ? null : dt;
     };
 
-    // Trend range drives revenue chart + sales volume chart.
-    const trendStart = parseDateOnlyUTC(dateFrom) ?? (() => new Date(last30DaysUtc))();
-    const trendEnd = parseDateOnlyUTC(dateTo) ?? todayStartUtc;
-    const rangeStartDate = trendStart <= trendEnd ? trendStart : trendEnd;
-    const rangeEndDate = trendStart <= trendEnd ? trendEnd : trendStart;
+    if (dateFrom && dateTo) {
+      const parsedFrom = parseDateOnlyUTC(dateFrom);
+      const parsedTo = parseDateOnlyUTC(dateTo);
+      if (!parsedFrom || !parsedTo) {
+        return { gte: last30DaysUtc, lte: todayEndUtc };
+      }
+      let fromStr = dateFrom;
+      let toStr = dateTo;
+      if (parsedFrom.getTime() > parsedTo.getTime()) {
+        [fromStr, toStr] = [toStr, fromStr];
+      }
+      return saleAtBoundsUtcInclusive(fromStr, toStr, tzOffsetMinutes);
+    }
+    return { gte: last30DaysUtc, lte: todayEndUtc };
+  }
 
-    // Include the full end day in range filtering (UTC).
-    rangeStartDate.setUTCHours(0, 0, 0, 0);
-    rangeEndDate.setUTCHours(23, 59, 59, 999);
+  private formatHumanDate(dt: Date): string {
+    return dt.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  }
 
-    /** Incoming milk to this account — matches stats/overview “collection” (non-deleted rows). */
-    const milkIncomingWhere = {
-      customer_account_id: accountId,
-      status: { not: 'deleted' as const },
+  private relativeWhen(dt: Date): string {
+    const diffMs = Date.now() - dt.getTime();
+    const mins = Math.max(1, Math.floor(diffMs / (60 * 1000)));
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs} hr ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days} d ago`;
+  }
+
+  private clamp(n: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, n));
+  }
+
+  private healthLabel(rejectionPct: number, tankPct: number): 'Excellent' | 'Good' | 'Moderate' | 'At risk' | 'Critical' {
+    if (rejectionPct <= 1.2 && tankPct <= 80) return 'Excellent';
+    if (rejectionPct <= 2.2 && tankPct <= 86) return 'Good';
+    if (rejectionPct <= 3.8 && tankPct <= 90) return 'Moderate';
+    if (rejectionPct <= 5.8 && tankPct <= 94) return 'At risk';
+    return 'Critical';
+  }
+
+  private onboardingStatusText(
+    status: MccOnboardingReviewStatus,
+  ): { status: string; tone: 'pending' | 'review' | 'kyc' } {
+    switch (status) {
+      case 'needs_changes':
+        return { status: 'KYC pending', tone: 'kyc' };
+      case 'approved':
+        return { status: 'Approved', tone: 'review' };
+      case 'rejected':
+        return { status: 'Rejected', tone: 'pending' };
+      default:
+        return { status: 'Under review', tone: 'review' };
+    }
+  }
+
+  private async buildLiveOverviewData(bounds: { gte: Date; lte: Date }) {
+    const todayStartUtc = new Date(
+      Date.UTC(bounds.lte.getUTCFullYear(), bounds.lte.getUTCMonth(), bounds.lte.getUTCDate(), 0, 0, 0, 0),
+    );
+
+    const [mccRows, qualityRows, onboardingRowsRaw, pendingOnboarding, latestLoan, latestPayroll, latestOnboarding, latestMilk] =
+      await Promise.all([
+        this.prisma.$queryRaw<
+          Array<{
+            account_id: string;
+            mcc: string;
+            collections_liters: number;
+            sales_rf: number;
+            rejected_txns: number;
+            total_txns: number;
+            liters_today: number;
+          }>
+        >(
+          Prisma.sql`
+          SELECT
+            ms.supplier_account_id::text AS account_id,
+            COALESCE(a.name, 'MCC') AS mcc,
+            COALESCE(SUM(ms.quantity)::numeric, 0)::float8 AS collections_liters,
+            COALESCE(SUM(ms.quantity * ms.unit_price)::numeric, 0)::float8 AS sales_rf,
+            COALESCE(SUM(CASE WHEN ms.status::text = 'rejected' THEN 1 ELSE 0 END), 0)::int AS rejected_txns,
+            COUNT(*)::int AS total_txns,
+            COALESCE(SUM(CASE WHEN ms.sale_at >= ${todayStartUtc} THEN ms.quantity ELSE 0 END)::numeric, 0)::float8 AS liters_today
+          FROM milk_sales ms
+          LEFT JOIN accounts a ON a.id = ms.supplier_account_id
+          WHERE ms.sale_at >= ${bounds.gte}
+            AND ms.sale_at <= ${bounds.lte}
+            AND ms.status::text <> 'deleted'
+          GROUP BY ms.supplier_account_id, a.name
+          ORDER BY collections_liters DESC
+          LIMIT 6
+        `,
+        ),
+        this.prisma.$queryRaw<
+          Array<{
+            account_id: string;
+            mcc: string;
+            deliveries_count: number;
+            manifests_submitted: number;
+            manifests_accepted: number;
+            manifests_rejected: number;
+            tests_total: number;
+            tests_rejected: number;
+            liters_today: number;
+          }>
+        >(
+          Prisma.sql`
+          SELECT
+            gd.mcc_account_id::text AS account_id,
+            COALESCE(a.name, 'MCC') AS mcc,
+            COUNT(DISTINCT gd.id)::int AS deliveries_count,
+            COUNT(DISTINCT CASE WHEN mf.id IS NOT NULL THEN mf.id END)::int AS manifests_submitted,
+            COUNT(DISTINCT CASE WHEN mf.status::text = 'accepted' THEN mf.id END)::int AS manifests_accepted,
+            COUNT(DISTINCT CASE WHEN mf.status::text = 'rejected' THEN mf.id END)::int AS manifests_rejected,
+            COUNT(tr.id)::int AS tests_total,
+            COALESCE(SUM(CASE WHEN tr.outcome::text = 'rejected' THEN 1 ELSE 0 END), 0)::int AS tests_rejected,
+            COALESCE(SUM(CASE WHEN gd.arrived_at >= ${todayStartUtc} THEN gd.gate_volume_litres ELSE 0 END)::numeric, 0)::float8 AS liters_today
+          FROM mcc_gate_deliveries gd
+          LEFT JOIN accounts a ON a.id = gd.mcc_account_id
+          LEFT JOIN mcc_milk_manifests mf ON mf.gate_delivery_id = gd.id
+          LEFT JOIN mcc_milk_test_results tr ON tr.mcc_gate_delivery_id = gd.id
+          WHERE gd.arrived_at >= ${bounds.gte}
+            AND gd.arrived_at <= ${bounds.lte}
+          GROUP BY gd.mcc_account_id, a.name
+          ORDER BY deliveries_count DESC, liters_today DESC
+          LIMIT 6
+        `,
+        ),
+        this.prisma.mccOnboardingSubmission.findMany({
+          where: { review_status: 'pending' },
+          orderBy: { created_at: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            business_name: true,
+            common_name: true,
+            location_province_id: true,
+            created_at: true,
+            review_status: true,
+          },
+        }),
+        this.prisma.mccOnboardingSubmission.count({
+          where: { review_status: 'pending' },
+        }),
+        this.prisma.loan.findFirst({
+          where: { disbursement_date: { gte: bounds.gte, lte: bounds.lte } },
+          orderBy: { disbursement_date: 'desc' },
+          select: { disbursement_date: true, principal: true },
+        }),
+        this.prisma.payrollRun.findFirst({
+          where: { run_date: { gte: bounds.gte, lte: bounds.lte }, status: 'completed' },
+          orderBy: { run_date: 'desc' },
+          select: { run_date: true, total_amount: true },
+        }),
+        this.prisma.mccOnboardingSubmission.findFirst({
+          orderBy: { created_at: 'desc' },
+          select: { created_at: true, business_name: true },
+        }),
+        this.prisma.milkSale.findFirst({
+          where: { sale_at: { gte: bounds.gte, lte: bounds.lte }, status: { not: 'deleted' } },
+          orderBy: { sale_at: 'desc' },
+          select: {
+            sale_at: true,
+            quantity: true,
+            supplier_account: { select: { name: true } },
+          },
+        }),
+      ]);
+
+    const locationIds = [...new Set(onboardingRowsRaw.map((r) => r.location_province_id).filter((v): v is string => !!v))];
+    const provinceRows = locationIds.length
+      ? await this.prisma.location.findMany({
+          where: { id: { in: locationIds.filter((id) => AdminService.LOCATION_UUID_RE.test(id)) } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const provinceMap = new Map(provinceRows.map((r) => [r.id, r.name]));
+
+    const onboardingQueue = onboardingRowsRaw.map((r) => {
+      const mapped = this.onboardingStatusText(r.review_status);
+      const province = r.location_province_id
+        ? provinceMap.get(r.location_province_id) ?? r.location_province_id
+        : '—';
+      return {
+        id: r.id,
+        applicant: r.common_name || r.business_name,
+        region: province,
+        appliedOn: this.formatHumanDate(r.created_at),
+        status: mapped.status,
+        statusTone: mapped.tone,
+      };
+    });
+
+    const topForWidgets = mccRows.slice(0, 5);
+    const topQualityRows = qualityRows.slice(0, 5);
+    const maxLitersToday = Math.max(1, ...topForWidgets.map((r) => Number(r.liters_today || 0)));
+    const maxGateLitersToday = Math.max(1, ...topQualityRows.map((r) => Number(r.liters_today || 0)));
+    const maxSales = Math.max(1, ...topForWidgets.map((r) => Number(r.sales_rf || 0)));
+    const maxTxns = Math.max(1, ...topForWidgets.map((r) => Number(r.total_txns || 0)));
+
+    const collectionsByMcc = topForWidgets.map((r) => ({
+      mcc: r.mcc,
+      collections_liters: Number(r.collections_liters || 0),
+      sales_rf: Number(r.sales_rf || 0),
+    }));
+
+    const healthRows =
+      topQualityRows.length > 0
+        ? topQualityRows.map((r) => {
+            const manifestsSubmitted = Math.max(0, Number(r.manifests_submitted || 0));
+            const manifestsAccepted = Math.max(0, Number(r.manifests_accepted || 0));
+            const testsTotal = Math.max(0, Number(r.tests_total || 0));
+            const testsRejected = Math.max(0, Number(r.tests_rejected || 0));
+            const manifestPct = manifestsSubmitted > 0
+              ? Number(((manifestsAccepted / manifestsSubmitted) * 100).toFixed(1))
+              : Number((manifestsAccepted > 0 ? 100 : 0).toFixed(1));
+            const rejectionBase =
+              testsTotal > 0
+                ? (testsRejected / testsTotal) * 100
+                : manifestsSubmitted > 0
+                  ? (Number(r.manifests_rejected || 0) / manifestsSubmitted) * 100
+                  : 0;
+            const rejectionPctNum = Number(rejectionBase.toFixed(1));
+            const tankPct = Math.round(
+              this.clamp((Number(r.liters_today || 0) / maxGateLitersToday) * 100, 48, 95),
+            );
+            const alerts =
+              testsRejected >= 6 || rejectionPctNum >= 7 ? 5
+                : testsRejected >= 3 || rejectionPctNum >= 4.5 ? 3
+                  : rejectionPctNum >= 2.5 ? 1
+                    : 0;
+            return {
+              accountId: r.account_id,
+              mcc: r.mcc,
+              litersToday: `${new Intl.NumberFormat('en-RW', { maximumFractionDigits: 0 }).format(Number(r.liters_today || 0))} L`,
+              manifestPct,
+              rejectionPct: rejectionPctNum,
+              tankPct,
+              alerts,
+              health: this.healthLabel(rejectionPctNum, tankPct),
+            };
+          })
+        : topForWidgets.map((r) => {
+            const totalTx = Math.max(1, Number(r.total_txns || 0));
+            const rejectionPct = Number(((Number(r.rejected_txns || 0) / totalTx) * 100).toFixed(1));
+            const manifestPct = Number((100 - rejectionPct * 1.6).toFixed(1));
+            const tankPct = Math.round(this.clamp((Number(r.liters_today || 0) / maxLitersToday) * 100, 52, 95));
+            const alerts = rejectionPct >= 5 ? 4 : rejectionPct >= 3 ? 2 : rejectionPct >= 1.6 ? 1 : 0;
+            return {
+              accountId: r.account_id,
+              mcc: r.mcc,
+              litersToday: `${new Intl.NumberFormat('en-RW', { maximumFractionDigits: 0 }).format(Number(r.liters_today || 0))} L`,
+              manifestPct,
+              rejectionPct,
+              tankPct,
+              alerts,
+              health: this.healthLabel(rejectionPct, tankPct),
+            };
+          });
+
+    const healthAccountIds = [...new Set(healthRows.map((r) => r.accountId).filter(Boolean))];
+    const healthUserLinks = healthAccountIds.length
+      ? await this.prisma.userAccount.findMany({
+          where: {
+            account_id: { in: healthAccountIds },
+            status: 'active',
+          },
+          select: {
+            account_id: true,
+            user_id: true,
+            created_at: true,
+          },
+          orderBy: { created_at: 'asc' },
+        })
+      : [];
+    const firstUserByAccount = new Map<string, string>();
+    for (const link of healthUserLinks) {
+      if (!firstUserByAccount.has(link.account_id)) {
+        firstUserByAccount.set(link.account_id, link.user_id);
+      }
+    }
+
+    const adoptionAccountIds = [...new Set(healthRows.map((r) => r.accountId).filter(Boolean))];
+    const [milkCounts, payrollCounts, manifestCounts, loanCounts, inventoryCountsRaw] =
+      adoptionAccountIds.length > 0
+        ? await Promise.all([
+            this.prisma.mccGateDelivery.groupBy({
+              by: ['mcc_account_id'],
+              where: {
+                mcc_account_id: { in: adoptionAccountIds },
+                arrived_at: { gte: bounds.gte, lte: bounds.lte },
+              },
+              _count: true,
+            }),
+            this.prisma.payrollRun.groupBy({
+              by: ['account_id'],
+              where: {
+                account_id: { in: adoptionAccountIds },
+                run_date: { gte: bounds.gte, lte: bounds.lte },
+                status: 'completed',
+              },
+              _count: true,
+            }),
+            this.prisma.mccMilkManifest.groupBy({
+              by: ['mcc_account_id'],
+              where: {
+                mcc_account_id: { in: adoptionAccountIds },
+                created_at: { gte: bounds.gte, lte: bounds.lte },
+              },
+              _count: true,
+            }),
+            this.prisma.loan.groupBy({
+              by: ['lender_account_id'],
+              where: {
+                lender_account_id: { in: adoptionAccountIds },
+                disbursement_date: { gte: bounds.gte, lte: bounds.lte },
+              },
+              _count: true,
+            }),
+            this.prisma.$queryRaw<Array<{ account_id: string; c: bigint }>>(
+              Prisma.sql`
+                SELECT p.account_id::text AS account_id, COUNT(*)::bigint AS c
+                FROM inventory_sales s
+                INNER JOIN products p ON p.id = s.product_id
+                WHERE p.account_id IS NOT NULL
+                  AND p.account_id::text IN (${Prisma.join(adoptionAccountIds)})
+                  AND s.sale_date >= ${bounds.gte}
+                  AND s.sale_date <= ${bounds.lte}
+                GROUP BY p.account_id
+              `,
+            ),
+          ])
+        : [[], [], [], [], []];
+
+    const milkByAccount = new Map(milkCounts.map((r) => [r.mcc_account_id, this.normalizeGroupCount(r)]));
+    const payrollEntries: Array<[string, number]> = [];
+    for (const r of payrollCounts) {
+      if (!r.account_id) continue;
+      payrollEntries.push([r.account_id, this.normalizeGroupCount(r)]);
+    }
+    const payrollByAccount = new Map<string, number>(payrollEntries);
+    const manifestByAccount = new Map(
+      manifestCounts.map((r) => [r.mcc_account_id, this.normalizeGroupCount(r)]),
+    );
+    const loanByAccount = new Map(
+      loanCounts.map((r) => [r.lender_account_id, this.normalizeGroupCount(r)]),
+    );
+    const inventoryByAccount = new Map(inventoryCountsRaw.map((r) => [r.account_id, Number(r.c ?? 0n)]));
+
+    const maxMilkCount = Math.max(1, ...Array.from(milkByAccount.values(), (v) => Number(v || 0)));
+    const maxUsageCount = Math.max(1, ...Array.from(manifestByAccount.values(), (v) => Number(v || 0)));
+    const maxLoanCount = Math.max(1, ...Array.from(loanByAccount.values(), (v) => Number(v || 0)));
+    const maxInventoryCount = Math.max(1, ...Array.from(inventoryByAccount.values(), (v) => Number(v || 0)));
+    const maxFinanceComposite = Math.max(
+      1,
+      ...adoptionAccountIds.map((id) => (Number(payrollByAccount.get(id) ?? 0) * 1.25) + Number(loanByAccount.get(id) ?? 0)),
+    );
+
+    const adoptionPct = (count: number, maxCount: number, floor = 34): number => {
+      if (count <= 0) return 0;
+      return Math.round(this.clamp(floor + (count / Math.max(1, maxCount)) * (100 - floor), floor, 99));
     };
 
-    // Basic counts (users/accounts remain platform-wide; milk + relationships scoped to current account)
+    const adoption = healthRows.slice(0, 3).map((row) => {
+      const id = row.accountId;
+      const milkCount = Number(milkByAccount.get(id) ?? 0);
+      const usageCount = Number(manifestByAccount.get(id) ?? 0);
+      const inventoryCount = Number(inventoryByAccount.get(id) ?? 0);
+      const loanCount = Number(loanByAccount.get(id) ?? 0);
+      const payrollCount = Number(payrollByAccount.get(id) ?? 0);
+      const financeComposite = payrollCount * 1.25 + loanCount;
+
+      return {
+        accountId: id,
+        userId: id ? firstUserByAccount.get(id) : undefined,
+        mcc: row.mcc,
+        milk: adoptionPct(milkCount, maxMilkCount, 46),
+        finance: adoptionPct(financeComposite, maxFinanceComposite, 38),
+        usage: adoptionPct(usageCount, maxUsageCount, 34),
+        inventory: adoptionPct(inventoryCount, maxInventoryCount, 28),
+        loans: adoptionPct(loanCount, maxLoanCount, 30),
+      };
+    });
+
+    const alerts: Array<{ id: string; severity: 'high' | 'medium' | 'info'; title: string; when: string }> = [];
+    healthRows
+      .filter((r) => r.rejectionPct >= 2.5)
+      .forEach((r) => {
+        if (r.rejectionPct >= 4.5) {
+          alerts.push({
+            id: `rej-${r.accountId}`,
+            severity: r.rejectionPct >= 6 ? 'high' : 'medium',
+            title: `${r.mcc}: rejection rate ${r.rejectionPct.toFixed(1)}% in selected window`,
+            when: 'Live',
+          });
+        } else {
+          alerts.push({
+            id: `rej-med-${r.accountId}`,
+            severity: 'medium',
+            title: `${r.mcc}: rejection trend is above baseline (${r.rejectionPct.toFixed(1)}%)`,
+            when: 'Live',
+          });
+        }
+      });
+    if (pendingOnboarding > 0) {
+      alerts.push({
+        id: 'onboarding-pending',
+        severity: pendingOnboarding > 12 ? 'high' : 'info',
+        title: `${pendingOnboarding} onboarding submissions are pending review`,
+        when: 'Live',
+      });
+    }
+
+    const activityRaw: Array<{ id: string; label: string; actor: string; whenDate: Date | null }> = [
+      latestPayroll
+        ? {
+            id: 'payroll',
+            label: 'Payroll completed',
+            actor: `RF ${new Intl.NumberFormat('en-RW', { maximumFractionDigits: 0 }).format(Number(latestPayroll.total_amount || 0))}`,
+            whenDate: latestPayroll.run_date,
+          }
+        : { id: 'payroll', label: '', actor: '', whenDate: null },
+      latestLoan
+        ? {
+            id: 'loan',
+            label: 'Disbursement recorded',
+            actor: `RF ${new Intl.NumberFormat('en-RW', { maximumFractionDigits: 0 }).format(Number(latestLoan.principal || 0))}`,
+            whenDate: latestLoan.disbursement_date,
+          }
+        : { id: 'loan', label: '', actor: '', whenDate: null },
+      latestOnboarding
+        ? {
+            id: 'onboarding',
+            label: 'New onboarding submission',
+            actor: latestOnboarding.business_name,
+            whenDate: latestOnboarding.created_at,
+          }
+        : { id: 'onboarding', label: '', actor: '', whenDate: null },
+      latestMilk
+        ? {
+            id: 'milk',
+            label: 'Collection captured',
+            actor: `${latestMilk.supplier_account?.name ?? 'Supplier'} · ${new Intl.NumberFormat('en-RW', {
+              maximumFractionDigits: 0,
+            }).format(Number(latestMilk.quantity || 0))} L`,
+            whenDate: latestMilk.sale_at,
+          }
+        : { id: 'milk', label: '', actor: '', whenDate: null },
+    ];
+
+    const activity = activityRaw
+      .filter((a) => a.whenDate)
+      .sort((a, b) => (b.whenDate?.getTime() ?? 0) - (a.whenDate?.getTime() ?? 0))
+      .slice(0, 3)
+      .map((a) => ({
+        id: a.id,
+        label: a.label,
+        actor: a.actor,
+        when: this.relativeWhen(a.whenDate as Date),
+      }));
+
+    return {
+      collectionsByMcc,
+      healthRows: healthRows.map((row) => ({
+        accountId: row.accountId,
+        userId: row.accountId ? firstUserByAccount.get(row.accountId) : undefined,
+        mcc: row.mcc,
+        litersToday: row.litersToday,
+        manifestPct: row.manifestPct,
+        rejectionPct: row.rejectionPct,
+        tankPct: row.tankPct,
+        alerts: row.alerts,
+        health: row.health,
+      })),
+      onboardingQueue,
+      alerts: alerts.slice(0, 3),
+      adoption,
+      activity,
+      pendingOnboarding,
+    };
+  }
+
+  /**
+   * Get dashboard statistics with comprehensive metrics (platform-wide milk KPIs).
+   * Milk charts, summary liters/revenue, sales-by-status, and recent rows respect `date_from`/`date_to`
+   * with optional `tz_offset_minutes` aligned to POST /stats/overview (browser `-Date.getTimezoneOffset()`).
+   */
+  async getDashboardStats(
+    user: User,
+    accountId: string,
+    dateFrom?: string,
+    dateTo?: string,
+    tzOffsetMinutes?: number,
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+
+    const now = new Date();
+    const todayStartUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+    const last30DaysUtc = new Date(todayStartUtc.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const last7DaysUtc = new Date(todayStartUtc.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const saleBounds = this.resolveAdminDashboardPeriodBounds(dateFrom, dateTo, tzOffsetMinutes);
+    const overviewDataPromise = this.buildLiveOverviewData(saleBounds);
+
+    const milkBase = { status: { not: 'deleted' as const } };
+
+    const milkInPeriod: Prisma.MilkSaleWhereInput = {
+      ...milkBase,
+      sale_at: { gte: saleBounds.gte, lte: saleBounds.lte },
+    };
+
     const [
+      supplierActorRows,
+      customerActorRows,
       totalUsers,
       activeUsers,
       totalAccounts,
-      lifetimeIncomingCount,
-      totalSuppliers,
-      totalCustomers,
+      salesInPeriod,
+      roll30Rows,
+      roll7Rows,
+      todayRows,
+      salesByStatus,
+      recentSales,
+      overview,
     ] = await Promise.all([
+      this.prisma.supplierCustomer.findMany({
+        where: { relationship_status: 'active' },
+        distinct: ['supplier_account_id'],
+        select: { supplier_account_id: true },
+      }),
+      this.prisma.supplierCustomer.findMany({
+        where: { relationship_status: 'active' },
+        distinct: ['customer_account_id'],
+        select: { customer_account_id: true },
+      }),
       this.prisma.user.count(),
       this.prisma.user.count({ where: { status: 'active' } }),
       this.prisma.account.count({ where: { status: 'active' } }),
-      this.prisma.milkSale.count({ where: milkIncomingWhere }),
-      this.prisma.supplierCustomer.count({
-        where: { customer_account_id: accountId, relationship_status: 'active' },
+      this.prisma.milkSale.findMany({
+        where: milkInPeriod,
+        select: {
+          quantity: true,
+          unit_price: true,
+          sale_at: true,
+        },
       }),
-      this.prisma.supplierCustomer.count({
-        where: { supplier_account_id: accountId, relationship_status: 'active' },
+      this.prisma.milkSale.findMany({
+        where: { ...milkBase, sale_at: { gte: last30DaysUtc } },
+        select: { quantity: true, unit_price: true },
       }),
+      this.prisma.milkSale.findMany({
+        where: { ...milkBase, sale_at: { gte: last7DaysUtc } },
+        select: { quantity: true, unit_price: true },
+      }),
+      this.prisma.milkSale.findMany({
+        where: { ...milkBase, sale_at: { gte: todayStartUtc } },
+        select: { quantity: true, unit_price: true },
+      }),
+      this.prisma.milkSale.groupBy({
+        by: ['status'],
+        where: milkInPeriod,
+        _count: true,
+      }),
+      this.prisma.milkSale.findMany({
+        where: milkInPeriod,
+        take: 10,
+        orderBy: { sale_at: 'desc' },
+        select: {
+          id: true,
+          quantity: true,
+          unit_price: true,
+          status: true,
+          sale_at: true,
+          supplier_account: {
+            select: { name: true },
+          },
+          customer_account: {
+            select: { name: true },
+          },
+        },
+      }),
+      overviewDataPromise,
     ]);
 
-    const allSales = await this.prisma.milkSale.findMany({
-      where: milkIncomingWhere,
-      select: {
-        quantity: true,
-        unit_price: true,
-        sale_at: true,
-      },
-    });
+    const totalSuppliers = supplierActorRows.length;
+    const totalCustomers = customerActorRows.length;
 
-    const salesLast30Days = allSales.filter(
-      (sale) => new Date(sale.sale_at) >= last30Days,
-    );
-    const revenueLast30Days = salesLast30Days.reduce(
-      (sum, sale) => sum + Number(sale.quantity) * Number(sale.unit_price),
-      0,
-    );
+    const sumQtyValue = (rows: { quantity: unknown; unit_price: unknown }[]) =>
+      rows.reduce(
+        (acc, sale) => ({
+          liters: acc.liters + Number(sale.quantity),
+          revenue: acc.revenue + Number(sale.quantity) * Number(sale.unit_price),
+        }),
+        { liters: 0, revenue: 0 },
+      );
 
-    const salesLast7Days = allSales.filter(
-      (sale) => new Date(sale.sale_at) >= last7Days,
-    );
-    const revenueLast7Days = salesLast7Days.reduce(
-      (sum, sale) => sum + Number(sale.quantity) * Number(sale.unit_price),
-      0,
-    );
+    const roll30 = sumQtyValue(roll30Rows);
+    const roll7 = sumQtyValue(roll7Rows);
+    const rollToday = sumQtyValue(todayRows);
 
-    const salesToday = allSales.filter(
-      (sale) => new Date(sale.sale_at) >= todayStart,
-    );
-    const revenueToday = salesToday.reduce(
-      (sum, sale) => sum + Number(sale.quantity) * Number(sale.unit_price),
-      0,
-    );
+    const periodTotals = sumQtyValue(salesInPeriod);
+    const salesInRange = salesInPeriod.length;
+    const litersInRange = periodTotals.liters;
+    const revenueInRange = periodTotals.revenue;
 
-    // Generate daily breakdown for selected date range
+    const dateKeys = utcCalendarDatesBetweenInclusive(saleBounds.gte, saleBounds.lte);
     const dailyBreakdown = new Map<string, { date: string; revenue: number; sales: number }>();
-
-    for (let d = new Date(rangeStartDate); d <= rangeEndDate; d.setUTCDate(d.getUTCDate() + 1)) {
-      // Ensure we're bucketing by UTC day.
-      d.setUTCHours(0, 0, 0, 0);
-      const dateStr = d.toISOString().split('T')[0];
+    for (const dateStr of dateKeys) {
       dailyBreakdown.set(dateStr, { date: dateStr, revenue: 0, sales: 0 });
     }
-
-    // Populate with actual data
-    allSales.forEach((sale) => {
+    for (const sale of salesInPeriod) {
       const dateStr = new Date(sale.sale_at).toISOString().split('T')[0];
-      if (dailyBreakdown.has(dateStr)) {
-        const dayData = dailyBreakdown.get(dateStr)!;
+      const dayData = dailyBreakdown.get(dateStr);
+      if (dayData) {
         dayData.revenue += Number(sale.quantity) * Number(sale.unit_price);
         dayData.sales += Number(sale.quantity);
       }
-    });
+    }
 
     const dailyTrend = Array.from(dailyBreakdown.values()).map((day) => ({
       date: day.date,
@@ -1949,49 +2622,6 @@ export class AdminService {
       revenue: day.revenue,
       sales: day.sales,
     }));
-
-    const incomingRowsInRange = allSales.filter((sale) => {
-      const dt = new Date(sale.sale_at);
-      return dt >= rangeStartDate && dt <= rangeEndDate;
-    });
-
-    const salesInRange = incomingRowsInRange.length;
-    const revenueInRange = incomingRowsInRange.reduce(
-      (sum, sale) => sum + Number(sale.quantity) * Number(sale.unit_price),
-      0,
-    );
-    const litersInRange = incomingRowsInRange.reduce((sum, sale) => sum + Number(sale.quantity), 0);
-
-    const salesByStatus = await this.prisma.milkSale.groupBy({
-      by: ['status'],
-      where: {
-        customer_account_id: accountId,
-        status: { not: 'deleted' },
-      },
-      _count: true,
-    });
-
-    const recentSales = await this.prisma.milkSale.findMany({
-      where: {
-        status: { not: 'deleted' },
-        OR: [{ customer_account_id: accountId }, { supplier_account_id: accountId }],
-      },
-      take: 10,
-      orderBy: { sale_at: 'desc' },
-      select: {
-        id: true,
-        quantity: true,
-        unit_price: true,
-        status: true,
-        sale_at: true,
-        supplier_account: {
-          select: { name: true },
-        },
-        customer_account: {
-          select: { name: true },
-        },
-      },
-    });
 
     return {
       code: 200,
@@ -2009,12 +2639,12 @@ export class AdminService {
         sales: {
           total: salesInRange,
           liters: litersInRange,
-          last30Days: salesLast30Days.length,
-          last7Days: salesLast7Days.length,
-          today: salesToday.length,
+          last30Days: roll30Rows.length,
+          last7Days: roll7Rows.length,
+          today: todayRows.length,
         },
         collections: {
-          total: lifetimeIncomingCount,
+          total: salesInRange,
         },
         suppliers: {
           total: totalSuppliers,
@@ -2024,9 +2654,9 @@ export class AdminService {
         },
         revenue: {
           total: revenueInRange,
-          last30Days: revenueLast30Days,
-          last7Days: revenueLast7Days,
-          today: revenueToday,
+          last30Days: roll30.revenue,
+          last7Days: roll7.revenue,
+          today: rollToday.revenue,
         },
         trends: {
           daily: dailyTrend,
@@ -2045,6 +2675,376 @@ export class AdminService {
           supplier: sale.supplier_account?.name || 'N/A',
           customer: sale.customer_account?.name || 'N/A',
         })),
+        overview: {
+          pendingOnboarding: overview.pendingOnboarding,
+          collectionsByMcc: overview.collectionsByMcc,
+          healthRows: overview.healthRows,
+          onboardingQueue: overview.onboardingQueue,
+          alerts: overview.alerts,
+          adoption: overview.adoption,
+          activity: overview.activity,
+        },
+      },
+    };
+  }
+
+  /**
+   * Platform-wide finance KPIs for Gemura Admin (loans, payroll, milk payments recorded, inventory sales).
+   * Respects the same period window as `getDashboardStats`.
+   */
+  async getFinanceDashboardStats(
+    user: User,
+    accountId: string,
+    dateFrom?: string,
+    dateTo?: string,
+    tzOffsetMinutes?: number,
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+
+    const bounds = this.resolveAdminDashboardPeriodBounds(dateFrom, dateTo, tzOffsetMinutes);
+    const dateFilter = { gte: bounds.gte, lte: bounds.lte };
+
+    const [
+      disburseAgg,
+      repaymentAgg,
+      payrollAgg,
+      milkPaidAgg,
+      inventoryAgg,
+      portfolioAgg,
+      disbursedLoansForTrend,
+      repaymentsForTrend,
+      payrollRunsForTrend,
+      inventorySalesForTrend,
+      loansByStatus,
+      recentDisbursements,
+    ] = await Promise.all([
+      this.prisma.loan.aggregate({
+        where: { disbursement_date: dateFilter },
+        _sum: { principal: true },
+        _count: { id: true },
+      }),
+      this.prisma.loanRepayment.aggregate({
+        where: { repayment_date: dateFilter },
+        _sum: { amount: true },
+        _count: { id: true },
+      }),
+      this.prisma.payrollRun.aggregate({
+        where: {
+          run_date: dateFilter,
+          status: 'completed',
+        },
+        _sum: { total_amount: true },
+        _count: { id: true },
+      }),
+      this.prisma.milkSale.aggregate({
+        where: {
+          status: { not: 'deleted' },
+          sale_at: dateFilter,
+        },
+        _sum: { amount_paid: true },
+      }),
+      this.prisma.inventorySale.aggregate({
+        where: { sale_date: dateFilter },
+        _sum: { total_amount: true },
+        _count: { id: true },
+      }),
+      this.prisma.loan.aggregate({
+        where: { status: 'active' },
+        _sum: { principal: true, amount_repaid: true },
+        _count: { id: true },
+      }),
+      this.prisma.loan.findMany({
+        where: { disbursement_date: dateFilter },
+        select: { disbursement_date: true, principal: true },
+      }),
+      this.prisma.loanRepayment.findMany({
+        where: { repayment_date: dateFilter },
+        select: { repayment_date: true, amount: true },
+      }),
+      this.prisma.payrollRun.findMany({
+        where: { run_date: dateFilter, status: 'completed' },
+        select: { run_date: true, total_amount: true },
+      }),
+      this.prisma.inventorySale.findMany({
+        where: { sale_date: dateFilter },
+        select: { sale_date: true, total_amount: true },
+      }),
+      this.prisma.loan.groupBy({
+        by: ['status'],
+        where: { disbursement_date: dateFilter },
+        _count: { id: true },
+      }),
+      this.prisma.loan.findMany({
+        where: { disbursement_date: dateFilter },
+        orderBy: { disbursement_date: 'desc' },
+        take: 8,
+        select: {
+          id: true,
+          principal: true,
+          status: true,
+          disbursement_date: true,
+          borrower_name: true,
+          borrower_account: { select: { name: true } },
+          lender_account: { select: { name: true } },
+        },
+      }),
+    ]);
+
+    const principalOutstanding =
+      Number(portfolioAgg._sum.principal ?? 0) - Number(portfolioAgg._sum.amount_repaid ?? 0);
+
+    const dateKeys = utcCalendarDatesBetweenInclusive(bounds.gte, bounds.lte);
+    const dailyMap = new Map<
+      string,
+      { disbursements: number; repayments: number; payroll: number; inventory_sales: number }
+    >();
+    for (const d of dateKeys) {
+      dailyMap.set(d, { disbursements: 0, repayments: 0, payroll: 0, inventory_sales: 0 });
+    }
+
+    const addToDay = (
+      at: Date,
+      field: 'disbursements' | 'repayments' | 'payroll' | 'inventory_sales',
+      amount: number,
+    ) => {
+      const key = at.toISOString().split('T')[0];
+      const cell = dailyMap.get(key);
+      if (cell) cell[field] += amount;
+    };
+
+    for (const row of disbursedLoansForTrend) {
+      addToDay(row.disbursement_date, 'disbursements', Number(row.principal));
+    }
+    for (const row of repaymentsForTrend) {
+      addToDay(row.repayment_date, 'repayments', Number(row.amount));
+    }
+    for (const row of payrollRunsForTrend) {
+      addToDay(row.run_date, 'payroll', Number(row.total_amount));
+    }
+    for (const row of inventorySalesForTrend) {
+      addToDay(row.sale_date, 'inventory_sales', Number(row.total_amount));
+    }
+
+    const breakdown = Array.from(dailyMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([dateStr, v]) => ({
+        date: dateStr,
+        label: new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        disbursements: v.disbursements,
+        repayments: v.repayments,
+        payroll: v.payroll,
+        inventory_sales: v.inventory_sales,
+      }));
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Finance dashboard statistics retrieved successfully.',
+      data: {
+        summary: {
+          disbursements: {
+            amount: Number(disburseAgg._sum.principal ?? 0),
+            count: disburseAgg._count.id,
+          },
+          repayments: {
+            amount: Number(repaymentAgg._sum.amount ?? 0),
+            count: repaymentAgg._count.id,
+          },
+          payroll: {
+            amount: Number(payrollAgg._sum.total_amount ?? 0),
+            runs: payrollAgg._count.id,
+          },
+          milk_payments_recorded: {
+            amount: Number(milkPaidAgg._sum.amount_paid ?? 0),
+          },
+          inventory_sales: {
+            amount: Number(inventoryAgg._sum.total_amount ?? 0),
+            count: inventoryAgg._count.id,
+          },
+          portfolio_active: {
+            loan_count: portfolioAgg._count.id,
+            principal_outstanding: principalOutstanding,
+          },
+        },
+        loans_by_status: loansByStatus.map((s) => ({
+          status: s.status,
+          count: s._count.id,
+        })),
+        breakdown,
+        recent_disbursements: recentDisbursements.map((row) => ({
+          id: row.id,
+          principal: Number(row.principal),
+          status: row.status,
+          disbursement_date: row.disbursement_date.toISOString(),
+          borrower_label: row.borrower_account?.name ?? row.borrower_name ?? 'Borrower',
+          lender_name: row.lender_account?.name ?? null,
+        })),
+      },
+    };
+  }
+
+  /**
+   * Platform-wide adoption & activity snapshot from existing tables (no separate analytics pipeline).
+   * Uses the same period window as other admin dashboards.
+   */
+  async getUsageDashboardStats(
+    user: User,
+    accountId: string,
+    dateFrom?: string,
+    dateTo?: string,
+    tzOffsetMinutes?: number,
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+
+    const bounds = this.resolveAdminDashboardPeriodBounds(dateFrom, dateTo, tzOffsetMinutes);
+    const dateFilter = { gte: bounds.gte, lte: bounds.lte };
+
+    const dayKey = (d: Date) => d.toISOString().split('T')[0];
+
+    const [
+      activePlatformUsers,
+      usersLoggedInPeriod,
+      usersRegisteredInPeriod,
+      auditEventsCount,
+      milkTxnCount,
+      gateDeliveriesCount,
+      payrollRunsCreated,
+      linksCreated,
+      feedPostsCount,
+      inventorySalesCreatedCount,
+      auditDistinctRows,
+      milkOperatorsDistinctRows,
+      auditDailyRows,
+      milkDailyRows,
+      gateDailyRows,
+    ] = await Promise.all([
+      this.prisma.user.count({ where: { status: 'active' } }),
+      this.prisma.user.count({
+        where: { status: 'active', last_login: dateFilter },
+      }),
+      this.prisma.user.count({ where: { created_at: dateFilter } }),
+      this.prisma.auditLog.count({ where: { created_at: dateFilter } }),
+      this.prisma.milkSale.count({
+        where: { sale_at: dateFilter, status: { not: 'deleted' } },
+      }),
+      this.prisma.mccGateDelivery.count({ where: { arrived_at: dateFilter } }),
+      this.prisma.payrollRun.count({ where: { created_at: dateFilter } }),
+      this.prisma.supplierCustomer.count({ where: { created_at: dateFilter } }),
+      this.prisma.feedPost.count({
+        where: { created_at: dateFilter, status: 'active' },
+      }),
+      this.prisma.inventorySale.count({ where: { created_at: dateFilter } }),
+      this.prisma.$queryRaw<[{ c: bigint }]>(
+        Prisma.sql`
+          SELECT COUNT(DISTINCT user_id)::bigint AS c
+          FROM audit_logs
+          WHERE created_at >= ${bounds.gte}
+            AND created_at <= ${bounds.lte}
+            AND user_id IS NOT NULL
+        `,
+      ),
+      this.prisma.$queryRaw<[{ c: bigint }]>(
+        Prisma.sql`
+          SELECT COUNT(DISTINCT recorded_by)::bigint AS c
+          FROM milk_sales
+          WHERE sale_at >= ${bounds.gte}
+            AND sale_at <= ${bounds.lte}
+            AND status::text <> 'deleted'
+        `,
+      ),
+      this.prisma.$queryRaw<Array<{ d: Date; events: bigint; users: bigint }>>(
+        Prisma.sql`
+          SELECT (created_at AT TIME ZONE 'UTC')::date AS d,
+                 COUNT(*)::bigint AS events,
+                 COUNT(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL)::bigint AS users
+          FROM audit_logs
+          WHERE created_at >= ${bounds.gte}
+            AND created_at <= ${bounds.lte}
+          GROUP BY 1
+          ORDER BY 1
+        `,
+      ),
+      this.prisma.$queryRaw<Array<{ d: Date; txns: bigint; ops: bigint }>>(
+        Prisma.sql`
+          SELECT (sale_at AT TIME ZONE 'UTC')::date AS d,
+                 COUNT(*)::bigint AS txns,
+                 COUNT(DISTINCT recorded_by)::bigint AS ops
+          FROM milk_sales
+          WHERE sale_at >= ${bounds.gte}
+            AND sale_at <= ${bounds.lte}
+            AND status::text <> 'deleted'
+          GROUP BY 1
+          ORDER BY 1
+        `,
+      ),
+      this.prisma.$queryRaw<Array<{ d: Date; n: bigint }>>(
+        Prisma.sql`
+          SELECT (arrived_at AT TIME ZONE 'UTC')::date AS d,
+                 COUNT(*)::bigint AS n
+          FROM mcc_gate_deliveries
+          WHERE arrived_at >= ${bounds.gte}
+            AND arrived_at <= ${bounds.lte}
+          GROUP BY 1
+          ORDER BY 1
+        `,
+      ),
+    ]);
+
+    const auditDistinctUsers = Number(auditDistinctRows[0]?.c ?? 0n);
+    const milkDistinctOperators = Number(milkOperatorsDistinctRows[0]?.c ?? 0n);
+
+    const auditMap = new Map<string, { events: number; users: number }>();
+    for (const r of auditDailyRows) {
+      const k = dayKey(new Date(r.d));
+      auditMap.set(k, { events: Number(r.events), users: Number(r.users) });
+    }
+    const milkMap = new Map<string, { txns: number; ops: number }>();
+    for (const r of milkDailyRows) {
+      const k = dayKey(new Date(r.d));
+      milkMap.set(k, { txns: Number(r.txns), ops: Number(r.ops) });
+    }
+    const gateMap = new Map<string, number>();
+    for (const r of gateDailyRows) {
+      gateMap.set(dayKey(new Date(r.d)), Number(r.n));
+    }
+
+    const dateKeys = utcCalendarDatesBetweenInclusive(bounds.gte, bounds.lte);
+    const breakdown = dateKeys.map((dateStr) => ({
+      date: dateStr,
+      label: new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      audit_events: auditMap.get(dateStr)?.events ?? 0,
+      audit_users: auditMap.get(dateStr)?.users ?? 0,
+      milk_transactions: milkMap.get(dateStr)?.txns ?? 0,
+      milk_operators: milkMap.get(dateStr)?.ops ?? 0,
+      gate_deliveries: gateMap.get(dateStr) ?? 0,
+    }));
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Usage dashboard statistics retrieved successfully.',
+      data: {
+        summary: {
+          users: {
+            active_platform_total: activePlatformUsers,
+            last_login_in_period: usersLoggedInPeriod,
+            registered_in_period: usersRegisteredInPeriod,
+          },
+          audit: {
+            events: auditEventsCount,
+            distinct_users: auditDistinctUsers,
+          },
+          milk: {
+            transactions: milkTxnCount,
+            distinct_operators: milkDistinctOperators,
+          },
+          mcc_gate_deliveries: gateDeliveriesCount,
+          payroll_runs_created: payrollRunsCreated,
+          supplier_customer_links_created: linksCreated,
+          feed_posts_created: feedPostsCount,
+          inventory_sales_created: inventorySalesCreatedCount,
+        },
+        breakdown,
       },
     };
   }
@@ -3161,12 +4161,50 @@ export class AdminService {
       } else {
         const dup = await tx.user.findFirst({ where: { phone: managerPhoneDigits } });
         if (dup) {
-          throw new BadRequestException({
-            code: 400,
-            status: 'error',
-            message:
-              'A user with this phone already exists. Approve again with linkExistingUserId set to that user UUID, or reject this submission.',
+          const existingMembership = await tx.userAccount.findFirst({
+            where: {
+              user_id: dup.id,
+              status: 'active',
+              account: {
+                status: 'active',
+                type: { in: ['tenant', 'branch'] },
+              },
+            },
+            include: {
+              account: {
+                select: { id: true, code: true, name: true, type: true, status: true },
+              },
+            },
+            orderBy: { created_at: 'desc' },
           });
+
+          if (!existingMembership?.account) {
+            throw new BadRequestException({
+              code: 400,
+              status: 'error',
+              message:
+                'A user with this phone already exists, but no active tenant/branch membership was found to link. Provide linkExistingAccountId with a valid active membership.',
+            });
+          }
+
+          const updatedSubmission = await tx.mccOnboardingSubmission.update({
+            where: { id: submissionId },
+            data: {
+              review_status: MccOnboardingReviewStatus.approved,
+              review_notes: dto.reviewNotes ?? null,
+              reviewed_at: new Date(),
+              reviewed_by_user_id: user.id,
+              linked_user_id: dup.id,
+              linked_account_id: existingMembership.account.id,
+            },
+          });
+
+          return {
+            flow: 'kyc_existing' as const,
+            updatedSubmission,
+            linkedUser: dup,
+            linkedAccount: existingMembership.account,
+          };
         }
         const hashedPassword = await bcrypt.hash(plainPassword, 10);
         const fn = (submission.manager_first_name ?? '').trim();

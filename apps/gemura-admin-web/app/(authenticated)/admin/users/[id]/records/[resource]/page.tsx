@@ -19,6 +19,7 @@ const RESOURCE_LABELS: Record<UserBusinessResource, string> = {
   customers: 'Customers',
   farms: 'Farms',
   accounts: 'Accounts',
+  members: 'Members',
 };
 
 function isUserBusinessResource(s: string): s is UserBusinessResource {
@@ -28,7 +29,8 @@ function isUserBusinessResource(s: string): s is UserBusinessResource {
     s === 'suppliers' ||
     s === 'customers' ||
     s === 'farms' ||
-    s === 'accounts'
+    s === 'accounts' ||
+    s === 'members'
   );
 }
 
@@ -328,6 +330,16 @@ export default function UserBusinessRecordsPage() {
           { key: 'role', label: 'Role', render: (_, row) => row.role ?? '—' },
           { key: 'relationship_status', label: 'Access', render: (_, row) => String(row.relationship_status ?? '—') },
           { key: 'status', label: 'Account status', render: (_, row) => String(row.status ?? '—') },
+        ];
+      case 'members':
+        return [
+          { key: 'name', label: 'Name', render: (_, row) => row.name ?? '—' },
+          { key: 'email', label: 'Email', render: (_, row) => row.email ?? '—' },
+          { key: 'phone', label: 'Phone', render: (_, row) => row.phone ?? '—' },
+          { key: 'code', label: 'Account', render: (_, row) => row.account?.code ?? '—' },
+          { key: 'role', label: 'Role', render: (_, row) => row.role ?? '—' },
+          { key: 'relationship_status', label: 'Access', render: (_, row) => String(row.relationship_status ?? '—') },
+          { key: 'status', label: 'User status', render: (_, row) => String(row.status ?? '—') },
         ];
       default:
         return [];

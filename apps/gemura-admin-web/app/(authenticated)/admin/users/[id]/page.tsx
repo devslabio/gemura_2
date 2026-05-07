@@ -12,7 +12,7 @@ import { useToastStore } from '@/store/toast';
 import { DetailPageSkeleton } from '@/app/components/SkeletonLoader';
 import ConfirmDialog from '@/app/components/ConfirmDialog';
 
-type ActivityKey = 'suppliers' | 'customers' | 'sales' | 'collections' | 'farms' | 'accounts';
+type ActivityKey = 'suppliers' | 'customers' | 'sales' | 'collections' | 'farms' | 'accounts' | 'members';
 
 function slugKey(s: string) {
   return s.trim().toLowerCase();
@@ -170,6 +170,7 @@ export default function UserDetailsPage() {
 
   const stats = user?.stats || {
     accounts: 0,
+    members: 0,
     suppliers: 0,
     customers: 0,
     sales: 0,
@@ -296,11 +297,16 @@ export default function UserDetailsPage() {
     { key: 'collections', label: 'Collections', value: stats.collections },
     { key: 'farms', label: 'Farms', value: stats.farms },
     { key: 'accounts', label: 'Accounts', value: stats.accounts },
+    { key: 'members', label: 'Members', value: stats.members },
   ];
 
   const recordsHref = useMemo(
     () => (metric: ActivityKey) => {
       if (metric === 'accounts') return `/admin/users/${userId}/records/accounts`;
+      if (metric === 'members') {
+        const q = listAccountId ? `?operational_account_id=${encodeURIComponent(listAccountId)}` : '';
+        return `/admin/users/${userId}/records/members${q}`;
+      }
       const q = listAccountId ? `?operational_account_id=${encodeURIComponent(listAccountId)}` : '';
       return `/admin/users/${userId}/records/${metric}${q}`;
     },
