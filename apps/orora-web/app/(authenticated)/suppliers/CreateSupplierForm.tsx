@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import { ENTITY_TYPE_OPTIONS } from '@/lib/constants/entity-types';
+import { useEffect, useState } from 'react';
 import { suppliersApi, CreateSupplierData } from '@/lib/api/suppliers';
+import { employeesApi, type RoleOption } from '@/lib/api/employees';
+import { useAuthStore } from '@/store/auth';
 import { useToastStore } from '@/store/toast';
 import Icon, { faCheckCircle, faSpinner } from '@/app/components/Icon';
-import Select from '@/app/components/Select';
 
 interface CreateSupplierFormProps {
   onSuccess: () => void;
@@ -13,9 +13,13 @@ interface CreateSupplierFormProps {
 }
 
 export default function CreateSupplierForm({ onSuccess, onCancel }: CreateSupplierFormProps) {
+  const currentAccount = useAuthStore((s) => s.currentAccount);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [formData, setFormData] = useState<Omit<CreateSupplierData, 'first_name' | 'last_name'> & { firstName: string; lastName: string; type: string }>({
+  const [staffRoles, setStaffRoles] = useState<RoleOption[]>([]);
+  const [staffRolesLoading, setStaffRolesLoading] = useState(false);
+  const [staffRolesError, setStaffRolesError] = useState('');
+  const [formData, setFormData] = useState<Omit<CreateSupplierData, 'first_name' | 'last_name'> & { firstName: string; lastName: string }>({
     firstName: '',
     lastName: '',
     phone: '',
@@ -23,9 +27,38 @@ export default function CreateSupplierForm({ onSuccess, onCancel }: CreateSuppli
     email: '',
     nid: '',
     address: '',
-    type: '',
+    add_as_cooperative_member: false,
+    grant_mcc_staff_access: false,
+    mcc_staff_role: '',
   });
   const [nidTouched, setNidTouched] = useState(false);
+
+  useEffect(() => {
+    if (!formData.grant_mcc_staff_access) return;
+    const accountId = currentAccount?.account_id;
+    if (!accountId) {
+      setStaffRolesError('Select an account to load staff roles.');
+      return;
+    }
+    let cancelled = false;
+    setStaffRolesLoading(true);
+    setStaffRolesError('');
+    employeesApi
+      .getRoles(accountId)
+      .then((res) => {
+        if (!cancelled && res.data?.roles?.length) setStaffRoles(res.data.roles);
+        else if (!cancelled) setStaffRoles([]);
+      })
+      .catch(() => {
+        if (!cancelled) setStaffRolesError('Could not load roles. You may lack permission or the API is unavailable.');
+      })
+      .finally(() => {
+        if (!cancelled) setStaffRolesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [formData.grant_mcc_staff_access, currentAccount?.account_id]);
 
   const nidValue = formData.nid ?? '';
   const nidClean = nidValue.replace(/\D/g, '');
@@ -79,6 +112,16 @@ export default function CreateSupplierForm({ onSuccess, onCancel }: CreateSuppli
       setError('Invalid email format');
       return false;
     }
+    if (formData.grant_mcc_staff_access) {
+      if (!currentAccount?.account_id) {
+        setError('Switch to your MCC account before granting staff access.');
+        return false;
+      }
+      if (!formData.mcc_staff_role?.trim()) {
+        setError('Choose a staff role when adding this supplier as MCC staff.');
+        return false;
+      }
+    }
     return true;
   };
 
@@ -97,10 +140,20 @@ export default function CreateSupplierForm({ onSuccess, onCancel }: CreateSuppli
         email: formData.email || undefined,
         nid: formData.nid,
         address: formData.address || undefined,
+        ...(formData.add_as_cooperative_member ? { add_as_cooperative_member: true } : {}),
+        ...(formData.grant_mcc_staff_access && formData.mcc_staff_role?.trim()
+          ? { grant_mcc_staff_access: true, mcc_staff_role: formData.mcc_staff_role.trim() }
+          : {}),
       };
       const response = await suppliersApi.createSupplier(finalData);
       if (response.code === 200 || response.code === 201) {
+        const aff = response.data?.mcc_affiliation;
         useToastStore.getState().success('Supplier created successfully!');
+        if (aff?.mcc_staff === 'skipped_already_linked') {
+          useToastStore.getState().info(
+            'This user already had access on this MCC — a duplicate staff link was not created.',
+          );
+        }
         onSuccess();
       } else {
         setError(response.message || 'Failed to create supplier');
@@ -136,19 +189,59 @@ export default function CreateSupplierForm({ onSuccess, onCancel }: CreateSuppli
           <label htmlFor="supplier-email" className="block text-sm font-medium text-gray-700 mb-1">Email</label>
           <input id="supplier-email" name="email" type="email" value={formData.email} onChange={handleChange} className="input w-full" placeholder="email@example.com" disabled={loading} />
         </div>
-        <div>
-          <label htmlFor="supplier-type" className="block text-sm font-medium text-gray-700 mb-1">Type</label>
-          <Select
-            id="supplier-type"
-            name="type"
-            value={formData.type}
-            onChange={(v) => setFormData((prev) => ({ ...prev, type: v }))}
-            options={ENTITY_TYPE_OPTIONS.filter((o) => o.value !== '')}
-            placeholder="— Select type —"
-            allowEmpty
-            disabled={loading}
-            className="w-full"
-          />
+        <div className="sm:col-span-2 space-y-2 rounded-lg border border-gray-200 bg-gray-50/80 p-4">
+          <label className="flex items-center gap-3 cursor-pointer text-sm font-medium text-gray-800">
+            <input
+              type="checkbox"
+              checked={!!formData.add_as_cooperative_member}
+              onChange={(e) => {
+                setFormData((prev) => ({ ...prev, add_as_cooperative_member: e.target.checked }));
+                setError('');
+              }}
+              disabled={loading}
+              className="rounded border-gray-300 shrink-0"
+            />
+            Cooperative member
+          </label>
+          <label className="flex items-center gap-3 cursor-pointer text-sm font-medium text-gray-800">
+            <input
+              type="checkbox"
+              checked={!!formData.grant_mcc_staff_access}
+              onChange={(e) => {
+                setFormData((prev) => ({
+                  ...prev,
+                  grant_mcc_staff_access: e.target.checked,
+                  mcc_staff_role: e.target.checked ? prev.mcc_staff_role : '',
+                }));
+                setError('');
+              }}
+              disabled={loading}
+              className="rounded border-gray-300 shrink-0"
+            />
+            MCC staff access
+          </label>
+          {formData.grant_mcc_staff_access && (
+            <div className="pt-1 sm:pl-8">
+              <label htmlFor="supplier-staff-role" className="block text-sm font-medium text-gray-700 mb-1">
+                Staff role <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="supplier-staff-role"
+                value={formData.mcc_staff_role || ''}
+                onChange={(e) => setFormData((prev) => ({ ...prev, mcc_staff_role: e.target.value }))}
+                className="input w-full max-w-lg"
+                disabled={loading || staffRolesLoading}
+              >
+                <option value="">{staffRolesLoading ? 'Loading roles…' : '— Select role —'}</option>
+                {staffRoles.map((r) => (
+                  <option key={r.code} value={r.code}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+              {staffRolesError && <p className="mt-1 text-sm text-amber-700">{staffRolesError}</p>}
+            </div>
+          )}
         </div>
         <div>
           <label htmlFor="supplier-price" className="block text-sm font-medium text-gray-700 mb-1">Price per liter (RWF) <span className="text-red-500">*</span></label>

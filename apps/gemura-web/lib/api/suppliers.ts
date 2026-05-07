@@ -61,6 +61,18 @@ export interface CreateSupplierData {
   address?: string;
   bank_name?: string;
   bank_account_number?: string;
+  /** Cooperative membership on the registering MCC account */
+  add_as_cooperative_member?: boolean;
+  /** Create UserAccount on the MCC for staff-style access */
+  grant_mcc_staff_access?: boolean;
+  /** Platform role slug when grant_mcc_staff_access is true (e.g. collector, manager) */
+  mcc_staff_role?: string;
+}
+
+export interface MccAffiliationResult {
+  cooperative_member_recorded: boolean;
+  mcc_staff: 'created' | 'skipped_already_linked' | 'not_requested';
+  mcc_staff_role?: string;
 }
 
 export interface UpdateSupplierData {
@@ -101,7 +113,14 @@ export const suppliersApi = {
     return apiClient.get(`/suppliers/${code}`);
   },
 
-  createSupplier: async (data: CreateSupplierData): Promise<SupplierResponse> => {
+  createSupplier: async (
+    data: CreateSupplierData,
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data?: { supplier: Record<string, unknown>; mcc_affiliation?: MccAffiliationResult };
+  }> => {
     return apiClient.post('/suppliers/create', data);
   },
 

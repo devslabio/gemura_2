@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsNumber, IsOptional, Length, Matches, MaxLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsNotEmpty, IsString, IsNumber, IsOptional, Length, Matches, MaxLength, ValidateIf } from 'class-validator';
 
 export class CreateSupplierDto {
   @ApiProperty({ description: 'Given name', example: 'Jean', required: true })
@@ -85,4 +85,33 @@ export class CreateSupplierDto {
   @IsString({ message: 'Bank account number must be a string' })
   @MaxLength(64, { message: 'Bank account number must be at most 64 characters' })
   bank_account_number?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'When true, records cooperative membership for this user on the registering MCC account (AccountMembership).',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  add_as_cooperative_member?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'When true, creates an active UserAccount on the registering MCC with platform role mcc_staff_role (staff access).',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  grant_mcc_staff_access?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Platform role slug for MCC staff (e.g. collector, manager). Required when grant_mcc_staff_access is true.',
+    example: 'collector',
+  })
+  @ValidateIf((o) => o.grant_mcc_staff_access === true)
+  @IsNotEmpty({ message: 'mcc_staff_role is required when grant_mcc_staff_access is true' })
+  @IsString()
+  @MaxLength(64)
+  mcc_staff_role?: string;
 }

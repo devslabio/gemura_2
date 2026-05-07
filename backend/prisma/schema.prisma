@@ -116,6 +116,13 @@ enum RelationshipStatus {
   inactive
 }
 
+/// Cooperative membership: user ↔ MCC (tenant) account. Orthogonal to SupplierCustomer and UserAccount RBAC.
+enum AccountMembershipStatus {
+  pending
+  active
+  inactive
+}
+
 enum WalletType {
   saving
   regular
@@ -242,7 +249,9 @@ enum FarmStatus {
   archived
 }
 
-/** Per-species production focus when registering/updating a farm */
+/**
+ * Per-species production focus when registering/updating a farm
+ */
 enum FarmProductionMode {
   dairy
   meat
@@ -302,24 +311,25 @@ enum LocationType {
 // ============================================
 
 model Account {
-  id         String        @id @default(uuid()) @db.Uuid
-  legacy_id  BigInt?       @unique @map("legacy_id") // For migration reference
-  code       String?       @unique
-  name       String
-  bank_name  String?       @map("bank_name")
-  bank_account_number String? @map("bank_account_number")
-  type       AccountType   @default(tenant)
-  parent_id  String?       @map("parent_id") @db.Uuid
-  status     AccountStatus @default(active)
-  created_at DateTime      @default(now()) @map("created_at")
-  updated_at DateTime      @updatedAt @map("updated_at")
-  created_by String?       @map("created_by") @db.Uuid
-  updated_by String?       @map("updated_by") @db.Uuid
+  id                  String        @id @default(uuid()) @db.Uuid
+  legacy_id           BigInt?       @unique @map("legacy_id") // For migration reference
+  code                String?       @unique
+  name                String
+  bank_name           String?       @map("bank_name")
+  bank_account_number String?       @map("bank_account_number")
+  type                AccountType   @default(tenant)
+  parent_id           String?       @map("parent_id") @db.Uuid
+  status              AccountStatus @default(active)
+  created_at          DateTime      @default(now()) @map("created_at")
+  updated_at          DateTime      @updatedAt @map("updated_at")
+  created_by          String?       @map("created_by") @db.Uuid
+  updated_by          String?       @map("updated_by") @db.Uuid
 
   // Relations
   parent                Account?            @relation("AccountParent", fields: [parent_id], references: [id], onDelete: SetNull)
   children              Account[]           @relation("AccountParent")
   user_accounts         UserAccount[]
+  account_memberships   AccountMembership[]
   suppliers             SupplierCustomer[]  @relation("SupplierAccount")
   customers             SupplierCustomer[]  @relation("CustomerAccount")
   milk_sales_supplier   MilkSale[]          @relation("MilkSaleSupplier")
@@ -420,18 +430,21 @@ model User {
   updated_by           String?          @map("updated_by") @db.Uuid
 
   // Relations
-  default_account              Account?           @relation("UserDefaultAccount", fields: [default_account_id], references: [id], onDelete: SetNull)
+  default_account              Account?                  @relation("UserDefaultAccount", fields: [default_account_id], references: [id], onDelete: SetNull)
   user_accounts                UserAccount[]
-  milk_sales_recorded          MilkSale[]         @relation("MilkSaleRecordedBy")
-  mcc_gate_deliveries_recorded MccGateDelivery[] @relation("MccGateDeliveryRecordedBy")
-  mcc_milk_tests_recorded      MccMilkTestResult[] @relation("MccMilkTestTester")
-  mcc_staff_shifts             MccStaffShift[]     @relation("MccStaffShiftUser")
-  created_accounts             Account[]          @relation("AccountCreatedBy")
-  updated_accounts             Account[]          @relation("AccountUpdatedBy")
-  created_users                User[]             @relation("UserCreatedBy")
-  updated_users                User[]             @relation("UserUpdatedBy")
-  created_by_user              User?              @relation("UserCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
-  updated_by_user              User?              @relation("UserUpdatedBy", fields: [updated_by], references: [id], onDelete: SetNull)
+  account_memberships          AccountMembership[]       @relation("AccountMembershipMember")
+  account_memberships_created  AccountMembership[]       @relation("AccountMembershipCreatedBy")
+  account_memberships_updated  AccountMembership[]       @relation("AccountMembershipUpdatedBy")
+  milk_sales_recorded          MilkSale[]                @relation("MilkSaleRecordedBy")
+  mcc_gate_deliveries_recorded MccGateDelivery[]         @relation("MccGateDeliveryRecordedBy")
+  mcc_milk_tests_recorded      MccMilkTestResult[]       @relation("MccMilkTestTester")
+  mcc_staff_shifts             MccStaffShift[]           @relation("MccStaffShiftUser")
+  created_accounts             Account[]                 @relation("AccountCreatedBy")
+  updated_accounts             Account[]                 @relation("AccountUpdatedBy")
+  created_users                User[]                    @relation("UserCreatedBy")
+  updated_users                User[]                    @relation("UserUpdatedBy")
+  created_by_user              User?                     @relation("UserCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+  updated_by_user              User?                     @relation("UserUpdatedBy", fields: [updated_by], references: [id], onDelete: SetNull)
   password_resets              PasswordReset[]
   notifications                Notification[]
   feed_posts                   FeedPost[]
@@ -439,20 +452,20 @@ model User {
   feed_comments                FeedComment[]
   feed_interactions            FeedInteraction[]
   user_bookmarks               UserBookmark[]
-  user_relationships_follower  UserRelationship[] @relation("UserRelationshipFollower")
-  user_relationships_following UserRelationship[] @relation("UserRelationshipFollowing")
-  vet_animal_health            AnimalHealth[]     @relation("VetUserAnimalHealth")
+  user_relationships_follower  UserRelationship[]        @relation("UserRelationshipFollower")
+  user_relationships_following UserRelationship[]        @relation("UserRelationshipFollowing")
+  vet_animal_health            AnimalHealth[]            @relation("VetUserAnimalHealth")
   user_points                  UserPoint[]
-  user_referrals_referrer      UserReferral[]     @relation("UserReferrer")
-  user_referrals_referred      UserReferral[]     @relation("UserReferred")
+  user_referrals_referrer      UserReferral[]            @relation("UserReferrer")
+  user_referrals_referred      UserReferral[]            @relation("UserReferred")
   user_rewards                 UserReward[]
   user_onboardings             UserOnboarding[]
   supplier_milk_onboarding     SupplierMilkOnboarding?
   supplier_transfers           SupplierTransfer[] @relation("SupplierTransfers")
   mcc_onboarding_reviews       MccOnboardingSubmission[] @relation("MccOnboardingReviewedBy")
   mcc_onboarding_linked        MccOnboardingSubmission[] @relation("MccOnboardingLinkedUser")
-  inventory_sales_created      InventorySale[]    @relation("InventorySaleCreatedBy")
-  inventory_movements_created  InventoryMovement[] @relation("InventoryMovementCreatedBy")
+  inventory_sales_created      InventorySale[]           @relation("InventorySaleCreatedBy")
+  inventory_movements_created  InventoryMovement[]       @relation("InventoryMovementCreatedBy")
   api_keys_created             ApiKey[]
 
   @@index([code])
@@ -485,16 +498,16 @@ model PlatformPermission {
 
 /// Dynamic platform role (slug matches UserAccount.role strings; legacy `owner` is migrated to `system_admin`).
 model PlatformRole {
-  id             String   @id @default(uuid()) @db.Uuid
-  slug           String   @unique @db.VarChar(64)
-  name           String   @db.VarChar(150)
-  description    String?  @db.Text
-  is_system      Boolean  @default(false) @map("is_system")
-  is_active      Boolean  @default(true) @map("is_active")
+  id            String   @id @default(uuid()) @db.Uuid
+  slug          String   @unique @db.VarChar(64)
+  name          String   @db.VarChar(150)
+  description   String?  @db.Text
+  is_system     Boolean  @default(false) @map("is_system")
+  is_active     Boolean  @default(true) @map("is_active")
   /// When false, role is hidden from employee-invite pickers (e.g. supplier, customer account types).
-  is_assignable  Boolean  @default(true) @map("is_assignable")
-  created_at     DateTime @default(now()) @map("created_at")
-  updated_at     DateTime @updatedAt @map("updated_at")
+  is_assignable Boolean  @default(true) @map("is_assignable")
+  created_at    DateTime @default(now()) @map("created_at")
+  updated_at    DateTime @updatedAt @map("updated_at")
 
   permission_links PlatformRolePermission[]
   user_accounts    UserAccount[]
@@ -529,12 +542,12 @@ model UserAccount {
   updated_by       String?           @map("updated_by") @db.Uuid
 
   // Relations
-  user          User           @relation(fields: [user_id], references: [id], onDelete: Cascade)
-  account       Account        @relation(fields: [account_id], references: [id], onDelete: Cascade)
-  platform_role PlatformRole?  @relation(fields: [platform_role_id], references: [id], onDelete: SetNull)
+  user                                User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  account                             Account       @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  platform_role                       PlatformRole? @relation(fields: [platform_role_id], references: [id], onDelete: SetNull)
   /// When set on an Umucunda (hub/route) operator at this MCC, MCC ops APIs scope gate deliveries & manifests to this supplier account only.
-  linked_umucunda_supplier_account_id String? @map("linked_umucunda_supplier_account_id") @db.Uuid
-  linked_umucunda_supplier            Account? @relation("UserAccountUmucundaSupplierScope", fields: [linked_umucunda_supplier_account_id], references: [id], onDelete: SetNull)
+  linked_umucunda_supplier_account_id String?       @map("linked_umucunda_supplier_account_id") @db.Uuid
+  linked_umucunda_supplier            Account?      @relation("UserAccountUmucundaSupplierScope", fields: [linked_umucunda_supplier_account_id], references: [id], onDelete: SetNull)
 
   @@unique([user_id, account_id])
   @@index([user_id])
@@ -543,6 +556,29 @@ model UserAccount {
   @@index([platform_role_id])
   @@index([status])
   @@map("user_accounts")
+}
+
+model AccountMembership {
+  id           String                  @id @default(uuid()) @db.Uuid
+  account_id   String                  @map("account_id") @db.Uuid
+  user_id      String                  @map("user_id") @db.Uuid
+  status       AccountMembershipStatus @default(active)
+  member_since DateTime?               @map("member_since")
+  created_at   DateTime                @default(now()) @map("created_at")
+  updated_at   DateTime                @updatedAt @map("updated_at")
+  created_by   String?                 @map("created_by") @db.Uuid
+  updated_by   String?                 @map("updated_by") @db.Uuid
+
+  account         Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  user            User    @relation("AccountMembershipMember", fields: [user_id], references: [id], onDelete: Cascade)
+  created_by_user User?   @relation("AccountMembershipCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+  updated_by_user User?   @relation("AccountMembershipUpdatedBy", fields: [updated_by], references: [id], onDelete: SetNull)
+
+  @@unique([account_id, user_id])
+  @@index([account_id])
+  @@index([user_id])
+  @@index([status])
+  @@map("account_memberships")
 }
 
 model SupplierCustomer {
@@ -577,21 +613,21 @@ model MilkSale {
   animal_id            String?        @map("animal_id") @db.Uuid
   milk_production_id   String?        @map("milk_production_id") @db.Uuid
   quantity             Decimal        @db.Decimal(10, 2)
-  unit_price          Decimal        @map("unit_price") @db.Decimal(10, 2)
-  status              MilkSaleStatus @default(pending)
-  sale_at             DateTime       @map("sale_at")
-  notes               String?
-  amount_paid         Decimal        @default(0) @map("amount_paid") @db.Decimal(10, 2)
-  payment_status      String?        @default("unpaid") @map("payment_status")
-  payment_history     Json?          @map("payment_history")
-  recorded_by         String         @map("recorded_by") @db.Uuid
-  mcc_gate_delivery_id String?      @unique @map("mcc_gate_delivery_id") @db.Uuid
+  unit_price           Decimal        @map("unit_price") @db.Decimal(10, 2)
+  status               MilkSaleStatus @default(pending)
+  sale_at              DateTime       @map("sale_at")
+  notes                String?
+  amount_paid          Decimal        @default(0) @map("amount_paid") @db.Decimal(10, 2)
+  payment_status       String?        @default("unpaid") @map("payment_status")
+  payment_history      Json?          @map("payment_history")
+  recorded_by          String         @map("recorded_by") @db.Uuid
+  mcc_gate_delivery_id String?        @unique @map("mcc_gate_delivery_id") @db.Uuid
   /// When set, this collection pays a specific farmer line on an accepted Umucunda manifest (gate context via line → manifest → gate).
-  mcc_manifest_line_id String?      @unique @map("mcc_manifest_line_id") @db.Uuid
-  created_at          DateTime       @default(now()) @map("created_at")
-  updated_at          DateTime       @updatedAt @map("updated_at")
-  created_by          String?        @map("created_by") @db.Uuid
-  updated_by          String?        @map("updated_by") @db.Uuid
+  mcc_manifest_line_id String?        @unique @map("mcc_manifest_line_id") @db.Uuid
+  created_at           DateTime       @default(now()) @map("created_at")
+  updated_at           DateTime       @updatedAt @map("updated_at")
+  created_by           String?        @map("created_by") @db.Uuid
+  updated_by           String?        @map("updated_by") @db.Uuid
 
   // Relations
   supplier_account    Account             @relation("MilkSaleSupplier", fields: [supplier_account_id], references: [id], onDelete: Restrict)
@@ -599,8 +635,8 @@ model MilkSale {
   recorded_by_user    User                @relation("MilkSaleRecordedBy", fields: [recorded_by], references: [id], onDelete: Restrict)
   mcc_gate_delivery   MccGateDelivery?    @relation("MilkSaleGateDelivery", fields: [mcc_gate_delivery_id], references: [id], onDelete: SetNull)
   mcc_manifest_line   MccManifestLine?    @relation("MilkSaleManifestLine", fields: [mcc_manifest_line_id], references: [id], onDelete: SetNull)
-  animal              Animal?              @relation(fields: [animal_id], references: [id], onDelete: SetNull)
-  milk_production     MilkProduction?      @relation(fields: [milk_production_id], references: [id], onDelete: SetNull)
+  animal              Animal?             @relation(fields: [animal_id], references: [id], onDelete: SetNull)
+  milk_production     MilkProduction?     @relation(fields: [milk_production_id], references: [id], onDelete: SetNull)
   supplier_transfers  SupplierTransfer[]
 
   @@index([supplier_account_id])
@@ -619,24 +655,24 @@ model MilkSale {
 
 /// Gate-scale milk arrival at an MCC (direct farmer or Umucunda batch); optional manifest per §12.2.
 model MccGateDelivery {
-  id                    String               @id @default(uuid()) @db.Uuid
-  mcc_account_id        String               @map("mcc_account_id") @db.Uuid
-  source_type           MccDeliverySourceType @map("source_type")
-  source_account_id    String               @map("source_account_id") @db.Uuid // Direct farmer supplier or Umucunda supplier account at gate
-  gate_volume_litres   Decimal               @map("gate_volume_litres") @db.Decimal(12, 3)
-  arrived_at            DateTime              @default(now()) @map("arrived_at")
-  recorded_by_user_id   String                @map("recorded_by_user_id") @db.Uuid
-  notes                 String?               @db.Text
-  created_at            DateTime              @default(now()) @map("created_at")
-  updated_at            DateTime              @updatedAt @map("updated_at")
+  id                  String                @id @default(uuid()) @db.Uuid
+  mcc_account_id      String                @map("mcc_account_id") @db.Uuid
+  source_type         MccDeliverySourceType @map("source_type")
+  source_account_id   String                @map("source_account_id") @db.Uuid // Direct farmer supplier or Umucunda supplier account at gate
+  gate_volume_litres  Decimal               @map("gate_volume_litres") @db.Decimal(12, 3)
+  arrived_at          DateTime              @default(now()) @map("arrived_at")
+  recorded_by_user_id String                @map("recorded_by_user_id") @db.Uuid
+  notes               String?               @db.Text
+  created_at          DateTime              @default(now()) @map("created_at")
+  updated_at          DateTime              @updatedAt @map("updated_at")
 
-  mcc_account    Account               @relation("MccGateDeliveryMccAccount", fields: [mcc_account_id], references: [id], onDelete: Restrict)
-  source_account Account               @relation("MccGateDeliverySourceAccount", fields: [source_account_id], references: [id], onDelete: Restrict)
-  recorded_by    User                  @relation("MccGateDeliveryRecordedBy", fields: [recorded_by_user_id], references: [id], onDelete: Restrict)
-  manifest       MccMilkManifest?
-  linked_milk_sale MilkSale?           @relation("MilkSaleGateDelivery")
+  mcc_account       Account             @relation("MccGateDeliveryMccAccount", fields: [mcc_account_id], references: [id], onDelete: Restrict)
+  source_account    Account             @relation("MccGateDeliverySourceAccount", fields: [source_account_id], references: [id], onDelete: Restrict)
+  recorded_by       User                @relation("MccGateDeliveryRecordedBy", fields: [recorded_by_user_id], references: [id], onDelete: Restrict)
+  manifest          MccMilkManifest?
+  linked_milk_sale  MilkSale?           @relation("MilkSaleGateDelivery")
   milk_test_results MccMilkTestResult[]
-  credit_events       MccCreditEvent[]
+  credit_events     MccCreditEvent[]
 
   @@index([mcc_account_id, arrived_at(sort: Desc)])
   @@index([source_account_id, arrived_at(sort: Desc)])
@@ -645,26 +681,26 @@ model MccGateDelivery {
 
 /// Umucunda manifest with constituent farmer lines (1:1 with gate delivery when used).
 model MccMilkManifest {
-  id                            String               @id @default(uuid()) @db.Uuid
-  gate_delivery_id              String               @unique @map("gate_delivery_id") @db.Uuid
-  mcc_account_id                String               @map("mcc_account_id") @db.Uuid
-  umucunda_supplier_account_id  String               @map("umucunda_supplier_account_id") @db.Uuid
-  manifest_ref                  String               @unique @map("manifest_ref") @db.VarChar(40)
-  status                        MccMilkManifestStatus @default(draft) @map("status")
-  route_metadata                Json?                @map("route_metadata")
-  gps_metadata                   Json?                @map("gps_metadata")
-  submitted_at                   DateTime?            @map("submitted_at")
-  accepted_at                    DateTime?            @map("accepted_at")
-  rejected_at                    DateTime?            @map("rejected_at")
-  rejection_reason               String?               @map("rejection_reason") @db.Text
-  created_at                     DateTime              @default(now()) @map("created_at")
-  updated_at                     DateTime              @updatedAt @map("updated_at")
+  id                           String                @id @default(uuid()) @db.Uuid
+  gate_delivery_id             String                @unique @map("gate_delivery_id") @db.Uuid
+  mcc_account_id               String                @map("mcc_account_id") @db.Uuid
+  umucunda_supplier_account_id String                @map("umucunda_supplier_account_id") @db.Uuid
+  manifest_ref                 String                @unique @map("manifest_ref") @db.VarChar(40)
+  status                       MccMilkManifestStatus @default(draft) @map("status")
+  route_metadata               Json?                 @map("route_metadata")
+  gps_metadata                 Json?                 @map("gps_metadata")
+  submitted_at                 DateTime?             @map("submitted_at")
+  accepted_at                  DateTime?             @map("accepted_at")
+  rejected_at                  DateTime?             @map("rejected_at")
+  rejection_reason             String?               @map("rejection_reason") @db.Text
+  created_at                   DateTime              @default(now()) @map("created_at")
+  updated_at                   DateTime              @updatedAt @map("updated_at")
 
-  gate_delivery       MccGateDelivery   @relation(fields: [gate_delivery_id], references: [id], onDelete: Restrict)
-  mcc_account         Account          @relation("MccManifestMccAccount", fields: [mcc_account_id], references: [id], onDelete: Restrict)
-  umucunda_supplier   Account          @relation("MccManifestUmucundaSupplier", fields: [umucunda_supplier_account_id], references: [id], onDelete: Restrict)
-  lines               MccManifestLine[]
-  credit_events       MccCreditEvent[]
+  gate_delivery     MccGateDelivery   @relation(fields: [gate_delivery_id], references: [id], onDelete: Restrict)
+  mcc_account       Account           @relation("MccManifestMccAccount", fields: [mcc_account_id], references: [id], onDelete: Restrict)
+  umucunda_supplier Account           @relation("MccManifestUmucundaSupplier", fields: [umucunda_supplier_account_id], references: [id], onDelete: Restrict)
+  lines             MccManifestLine[]
+  credit_events     MccCreditEvent[]
 
   @@index([mcc_account_id, status])
   @@index([umucunda_supplier_account_id])
@@ -672,16 +708,16 @@ model MccMilkManifest {
 }
 
 model MccManifestLine {
-  id                         String    @id @default(uuid()) @db.Uuid
-  manifest_id                String    @map("manifest_id") @db.Uuid
-  farmer_supplier_account_id String    @map("farmer_supplier_account_id") @db.Uuid
-  declared_litres            Decimal    @map("declared_litres") @db.Decimal(12, 3)
-  container_id               String?    @map("container_id") @db.VarChar(64)
+  id                         String  @id @default(uuid()) @db.Uuid
+  manifest_id                String  @map("manifest_id") @db.Uuid
+  farmer_supplier_account_id String  @map("farmer_supplier_account_id") @db.Uuid
+  declared_litres            Decimal @map("declared_litres") @db.Decimal(12, 3)
+  container_id               String? @map("container_id") @db.VarChar(64)
 
-  manifest         MccMilkManifest     @relation(fields: [manifest_id], references: [id], onDelete: Cascade)
-  farmer_supplier  Account             @relation("MccManifestLineFarmerSupplier", fields: [farmer_supplier_account_id], references: [id], onDelete: Restrict)
+  manifest          MccMilkManifest     @relation(fields: [manifest_id], references: [id], onDelete: Cascade)
+  farmer_supplier   Account             @relation("MccManifestLineFarmerSupplier", fields: [farmer_supplier_account_id], references: [id], onDelete: Restrict)
   milk_test_results MccMilkTestResult[]
-  linked_collection MilkSale?          @relation("MilkSaleManifestLine")
+  linked_collection MilkSale?           @relation("MilkSaleManifestLine")
 
   @@index([manifest_id])
   @@index([farmer_supplier_account_id])
@@ -689,19 +725,19 @@ model MccManifestLine {
 }
 
 model MccMilkTestResult {
-  id                          String                       @id @default(uuid()) @db.Uuid
-  mcc_gate_delivery_id        String                       @map("mcc_gate_delivery_id") @db.Uuid
-  manifest_line_id            String?                      @map("manifest_line_id") @db.Uuid
-  outcome                     MccMilkTestOutcome            @default(pending)
-  rejection_cause             String?                       @map("rejection_cause") @db.Text
-  source_resolution_status    MccSourceResolutionStatus?    @map("source_resolution_status")
-  detail                      Json?
-  tested_by_user_id           String?                      @map("tested_by_user_id") @db.Uuid
-  tested_at                   DateTime                     @default(now()) @map("tested_at")
+  id                       String                     @id @default(uuid()) @db.Uuid
+  mcc_gate_delivery_id     String                     @map("mcc_gate_delivery_id") @db.Uuid
+  manifest_line_id         String?                    @map("manifest_line_id") @db.Uuid
+  outcome                  MccMilkTestOutcome         @default(pending)
+  rejection_cause          String?                    @map("rejection_cause") @db.Text
+  source_resolution_status MccSourceResolutionStatus? @map("source_resolution_status")
+  detail                   Json?
+  tested_by_user_id        String?                    @map("tested_by_user_id") @db.Uuid
+  tested_at                DateTime                   @default(now()) @map("tested_at")
 
-  gate_delivery MccGateDelivery   @relation(fields: [mcc_gate_delivery_id], references: [id], onDelete: Restrict)
+  gate_delivery MccGateDelivery  @relation(fields: [mcc_gate_delivery_id], references: [id], onDelete: Restrict)
   manifest_line MccManifestLine? @relation(fields: [manifest_line_id], references: [id], onDelete: SetNull)
-  tester       User?            @relation("MccMilkTestTester", fields: [tested_by_user_id], references: [id], onDelete: SetNull)
+  tester        User?            @relation("MccMilkTestTester", fields: [tested_by_user_id], references: [id], onDelete: SetNull)
   credit_events MccCreditEvent[]
 
   @@index([mcc_gate_delivery_id, tested_at(sort: Desc)])
@@ -709,20 +745,20 @@ model MccMilkTestResult {
 }
 
 model MccCreditEvent {
-  id                        String              @id @default(uuid()) @db.Uuid
-  farmer_account_id         String               @map("farmer_account_id") @db.Uuid
-  mcc_account_id            String               @map("mcc_account_id") @db.Uuid
-  mcc_gate_delivery_id       String               @map("mcc_gate_delivery_id") @db.Uuid
-  mcc_milk_manifest_id      String?               @map("mcc_milk_manifest_id") @db.Uuid
-  mcc_milk_test_result_id    String?              @map("mcc_milk_test_result_id") @db.Uuid
-  volume_credited_litres    Decimal              @map("volume_credited_litres") @db.Decimal(12, 3)
-  created_at                DateTime             @default(now()) @map("created_at")
+  id                      String   @id @default(uuid()) @db.Uuid
+  farmer_account_id       String   @map("farmer_account_id") @db.Uuid
+  mcc_account_id          String   @map("mcc_account_id") @db.Uuid
+  mcc_gate_delivery_id    String   @map("mcc_gate_delivery_id") @db.Uuid
+  mcc_milk_manifest_id    String?  @map("mcc_milk_manifest_id") @db.Uuid
+  mcc_milk_test_result_id String?  @map("mcc_milk_test_result_id") @db.Uuid
+  volume_credited_litres  Decimal  @map("volume_credited_litres") @db.Decimal(12, 3)
+  created_at              DateTime @default(now()) @map("created_at")
 
-  farmer      Account               @relation("MccCreditEventFarmer", fields: [farmer_account_id], references: [id], onDelete: Restrict)
-  mcc_account Account               @relation("MccCreditEventMccAccount", fields: [mcc_account_id], references: [id], onDelete: Restrict)
-  gate_delivery MccGateDelivery      @relation(fields: [mcc_gate_delivery_id], references: [id], onDelete: Restrict)
-  manifest      MccMilkManifest?     @relation(fields: [mcc_milk_manifest_id], references: [id], onDelete: SetNull)
-  test_result   MccMilkTestResult?  @relation(fields: [mcc_milk_test_result_id], references: [id], onDelete: SetNull)
+  farmer        Account            @relation("MccCreditEventFarmer", fields: [farmer_account_id], references: [id], onDelete: Restrict)
+  mcc_account   Account            @relation("MccCreditEventMccAccount", fields: [mcc_account_id], references: [id], onDelete: Restrict)
+  gate_delivery MccGateDelivery    @relation(fields: [mcc_gate_delivery_id], references: [id], onDelete: Restrict)
+  manifest      MccMilkManifest?   @relation(fields: [mcc_milk_manifest_id], references: [id], onDelete: SetNull)
+  test_result   MccMilkTestResult? @relation(fields: [mcc_milk_test_result_id], references: [id], onDelete: SetNull)
 
   @@index([farmer_account_id, created_at(sort: Desc)])
   @@index([mcc_gate_delivery_id])
@@ -750,21 +786,21 @@ model MccStaffShift {
 
 // Milk production (per animal or farm per day) – can be linked to sales later via milk_production_id on MilkSale
 model MilkProduction {
-  id               String   @id @default(uuid()) @db.Uuid
-  account_id       String   @map("account_id") @db.Uuid
-  farm_id          String?  @map("farm_id") @db.Uuid
-  animal_id        String?  @map("animal_id") @db.Uuid
-  production_date  DateTime @map("production_date") @db.Date
-  quantity_litres  Decimal  @map("quantity_litres") @db.Decimal(10, 2)
-  session          String?  @db.VarChar(32)
-  notes            String?  @db.Text
-  created_at       DateTime @default(now()) @map("created_at")
-  updated_at       DateTime @updatedAt @map("updated_at")
-  created_by       String?  @map("created_by") @db.Uuid
+  id              String   @id @default(uuid()) @db.Uuid
+  account_id      String   @map("account_id") @db.Uuid
+  farm_id         String?  @map("farm_id") @db.Uuid
+  animal_id       String?  @map("animal_id") @db.Uuid
+  production_date DateTime @map("production_date") @db.Date
+  quantity_litres Decimal  @map("quantity_litres") @db.Decimal(10, 2)
+  session         String?  @db.VarChar(32)
+  notes           String?  @db.Text
+  created_at      DateTime @default(now()) @map("created_at")
+  updated_at      DateTime @updatedAt @map("updated_at")
+  created_by      String?  @map("created_by") @db.Uuid
 
-  account Account  @relation("MilkProductionAccount", fields: [account_id], references: [id], onDelete: Cascade)
-  farm    Farm?    @relation(fields: [farm_id], references: [id], onDelete: SetNull)
-  animal  Animal?  @relation(fields: [animal_id], references: [id], onDelete: SetNull)
+  account    Account    @relation("MilkProductionAccount", fields: [account_id], references: [id], onDelete: Cascade)
+  farm       Farm?      @relation(fields: [farm_id], references: [id], onDelete: SetNull)
+  animal     Animal?    @relation(fields: [animal_id], references: [id], onDelete: SetNull)
   milk_sales MilkSale[]
 
   @@index([account_id])
@@ -775,30 +811,30 @@ model MilkProduction {
 }
 
 model Product {
-  id                     String        @id @default(uuid()) @db.Uuid
-  legacy_id              BigInt?       @unique @map("legacy_id") // For migration reference
-  name                   String
-  description            String?
-  price                  Decimal       @db.Decimal(10, 2)
-  stock_quantity         Int           @default(0) @map("stock_quantity")
-  min_stock_level        Int?          @map("min_stock_level") // Optional: for low stock alerts
-  status                 ProductStatus @default(active)
-  account_id             String?       @map("account_id") @db.Uuid // Link to user's account
-  inventory_item_id      String?       @map("inventory_item_id") @db.Uuid // Optional: link to predefined inventory item type
-  is_listed_in_marketplace Boolean     @default(false) @map("is_listed_in_marketplace") // Whether product is listed in marketplace
-  created_at             DateTime      @default(now()) @map("created_at")
-  updated_at             DateTime      @updatedAt @map("updated_at")
-  created_by             String?       @map("created_by") @db.Uuid
-  updated_by             String?       @map("updated_by") @db.Uuid
+  id                       String        @id @default(uuid()) @db.Uuid
+  legacy_id                BigInt?       @unique @map("legacy_id") // For migration reference
+  name                     String
+  description              String?
+  price                    Decimal       @db.Decimal(10, 2)
+  stock_quantity           Int           @default(0) @map("stock_quantity")
+  min_stock_level          Int?          @map("min_stock_level") // Optional: for low stock alerts
+  status                   ProductStatus @default(active)
+  account_id               String?       @map("account_id") @db.Uuid // Link to user's account
+  inventory_item_id        String?       @map("inventory_item_id") @db.Uuid // Optional: link to predefined inventory item type
+  is_listed_in_marketplace Boolean       @default(false) @map("is_listed_in_marketplace") // Whether product is listed in marketplace
+  created_at               DateTime      @default(now()) @map("created_at")
+  updated_at               DateTime      @updatedAt @map("updated_at")
+  created_by               String?       @map("created_by") @db.Uuid
+  updated_by               String?       @map("updated_by") @db.Uuid
 
   // Relations
-  account          Account?           @relation("ProductAccount", fields: [account_id], references: [id], onDelete: SetNull)
-  inventory_item   InventoryItem?     @relation(fields: [inventory_item_id], references: [id], onDelete: SetNull)
-  categories       ProductCategory[]
-  images           ProductImage[]
-  order_items      OrderItem[]
-  sales            InventorySale[]    @relation("InventorySaleProduct")
-  movements        InventoryMovement[]
+  account        Account?            @relation("ProductAccount", fields: [account_id], references: [id], onDelete: SetNull)
+  inventory_item InventoryItem?      @relation(fields: [inventory_item_id], references: [id], onDelete: SetNull)
+  categories     ProductCategory[]
+  images         ProductImage[]
+  order_items    OrderItem[]
+  sales          InventorySale[]     @relation("InventorySaleProduct")
+  movements      InventoryMovement[]
 
   @@index([status])
   @@index([created_at])
@@ -871,8 +907,8 @@ model Order {
   updated_at       DateTime    @updatedAt @map("updated_at")
 
   // Relations
-  account Account     @relation(fields: [account_id], references: [id], onDelete: Restrict)
-  items   OrderItem[]
+  account         Account         @relation(fields: [account_id], references: [id], onDelete: Restrict)
+  items           OrderItem[]
   inventory_sales InventorySale[] @relation("InventorySaleOrder")
 
   @@index([customer_id])
@@ -1211,33 +1247,33 @@ model SupplierTransfer {
 }
 
 model MccOnboardingSubmission {
-  id                     String   @id @default(uuid()) @db.Uuid
-  submission_code        String   @unique @map("submission_code") @db.VarChar(64)
-  business_name          String   @map("business_name") @db.VarChar(255)
-  common_name            String?  @map("common_name") @db.VarChar(255)
-  manager_first_name     String   @map("manager_first_name") @db.VarChar(120)
-  manager_last_name      String   @map("manager_last_name") @db.VarChar(120)
-  manager_phone          String   @map("manager_phone") @db.VarChar(50)
-  manager_id_number      String   @map("manager_id_number") @db.VarChar(120)
-  location_province_id   String?  @map("location_province_id") @db.VarChar(120)
-  location_district_id   String?  @map("location_district_id") @db.VarChar(120)
-  location_sector_id     String?  @map("location_sector_id") @db.VarChar(120)
-  location_cell_id       String?  @map("location_cell_id") @db.VarChar(120)
-  location_village_id    String?  @map("location_village_id") @db.VarChar(120)
-  final_decision         String   @map("final_decision") @db.VarChar(32)
-  pass_count             Int      @default(0) @map("pass_count")
-  section_payload        Json     @map("section_payload")
-  google_sheet_status    String   @default("not_configured") @map("google_sheet_status") @db.VarChar(40)
-  google_sheet_response  Json?    @map("google_sheet_response")
-  google_sheet_error     String?  @map("google_sheet_error")
-  review_status          MccOnboardingReviewStatus @default(pending) @map("review_status")
-  review_notes           String?  @map("review_notes") @db.Text
-  reviewed_at            DateTime? @map("reviewed_at")
-  reviewed_by_user_id    String?  @map("reviewed_by_user_id") @db.Uuid
-  linked_user_id         String?  @map("linked_user_id") @db.Uuid
-  linked_account_id      String?  @map("linked_account_id") @db.Uuid
-  created_at             DateTime @default(now()) @map("created_at")
-  updated_at             DateTime @updatedAt @map("updated_at")
+  id                    String                    @id @default(uuid()) @db.Uuid
+  submission_code       String                    @unique @map("submission_code") @db.VarChar(64)
+  business_name         String                    @map("business_name") @db.VarChar(255)
+  common_name           String?                   @map("common_name") @db.VarChar(255)
+  manager_first_name    String                    @map("manager_first_name") @db.VarChar(120)
+  manager_last_name     String                    @map("manager_last_name") @db.VarChar(120)
+  manager_phone         String                    @map("manager_phone") @db.VarChar(50)
+  manager_id_number     String                    @map("manager_id_number") @db.VarChar(120)
+  location_province_id  String?                   @map("location_province_id") @db.VarChar(120)
+  location_district_id  String?                   @map("location_district_id") @db.VarChar(120)
+  location_sector_id    String?                   @map("location_sector_id") @db.VarChar(120)
+  location_cell_id      String?                   @map("location_cell_id") @db.VarChar(120)
+  location_village_id   String?                   @map("location_village_id") @db.VarChar(120)
+  final_decision        String                    @map("final_decision") @db.VarChar(32)
+  pass_count            Int                       @default(0) @map("pass_count")
+  section_payload       Json                      @map("section_payload")
+  google_sheet_status   String                    @default("not_configured") @map("google_sheet_status") @db.VarChar(40)
+  google_sheet_response Json?                     @map("google_sheet_response")
+  google_sheet_error    String?                   @map("google_sheet_error")
+  review_status         MccOnboardingReviewStatus @default(pending) @map("review_status")
+  review_notes          String?                   @map("review_notes") @db.Text
+  reviewed_at           DateTime?                 @map("reviewed_at")
+  reviewed_by_user_id   String?                   @map("reviewed_by_user_id") @db.Uuid
+  linked_user_id        String?                   @map("linked_user_id") @db.Uuid
+  linked_account_id     String?                   @map("linked_account_id") @db.Uuid
+  created_at            DateTime                  @default(now()) @map("created_at")
+  updated_at            DateTime                  @updatedAt @map("updated_at")
 
   reviewed_by_user User?    @relation("MccOnboardingReviewedBy", fields: [reviewed_by_user_id], references: [id], onDelete: SetNull)
   linked_user      User?    @relation("MccOnboardingLinkedUser", fields: [linked_user_id], references: [id], onDelete: SetNull)
@@ -1342,7 +1378,7 @@ model AccountingTransaction {
   created_by       String?  @map("created_by") @db.Uuid
 
   // Relations
-  entries         AccountingTransactionEntry[]
+  entries AccountingTransactionEntry[]
 
   @@index([transaction_date])
   @@index([farm_id])
@@ -1368,7 +1404,6 @@ model AccountingTransactionEntry {
   @@index([account_id])
   @@map("accounting_transaction_entries")
 }
-
 
 model AuditLog {
   id          String   @id @default(uuid()) @db.Uuid
@@ -1444,7 +1479,7 @@ model PayrollRun {
   created_by         String?   @map("created_by") @db.Uuid
 
   // Relations
-  account   Account?          @relation("PayrollRunAccount", fields: [account_id], references: [id], onDelete: Cascade)
+  account  Account?         @relation("PayrollRunAccount", fields: [account_id], references: [id], onDelete: Cascade)
   period   PayrollPeriod?   @relation(fields: [period_id], references: [id], onDelete: SetNull)
   payslips PayrollPayslip[]
 
@@ -1458,26 +1493,26 @@ model PayrollRun {
 }
 
 model PayrollPayslip {
-  id                  String   @id @default(uuid()) @db.Uuid
-  run_id              String   @map("run_id") @db.Uuid
-  supplier_account_id String   @map("supplier_account_id") @db.Uuid
-  gross_amount        Decimal  @map("gross_amount") @db.Decimal(15, 2) // Total from milk sales
-  total_deductions    Decimal  @map("total_deductions") @db.Decimal(15, 2)
-  net_amount          Decimal  @map("net_amount") @db.Decimal(15, 2) // Amount to pay supplier
-  milk_sales_count    Int      @default(0) @map("milk_sales_count") // Number of milk sales included
+  id                  String    @id @default(uuid()) @db.Uuid
+  run_id              String    @map("run_id") @db.Uuid
+  supplier_account_id String    @map("supplier_account_id") @db.Uuid
+  gross_amount        Decimal   @map("gross_amount") @db.Decimal(15, 2) // Total from milk sales
+  total_deductions    Decimal   @map("total_deductions") @db.Decimal(15, 2)
+  net_amount          Decimal   @map("net_amount") @db.Decimal(15, 2) // Amount to pay supplier
+  milk_sales_count    Int       @default(0) @map("milk_sales_count") // Number of milk sales included
   period_start        DateTime  @map("period_start") // Start date of milk sales period
   period_end          DateTime  @map("period_end") // End date of milk sales period
-  status              String    // draft, generated, paid
+  status              String // draft, generated, paid
   payment_date        DateTime? @map("payment_date") // Date when payment was made
   paid_by             String?   @map("paid_by") @db.Uuid // User who marked as paid
   created_at          DateTime  @default(now()) @map("created_at")
   updated_at          DateTime  @updatedAt @map("updated_at")
 
   // Relations
-  run              PayrollRun         @relation(fields: [run_id], references: [id], onDelete: Cascade)
-  supplier_account Account            @relation("PayrollPayslipSupplier", fields: [supplier_account_id], references: [id], onDelete: Restrict)
-  payroll_supplier PayrollSupplier?   @relation("PayrollSupplierPayslips", fields: [payroll_supplier_id], references: [id], onDelete: SetNull)
-  deductions       PayrollDeduction[]
+  run                 PayrollRun          @relation(fields: [run_id], references: [id], onDelete: Cascade)
+  supplier_account    Account             @relation("PayrollPayslipSupplier", fields: [supplier_account_id], references: [id], onDelete: Restrict)
+  payroll_supplier    PayrollSupplier?    @relation("PayrollSupplierPayslips", fields: [payroll_supplier_id], references: [id], onDelete: SetNull)
+  deductions          PayrollDeduction[]
   charge_applications ChargeApplication[]
 
   payroll_supplier_id String? @map("payroll_supplier_id") @db.Uuid
@@ -1491,18 +1526,18 @@ model PayrollPayslip {
 }
 
 model PayrollDeduction {
-  id               String   @id @default(uuid()) @db.Uuid
-  payslip_id       String   @map("payslip_id") @db.Uuid
-  deduction_type   String   @map("deduction_type") // tax, social_security, loan, loan_repayment, benefit, fee, inventory_debt
-  amount           Decimal  @db.Decimal(10, 2)
-  description      String?
+  id                String   @id @default(uuid()) @db.Uuid
+  payslip_id        String   @map("payslip_id") @db.Uuid
+  deduction_type    String   @map("deduction_type") // tax, social_security, loan, loan_repayment, benefit, fee, inventory_debt
+  amount            Decimal  @db.Decimal(10, 2)
+  description       String?
   inventory_sale_id String?  @map("inventory_sale_id") @db.Uuid // Links to InventorySale when deduction_type=inventory_debt
-  loan_id          String?  @map("loan_id") @db.Uuid // Links to Loan when deduction_type=loan_repayment
-  charge_id        String?  @map("charge_id") @db.Uuid // Links to Charge when deduction_type=fee
-  created_at       DateTime @default(now()) @map("created_at")
+  loan_id           String?  @map("loan_id") @db.Uuid // Links to Loan when deduction_type=loan_repayment
+  charge_id         String?  @map("charge_id") @db.Uuid // Links to Charge when deduction_type=fee
+  created_at        DateTime @default(now()) @map("created_at")
 
   // Relations
-  payslip       PayrollPayslip @relation(fields: [payslip_id], references: [id], onDelete: Cascade)
+  payslip        PayrollPayslip @relation(fields: [payslip_id], references: [id], onDelete: Cascade)
   inventory_sale InventorySale? @relation(fields: [inventory_sale_id], references: [id], onDelete: SetNull)
   loan           Loan?          @relation(fields: [loan_id], references: [id], onDelete: SetNull)
   charge         Charge?        @relation(fields: [charge_id], references: [id], onDelete: SetNull)
@@ -1520,26 +1555,26 @@ model PayrollDeduction {
 // ============================================
 
 model Charge {
-  id                      String    @id @default(uuid()) @db.Uuid
-  customer_account_id     String    @map("customer_account_id") @db.Uuid
-  name                    String
-  description             String?
-  kind                    String    // one_time | recurring
-  amount_type             String    @map("amount_type") // fixed | percentage
-  amount                  Decimal   @db.Decimal(10, 2) // fixed amount or percentage (e.g. 5.00 for 5%)
-  recurrence              String?   // monthly | per_payroll (for recurring only)
-  apply_to_all_suppliers   Boolean   @default(true) @map("apply_to_all_suppliers")
-  effective_from          DateTime?  @map("effective_from")
-  effective_to            DateTime?  @map("effective_to")
-  is_active               Boolean   @default(true) @map("is_active")
-  created_at              DateTime  @default(now()) @map("created_at")
-  updated_at              DateTime  @updatedAt @map("updated_at")
-  created_by              String?   @map("created_by") @db.Uuid
+  id                     String    @id @default(uuid()) @db.Uuid
+  customer_account_id    String    @map("customer_account_id") @db.Uuid
+  name                   String
+  description            String?
+  kind                   String // one_time | recurring
+  amount_type            String    @map("amount_type") // fixed | percentage
+  amount                 Decimal   @db.Decimal(10, 2) // fixed amount or percentage (e.g. 5.00 for 5%)
+  recurrence             String? // monthly | per_payroll (for recurring only)
+  apply_to_all_suppliers Boolean   @default(true) @map("apply_to_all_suppliers")
+  effective_from         DateTime? @map("effective_from")
+  effective_to           DateTime? @map("effective_to")
+  is_active              Boolean   @default(true) @map("is_active")
+  created_at             DateTime  @default(now()) @map("created_at")
+  updated_at             DateTime  @updatedAt @map("updated_at")
+  created_by             String?   @map("created_by") @db.Uuid
 
   // Relations
-  customer_account Account            @relation("ChargeCustomerAccount", fields: [customer_account_id], references: [id], onDelete: Cascade)
+  customer_account   Account             @relation("ChargeCustomerAccount", fields: [customer_account_id], references: [id], onDelete: Cascade)
   selected_suppliers ChargeSupplier[]
-  applications      ChargeApplication[]
+  applications       ChargeApplication[]
   payroll_deductions PayrollDeduction[]
 
   @@index([customer_account_id])
@@ -1572,7 +1607,7 @@ model ChargeApplication {
   supplier_account_id String   @map("supplier_account_id") @db.Uuid
   payslip_id          String   @map("payslip_id") @db.Uuid
   amount              Decimal  @db.Decimal(10, 2)
-  applied_at           DateTime @default(now()) @map("applied_at")
+  applied_at          DateTime @default(now()) @map("applied_at")
 
   // Relations
   charge   Charge         @relation(fields: [charge_id], references: [id], onDelete: Cascade)
@@ -1627,13 +1662,13 @@ model InventoryItem {
   id          String   @id @default(uuid()) @db.Uuid
   category_id String   @map("category_id") @db.Uuid
   name        String
-  code        String?  // Optional short code (e.g. MILK-1L)
-  unit        String?  // e.g. L, kg, pcs
+  code        String? // Optional short code (e.g. MILK-1L)
+  unit        String? // e.g. L, kg, pcs
   description String?  @db.Text
   is_active   Boolean  @default(true) @map("is_active")
   sort_order  Int      @default(0) @map("sort_order")
-  created_at DateTime @default(now()) @map("created_at")
-  updated_at DateTime @updatedAt @map("updated_at")
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
 
   // Relations
   category InventoryItemCategory @relation(fields: [category_id], references: [id], onDelete: Restrict)
@@ -1650,30 +1685,30 @@ model InventoryItem {
 // ============================================
 
 model InventorySale {
-  id              String                      @id @default(uuid()) @db.Uuid
-  product_id      String                      @map("product_id") @db.Uuid
-  order_id        String?                     @map("order_id") @db.Uuid // Nullable: Links to Order if from online marketplace
-  buyer_type      InventorySaleBuyerType      @map("buyer_type")
+  id               String                     @id @default(uuid()) @db.Uuid
+  product_id       String                     @map("product_id") @db.Uuid
+  order_id         String?                    @map("order_id") @db.Uuid // Nullable: Links to Order if from online marketplace
+  buyer_type       InventorySaleBuyerType     @map("buyer_type")
   buyer_account_id String?                    @map("buyer_account_id") @db.Uuid // Required for 'supplier', nullable for 'customer'/'other'
-  buyer_name      String?                     @map("buyer_name") // Optional for new clients
-  buyer_phone     String?                     @map("buyer_phone") // Optional for new clients
-  quantity        Decimal                     @db.Decimal(10, 2)
-  unit_price      Decimal                     @map("unit_price") @db.Decimal(10, 2)
-  total_amount    Decimal                     @map("total_amount") @db.Decimal(10, 2)
-  amount_paid     Decimal                     @default(0) @map("amount_paid") @db.Decimal(10, 2)
-  payment_status  InventorySalePaymentStatus  @default(unpaid) @map("payment_status")
-  sale_date       DateTime                    @map("sale_date")
-  notes           String?                     @db.Text
-  created_at      DateTime                    @default(now()) @map("created_at")
-  updated_at      DateTime                    @updatedAt @map("updated_at")
-  created_by      String?                     @map("created_by") @db.Uuid
+  buyer_name       String?                    @map("buyer_name") // Optional for new clients
+  buyer_phone      String?                    @map("buyer_phone") // Optional for new clients
+  quantity         Decimal                    @db.Decimal(10, 2)
+  unit_price       Decimal                    @map("unit_price") @db.Decimal(10, 2)
+  total_amount     Decimal                    @map("total_amount") @db.Decimal(10, 2)
+  amount_paid      Decimal                    @default(0) @map("amount_paid") @db.Decimal(10, 2)
+  payment_status   InventorySalePaymentStatus @default(unpaid) @map("payment_status")
+  sale_date        DateTime                   @map("sale_date")
+  notes            String?                    @db.Text
+  created_at       DateTime                   @default(now()) @map("created_at")
+  updated_at       DateTime                   @updatedAt @map("updated_at")
+  created_by       String?                    @map("created_by") @db.Uuid
 
   // Relations
-  product           Product                     @relation("InventorySaleProduct", fields: [product_id], references: [id], onDelete: Restrict)
-  order             Order?                      @relation("InventorySaleOrder", fields: [order_id], references: [id], onDelete: SetNull) // Link to marketplace order
-  buyer_account     Account?                    @relation("InventorySaleBuyer", fields: [buyer_account_id], references: [id], onDelete: SetNull) // For buyer (supplier/customer) - also used for supplier debt tracking
-  created_by_user   User?                       @relation("InventorySaleCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
-  payroll_deductions PayrollDeduction[]          // Settled via payroll deduction when supplier owes for inventory
+  product            Product            @relation("InventorySaleProduct", fields: [product_id], references: [id], onDelete: Restrict)
+  order              Order?             @relation("InventorySaleOrder", fields: [order_id], references: [id], onDelete: SetNull) // Link to marketplace order
+  buyer_account      Account?           @relation("InventorySaleBuyer", fields: [buyer_account_id], references: [id], onDelete: SetNull) // For buyer (supplier/customer) - also used for supplier debt tracking
+  created_by_user    User?              @relation("InventorySaleCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+  payroll_deductions PayrollDeduction[] // Settled via payroll deduction when supplier owes for inventory
 
   @@index([product_id])
   @@index([order_id]) // For linking to marketplace orders
@@ -1689,21 +1724,21 @@ model InventorySale {
 // ============================================
 
 model InventoryMovement {
-  id               String                         @id @default(uuid()) @db.Uuid
-  product_id       String                         @map("product_id") @db.Uuid
-  movement_type    InventoryMovementType          @map("movement_type")
-  quantity         Int                            // Always positive; direction from movement_type
-  movement_date    DateTime                       @default(now()) @map("movement_date")
-  reference_type   InventoryMovementReferenceType @map("reference_type")
-  reference_id     String?                        @map("reference_id") @db.Uuid // e.g. inventory_sale.id
-  description      String?                        @db.Text // e.g. "Sale to John (A_ABC)", "New shipment"
-  unit_price       Decimal?                       @map("unit_price") @db.Decimal(10, 2)
-  created_at       DateTime                       @default(now()) @map("created_at")
-  created_by       String?                        @map("created_by") @db.Uuid
+  id             String                         @id @default(uuid()) @db.Uuid
+  product_id     String                         @map("product_id") @db.Uuid
+  movement_type  InventoryMovementType          @map("movement_type")
+  quantity       Int // Always positive; direction from movement_type
+  movement_date  DateTime                       @default(now()) @map("movement_date")
+  reference_type InventoryMovementReferenceType @map("reference_type")
+  reference_id   String?                        @map("reference_id") @db.Uuid // e.g. inventory_sale.id
+  description    String?                        @db.Text // e.g. "Sale to John (A_ABC)", "New shipment"
+  unit_price     Decimal?                       @map("unit_price") @db.Decimal(10, 2)
+  created_at     DateTime                       @default(now()) @map("created_at")
+  created_by     String?                        @map("created_by") @db.Uuid
 
   // Relations
-  product        Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
-  created_by_user User?  @relation("InventoryMovementCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+  product         Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  created_by_user User?   @relation("InventoryMovementCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
 
   @@index([product_id])
   @@index([movement_type])
@@ -1718,27 +1753,27 @@ model InventoryMovement {
 // ============================================
 
 model Loan {
-  id                   String    @id @default(uuid()) @db.Uuid
-  lender_account_id    String    @map("lender_account_id") @db.Uuid   // MCC / your account
-  borrower_type        String    @map("borrower_type")              // supplier, customer, other
-  borrower_account_id  String?   @map("borrower_account_id") @db.Uuid // Required for supplier/customer; null for other
-  borrower_name        String?   @map("borrower_name")              // For "other" or display
-  principal            Decimal   @db.Decimal(15, 2)
-  amount_repaid        Decimal   @default(0) @map("amount_repaid") @db.Decimal(15, 2)
-  currency             String    @default("RWF")
-  status               String    @default("active")                // active, closed
-  disbursement_date    DateTime  @map("disbursement_date")
-  due_date             DateTime? @map("due_date")
-  notes                String?   @db.Text
-  created_at           DateTime  @default(now()) @map("created_at")
-  updated_at           DateTime  @updatedAt @map("updated_at")
-  created_by           String?   @map("created_by") @db.Uuid
+  id                  String    @id @default(uuid()) @db.Uuid
+  lender_account_id   String    @map("lender_account_id") @db.Uuid // MCC / your account
+  borrower_type       String    @map("borrower_type") // supplier, customer, other
+  borrower_account_id String?   @map("borrower_account_id") @db.Uuid // Required for supplier/customer; null for other
+  borrower_name       String?   @map("borrower_name") // For "other" or display
+  principal           Decimal   @db.Decimal(15, 2)
+  amount_repaid       Decimal   @default(0) @map("amount_repaid") @db.Decimal(15, 2)
+  currency            String    @default("RWF")
+  status              String    @default("active") // active, closed
+  disbursement_date   DateTime  @map("disbursement_date")
+  due_date            DateTime? @map("due_date")
+  notes               String?   @db.Text
+  created_at          DateTime  @default(now()) @map("created_at")
+  updated_at          DateTime  @updatedAt @map("updated_at")
+  created_by          String?   @map("created_by") @db.Uuid
 
   // Relations
-  lender_account    Account             @relation("LoanLender", fields: [lender_account_id], references: [id], onDelete: Cascade)
-  borrower_account  Account?            @relation("LoanBorrower", fields: [borrower_account_id], references: [id], onDelete: SetNull)
+  lender_account     Account            @relation("LoanLender", fields: [lender_account_id], references: [id], onDelete: Cascade)
+  borrower_account   Account?           @relation("LoanBorrower", fields: [borrower_account_id], references: [id], onDelete: SetNull)
   payroll_deductions PayrollDeduction[]
-  repayments        LoanRepayment[]
+  repayments         LoanRepayment[]
 
   @@index([lender_account_id])
   @@index([borrower_account_id])
@@ -1749,13 +1784,13 @@ model Loan {
 }
 
 model LoanRepayment {
-  id               String   @id @default(uuid()) @db.Uuid
-  loan_id          String   @map("loan_id") @db.Uuid
-  amount           Decimal  @db.Decimal(15, 2)
-  repayment_date   DateTime @map("repayment_date")
-  notes            String?  @db.Text
-  source           String   @default("direct") // direct | payroll
-  created_at       DateTime @default(now()) @map("created_at")
+  id             String   @id @default(uuid()) @db.Uuid
+  loan_id        String   @map("loan_id") @db.Uuid
+  amount         Decimal  @db.Decimal(15, 2)
+  repayment_date DateTime @map("repayment_date")
+  notes          String?  @db.Text
+  source         String   @default("direct") // direct | payroll
+  created_at     DateTime @default(now()) @map("created_at")
 
   loan Loan @relation(fields: [loan_id], references: [id], onDelete: Cascade)
 
@@ -1772,8 +1807,8 @@ model Location {
   location_type LocationType @map("location_type")
   parent_id     String?      @map("parent_id") @db.Uuid
 
-  parent   Location?   @relation("LocationParent", fields: [parent_id], references: [id], onDelete: Restrict)
-  children Location[]  @relation("LocationParent")
+  parent   Location?  @relation("LocationParent", fields: [parent_id], references: [id], onDelete: Restrict)
+  children Location[] @relation("LocationParent")
   farms    Farm[]
 
   @@unique([code])
@@ -1783,26 +1818,26 @@ model Location {
 }
 
 model Farm {
-  id           String      @id @default(uuid()) @db.Uuid
-  account_id   String      @map("account_id") @db.Uuid
-  name         String
-  code         String?     @unique
-  description  String?     @db.Text
-  location     String?     // legacy / extra address line
-  location_id  String?     @map("location_id") @db.Uuid
-  status       FarmStatus  @default(active)
-  created_at   DateTime    @default(now()) @map("created_at")
-  updated_at   DateTime    @updatedAt @map("updated_at")
-  created_by   String?     @map("created_by") @db.Uuid
+  id          String     @id @default(uuid()) @db.Uuid
+  account_id  String     @map("account_id") @db.Uuid
+  name        String
+  code        String?    @unique
+  description String?    @db.Text
+  location    String? // legacy / extra address line
+  location_id String?    @map("location_id") @db.Uuid
+  status      FarmStatus @default(active)
+  created_at  DateTime   @default(now()) @map("created_at")
+  updated_at  DateTime   @updatedAt @map("updated_at")
+  created_by  String?    @map("created_by") @db.Uuid
 
-  account  Account   @relation("FarmAccount", fields: [account_id], references: [id], onDelete: Cascade)
-  locationRef Location? @relation(fields: [location_id], references: [id], onDelete: SetNull)
-  animals               Animal[]
-  milk_productions      MilkProduction[]
-  farm_species_focus    FarmSpeciesFocus[]
-  poultry_flocks        PoultryFlock[]
-  pig_batches           PigBatch[]
-  pig_farrowings        PigFarrowing[]
+  account            Account            @relation("FarmAccount", fields: [account_id], references: [id], onDelete: Cascade)
+  locationRef        Location?          @relation(fields: [location_id], references: [id], onDelete: SetNull)
+  animals            Animal[]
+  milk_productions   MilkProduction[]
+  farm_species_focus FarmSpeciesFocus[]
+  poultry_flocks     PoultryFlock[]
+  pig_batches        PigBatch[]
+  pig_farrowings     PigFarrowing[]
 
   @@index([account_id])
   @@index([location_id])
@@ -1810,7 +1845,9 @@ model Farm {
   @@map("farms")
 }
 
-/** Optional: species + modes (multi-select farms). Used for nav / feature gates. */
+/**
+ * Optional: species + modes (multi-select farms). Used for nav / feature gates.
+ */
 model FarmSpeciesFocus {
   farm_id    String               @map("farm_id") @db.Uuid
   species_id String               @map("species_id") @db.Uuid
@@ -1853,7 +1890,7 @@ model Breed {
   description String?  @db.Text
   created_at  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  species        Species @relation(fields: [species_id], references: [id], onDelete: Restrict)
+  species        Species        @relation(fields: [species_id], references: [id], onDelete: Restrict)
   animals        Animal[]
   poultry_flocks PoultryFlock[]
   pig_batches    PigBatch[]
@@ -1864,44 +1901,44 @@ model Breed {
 }
 
 model Animal {
-  id             String        @id @default(uuid()) @db.Uuid
-  account_id     String        @map("account_id") @db.Uuid
-  farm_id        String?       @map("farm_id") @db.Uuid
-  species_id     String        @map("species_id") @db.Uuid
-  breed_id      String        @map("breed_id") @db.Uuid
-  tag_number     String        @map("tag_number")
+  id             String       @id @default(uuid()) @db.Uuid
+  account_id     String       @map("account_id") @db.Uuid
+  farm_id        String?      @map("farm_id") @db.Uuid
+  species_id     String       @map("species_id") @db.Uuid
+  breed_id       String       @map("breed_id") @db.Uuid
+  tag_number     String       @map("tag_number")
   name           String?
   gender         AnimalGender
-  date_of_birth  DateTime      @map("date_of_birth")
+  date_of_birth  DateTime     @map("date_of_birth")
   source         AnimalSource
-  purchase_date  DateTime?     @map("purchase_date")
-  purchase_price Decimal?      @map("purchase_price") @db.Decimal(10, 2)
-  mother_id      String?       @map("mother_id") @db.Uuid
-  father_id      String?       @map("father_id") @db.Uuid
-  status         AnimalStatus  @default(active)
-  photo_url      String?       @map("photo_url")
-  notes          String?       @db.Text
-  created_at     DateTime      @default(now()) @map("created_at")
-  updated_at     DateTime      @updatedAt @map("updated_at")
-  created_by     String?       @map("created_by") @db.Uuid
+  purchase_date  DateTime?    @map("purchase_date")
+  purchase_price Decimal?     @map("purchase_price") @db.Decimal(10, 2)
+  mother_id      String?      @map("mother_id") @db.Uuid
+  father_id      String?      @map("father_id") @db.Uuid
+  status         AnimalStatus @default(active)
+  photo_url      String?      @map("photo_url")
+  notes          String?      @db.Text
+  created_at     DateTime     @default(now()) @map("created_at")
+  updated_at     DateTime     @updatedAt @map("updated_at")
+  created_by     String?      @map("created_by") @db.Uuid
 
-  account        Account         @relation("AnimalAccount", fields: [account_id], references: [id], onDelete: Cascade)
-  species        Species         @relation(fields: [species_id], references: [id], onDelete: Restrict)
-  breed          Breed           @relation(fields: [breed_id], references: [id], onDelete: Restrict)
-  farm           Farm?           @relation(fields: [farm_id], references: [id], onDelete: SetNull)
-  mother         Animal?         @relation("AnimalMother", fields: [mother_id], references: [id], onDelete: SetNull)
-  father          Animal?         @relation("AnimalFather", fields: [father_id], references: [id], onDelete: SetNull)
-  offspring_mother Animal[]      @relation("AnimalMother")
-  offspring_father Animal[]      @relation("AnimalFather")
-  weights         AnimalWeight[]
-  health_records  AnimalHealth[]
-  milk_sales      MilkSale[]
-  milk_productions MilkProduction[]
-  breeding_records AnimalBreeding[]  @relation("AnimalBreedingDam")
-  breeding_as_bull AnimalBreeding[]  @relation("AnimalBreedingBull")
-  calvings         AnimalCalving[]   @relation("AnimalCalvingMother")
-  calving_as_calf  AnimalCalving?    @relation("AnimalCalvingCalf")
-  pig_farrowings_as_sow PigFarrowing[] @relation("SowFarrowing")
+  account               Account          @relation("AnimalAccount", fields: [account_id], references: [id], onDelete: Cascade)
+  species               Species          @relation(fields: [species_id], references: [id], onDelete: Restrict)
+  breed                 Breed            @relation(fields: [breed_id], references: [id], onDelete: Restrict)
+  farm                  Farm?            @relation(fields: [farm_id], references: [id], onDelete: SetNull)
+  mother                Animal?          @relation("AnimalMother", fields: [mother_id], references: [id], onDelete: SetNull)
+  father                Animal?          @relation("AnimalFather", fields: [father_id], references: [id], onDelete: SetNull)
+  offspring_mother      Animal[]         @relation("AnimalMother")
+  offspring_father      Animal[]         @relation("AnimalFather")
+  weights               AnimalWeight[]
+  health_records        AnimalHealth[]
+  milk_sales            MilkSale[]
+  milk_productions      MilkProduction[]
+  breeding_records      AnimalBreeding[] @relation("AnimalBreedingDam")
+  breeding_as_bull      AnimalBreeding[] @relation("AnimalBreedingBull")
+  calvings              AnimalCalving[]  @relation("AnimalCalvingMother")
+  calving_as_calf       AnimalCalving?   @relation("AnimalCalvingCalf")
+  pig_farrowings_as_sow PigFarrowing[]   @relation("SowFarrowing")
 
   @@unique([account_id, tag_number])
   @@index([account_id])
@@ -1930,25 +1967,25 @@ model AnimalWeight {
 }
 
 model AnimalHealth {
-  id               String          @id @default(uuid()) @db.Uuid
-  animal_id        String          @map("animal_id") @db.Uuid
-  event_type       HealthEventType @map("event_type")
-  event_date       DateTime        @map("event_date")
-  description      String          @db.Text
-  diagnosis        String?         @db.Text
-  treatment        String?         @db.Text
-  medicine_name    String?         @map("medicine_name")
-  dosage           String?
-  administered_by  String?         @map("administered_by")
-  vet_user_id      String?         @map("vet_user_id") @db.Uuid
-  vet_first_name   String?         @map("vet_first_name")
-  vet_last_name    String?         @map("vet_last_name")
-  vet_phone        String?         @map("vet_phone")
-  next_due_date    DateTime?       @map("next_due_date")
-  cost             Decimal?        @db.Decimal(10, 2)
-  notes            String?         @db.Text
-  created_at       DateTime        @default(now()) @map("created_at")
-  created_by       String?         @map("created_by") @db.Uuid
+  id              String          @id @default(uuid()) @db.Uuid
+  animal_id       String          @map("animal_id") @db.Uuid
+  event_type      HealthEventType @map("event_type")
+  event_date      DateTime        @map("event_date")
+  description     String          @db.Text
+  diagnosis       String?         @db.Text
+  treatment       String?         @db.Text
+  medicine_name   String?         @map("medicine_name")
+  dosage          String?
+  administered_by String?         @map("administered_by")
+  vet_user_id     String?         @map("vet_user_id") @db.Uuid
+  vet_first_name  String?         @map("vet_first_name")
+  vet_last_name   String?         @map("vet_last_name")
+  vet_phone       String?         @map("vet_phone")
+  next_due_date   DateTime?       @map("next_due_date")
+  cost            Decimal?        @db.Decimal(10, 2)
+  notes           String?         @db.Text
+  created_at      DateTime        @default(now()) @map("created_at")
+  created_by      String?         @map("created_by") @db.Uuid
 
   animal  Animal @relation(fields: [animal_id], references: [id], onDelete: Cascade)
   vetUser User?  @relation("VetUserAnimalHealth", fields: [vet_user_id], references: [id], onDelete: SetNull)
@@ -1962,21 +1999,21 @@ model AnimalHealth {
 }
 
 model AnimalBreeding {
-  id                    String          @id @default(uuid()) @db.Uuid
-  animal_id             String          @map("animal_id") @db.Uuid
-  breeding_date         DateTime        @map("breeding_date") @db.Date
-  heat_date             DateTime?       @map("heat_date") @db.Date
+  id                    String           @id @default(uuid()) @db.Uuid
+  animal_id             String           @map("animal_id") @db.Uuid
+  breeding_date         DateTime         @map("breeding_date") @db.Date
+  heat_date             DateTime?        @map("heat_date") @db.Date
   method                BreedingMethod
-  bull_animal_id        String?         @map("bull_animal_id") @db.Uuid
-  bull_name             String?         @map("bull_name")
-  semen_code            String?         @map("semen_code")
-  expected_calving_date DateTime?       @map("expected_calving_date") @db.Date
+  bull_animal_id        String?          @map("bull_animal_id") @db.Uuid
+  bull_name             String?          @map("bull_name")
+  semen_code            String?          @map("semen_code")
+  expected_calving_date DateTime?        @map("expected_calving_date") @db.Date
   outcome               BreedingOutcome? @default(unknown)
-  notes                 String?         @db.Text
-  created_at            DateTime        @default(now()) @map("created_at")
-  created_by            String?         @map("created_by") @db.Uuid
+  notes                 String?          @db.Text
+  created_at            DateTime         @default(now()) @map("created_at")
+  created_by            String?          @map("created_by") @db.Uuid
 
-  animal    Animal  @relation("AnimalBreedingDam", fields: [animal_id], references: [id], onDelete: Cascade)
+  animal      Animal  @relation("AnimalBreedingDam", fields: [animal_id], references: [id], onDelete: Cascade)
   bull_animal Animal? @relation("AnimalBreedingBull", fields: [bull_animal_id], references: [id], onDelete: SetNull)
 
   @@index([animal_id])
@@ -2011,20 +2048,20 @@ model AnimalCalving {
 // ============================================
 
 model PoultryFlock {
-  id                   String             @id @default(uuid()) @db.Uuid
-  account_id           String             @map("account_id") @db.Uuid
-  farm_id              String?            @map("farm_id") @db.Uuid
-  breed_id             String?            @map("breed_id") @db.Uuid
-  name                 String
-  code                 String?
-  started_at           DateTime           @map("started_at") @db.Date
-  opening_head_count   Int                @map("opening_head_count")
-  current_head_count   Int                @map("current_head_count")
-  status               PoultryFlockStatus @default(active)
-  notes                String?            @db.Text
-  created_at           DateTime           @default(now()) @map("created_at")
-  updated_at           DateTime           @updatedAt @map("updated_at")
-  created_by           String?            @map("created_by") @db.Uuid
+  id                 String             @id @default(uuid()) @db.Uuid
+  account_id         String             @map("account_id") @db.Uuid
+  farm_id            String?            @map("farm_id") @db.Uuid
+  breed_id           String?            @map("breed_id") @db.Uuid
+  name               String
+  code               String?
+  started_at         DateTime           @map("started_at") @db.Date
+  opening_head_count Int                @map("opening_head_count")
+  current_head_count Int                @map("current_head_count")
+  status             PoultryFlockStatus @default(active)
+  notes              String?            @db.Text
+  created_at         DateTime           @default(now()) @map("created_at")
+  updated_at         DateTime           @updatedAt @map("updated_at")
+  created_by         String?            @map("created_by") @db.Uuid
 
   account Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
   farm    Farm?   @relation(fields: [farm_id], references: [id], onDelete: SetNull)
@@ -2056,14 +2093,14 @@ model FlockDailyRecord {
 }
 
 model FlockMovement {
-  id            String             @id @default(uuid()) @db.Uuid
-  flock_id      String             @map("flock_id") @db.Uuid
-  movement_date DateTime           @map("movement_date") @db.Date
+  id            String            @id @default(uuid()) @db.Uuid
+  flock_id      String            @map("flock_id") @db.Uuid
+  movement_date DateTime          @map("movement_date") @db.Date
   type          FlockMovementType
   quantity      Int
-  notes         String?            @db.Text
-  created_at    DateTime           @default(now()) @map("created_at")
-  created_by    String?            @map("created_by") @db.Uuid
+  notes         String?           @db.Text
+  created_at    DateTime          @default(now()) @map("created_at")
+  created_by    String?           @map("created_by") @db.Uuid
 
   flock PoultryFlock @relation(fields: [flock_id], references: [id], onDelete: Cascade)
 
@@ -2077,20 +2114,20 @@ model FlockMovement {
 // ============================================
 
 model PigBatch {
-  id                   String         @id @default(uuid()) @db.Uuid
-  account_id           String         @map("account_id") @db.Uuid
-  farm_id              String?        @map("farm_id") @db.Uuid
-  breed_id             String?        @map("breed_id") @db.Uuid
-  name                 String
-  code                 String?
-  started_at           DateTime       @map("started_at") @db.Date
-  opening_head_count   Int            @map("opening_head_count")
-  current_head_count   Int            @map("current_head_count")
-  status               PigBatchStatus @default(active)
-  notes                String?        @db.Text
-  created_at           DateTime       @default(now()) @map("created_at")
-  updated_at           DateTime       @updatedAt @map("updated_at")
-  created_by           String?        @map("created_by") @db.Uuid
+  id                 String         @id @default(uuid()) @db.Uuid
+  account_id         String         @map("account_id") @db.Uuid
+  farm_id            String?        @map("farm_id") @db.Uuid
+  breed_id           String?        @map("breed_id") @db.Uuid
+  name               String
+  code               String?
+  started_at         DateTime       @map("started_at") @db.Date
+  opening_head_count Int            @map("opening_head_count")
+  current_head_count Int            @map("current_head_count")
+  status             PigBatchStatus @default(active)
+  notes              String?        @db.Text
+  created_at         DateTime       @default(now()) @map("created_at")
+  updated_at         DateTime       @updatedAt @map("updated_at")
+  created_by         String?        @map("created_by") @db.Uuid
 
   account Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
   farm    Farm?   @relation(fields: [farm_id], references: [id], onDelete: SetNull)

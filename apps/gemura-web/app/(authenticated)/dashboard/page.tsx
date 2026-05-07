@@ -1623,7 +1623,7 @@ function BusinessDashboard() {
         open={quickActionModal === 'supplier'}
         onClose={() => setQuickActionModal(null)}
         title="Add Supplier"
-        maxWidth="max-w-lg"
+        maxWidth="max-w-3xl"
       >
         <CreateSupplierForm onSuccess={closeQuickActionAndRefresh} onCancel={() => setQuickActionModal(null)} />
       </Modal>

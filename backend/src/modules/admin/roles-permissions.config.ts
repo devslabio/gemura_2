@@ -125,6 +125,18 @@ export const PERMISSIONS: PermissionDef[] = [
   },
 ];
 
+/**
+ * Cooperative membership roster (`GET /account-memberships`, Gemura Members menu).
+ * Aligns with Contacts: managers (manage_users), supplier onboarding (create/update_suppliers),
+ * and roles that can open the supplier directory (view_suppliers), without granting standalone roster edits.
+ */
+export const ACCOUNT_MEMBERSHIP_LIST_PERMISSIONS: readonly string[] = [
+  'manage_users',
+  'create_suppliers',
+  'update_suppliers',
+  'view_suppliers',
+];
+
 /** Default permissions per role (system_admin/admin have all in guards; this is for display and for non-admin roles) */
 export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
   system_admin: PERMISSIONS.map((p) => p.code),

@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, ForbiddenException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { RbacService } from '../rbac/rbac.service';
-import { isPlatformSuperAdminRole } from '../admin/roles-permissions.config';
+import { canonicalPlatformRoleSlug, isPlatformSuperAdminRole } from '../admin/roles-permissions.config';
 import { User, UserAccountType, UserAccountRole, SupplierTransferStatus } from '@prisma/client';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
@@ -65,8 +65,10 @@ export class SuppliersService {
     let supplierAccountId: string;
     let supplierAccountCode: string;
     let supplierName: string;
+    let supplierUserId: string;
 
     if (existingUser) {
+      supplierUserId = existingUser.id;
       // User exists - use existing user
       supplierName = existingUser.name;
 
@@ -202,6 +204,7 @@ export class SuppliersService {
       supplierAccountId = newAccount.id;
       supplierAccountCode = accountCode;
       supplierName = userDisplayName;
+      supplierUserId = newUser.id;
     }
 
     if (normalizedBankName || normalizedBankAccountNumber) {
@@ -246,6 +249,13 @@ export class SuppliersService {
       });
     }
 
+    const mccAffiliation = await this.applySupplierMccAffiliation(
+      user,
+      customerAccountId,
+      supplierUserId,
+      createDto,
+    );
+
     return {
       code: 200,
       status: 'success',
@@ -260,7 +270,125 @@ export class SuppliersService {
           bank_name: normalizedBankName,
           bank_account_number: normalizedBankAccountNumber,
         },
+        mcc_affiliation: mccAffiliation,
       },
+    };
+  }
+
+  private async ensureAssignableStaffRole(rawRole: string): Promise<string> {
+    await this.rbac.ensureCatalogFromConfig();
+    const slug = canonicalPlatformRoleSlug(rawRole.trim().slice(0, 64));
+    if (!slug) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Invalid staff role.',
+      });
+    }
+    const row = await this.prisma.platformRole.findUnique({ where: { slug } });
+    if (!row?.is_active) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Unknown or inactive role.',
+      });
+    }
+    if (!row.is_assignable) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'This role cannot be assigned from supplier registration.',
+      });
+    }
+    return slug;
+  }
+
+  private async applySupplierMccAffiliation(
+    actor: User,
+    mccAccountId: string,
+    supplierUserId: string,
+    dto: CreateSupplierDto,
+  ): Promise<{
+    cooperative_member_recorded: boolean;
+    mcc_staff: 'created' | 'skipped_already_linked' | 'not_requested';
+    mcc_staff_role?: string;
+  }> {
+    const wantsMember = dto.add_as_cooperative_member === true;
+    const wantsStaff = dto.grant_mcc_staff_access === true;
+
+    let cooperative_member_recorded = false;
+    let mcc_staff: 'created' | 'skipped_already_linked' | 'not_requested' = 'not_requested';
+    let mcc_staff_role: string | undefined;
+
+    if (wantsMember) {
+      const existingMem = await this.prisma.accountMembership.findFirst({
+        where: { account_id: mccAccountId, user_id: supplierUserId },
+      });
+      if (existingMem) {
+        await this.prisma.accountMembership.update({
+          where: { id: existingMem.id },
+          data: {
+            status: 'active',
+            updated_by: actor.id,
+          },
+        });
+      } else {
+        await this.prisma.accountMembership.create({
+          data: {
+            account_id: mccAccountId,
+            user_id: supplierUserId,
+            status: 'active',
+            member_since: new Date(),
+            created_by: actor.id,
+            updated_by: actor.id,
+          },
+        });
+      }
+      cooperative_member_recorded = true;
+    }
+
+    if (wantsStaff) {
+      const roleSlug = await this.ensureAssignableStaffRole(dto.mcc_staff_role || '');
+      mcc_staff_role = roleSlug;
+      await this.rbac.ensureCatalogFromConfig();
+      const platformRoleId = await this.rbac.resolvePlatformRoleIdFromSlug(roleSlug);
+      if (!platformRoleId) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Could not resolve platform role for staff assignment.',
+        });
+      }
+
+      const existingUa = await this.prisma.userAccount.findFirst({
+        where: {
+          user_id: supplierUserId,
+          account_id: mccAccountId,
+        },
+      });
+
+      if (existingUa) {
+        mcc_staff = 'skipped_already_linked';
+      } else {
+        await this.prisma.userAccount.create({
+          data: {
+            user_id: supplierUserId,
+            account_id: mccAccountId,
+            role: roleSlug,
+            platform_role_id: platformRoleId,
+            permissions: null,
+            status: 'active',
+            created_by: actor.id,
+          },
+        });
+        mcc_staff = 'created';
+      }
+    }
+
+    return {
+      cooperative_member_recorded,
+      mcc_staff,
+      ...(mcc_staff_role ? { mcc_staff_role } : {}),
     };
   }
 

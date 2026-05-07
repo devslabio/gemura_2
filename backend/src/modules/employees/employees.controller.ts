@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiQuery, A
 import { EmployeesService } from './employees.service';
 import { TokenGuard } from '../../common/guards/token.guard';
 import { PermissionGuard } from '../../common/guards/permission.guard';
-import { RequirePermission } from '../../common/decorators/permission.decorator';
+import { RequireAnyPermission, RequirePermission } from '../../common/decorators/permission.decorator';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { User } from '@prisma/client';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
@@ -202,10 +202,11 @@ export class EmployeesController {
   }
 
   @Get('roles')
-  @RequirePermission('manage_users')
+  @RequireAnyPermission(['manage_users', 'create_suppliers', 'update_suppliers'])
   @ApiOperation({
     summary: 'Get roles config',
-    description: 'Returns roles and default permissions for use in employee management UI. Requires system_admin, admin, manager, or legacy owner on the account.',
+    description:
+      'Returns roles and default permissions for employee/supplier onboarding UI. Requires manage_users, or create/update suppliers on the account.',
   })
   @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (default: user default account)' })
   @ApiResponse({ status: 200, description: 'Roles config' })

@@ -31,6 +31,7 @@ import {
   faArrowsRotate,
   faRightFromBracket,
   faChartBar,
+  faUserFriends,
 } from '@/app/components/Icon';
 
 /** Account types that see user/operations menu (filtered by role + permissions) */
@@ -132,6 +133,14 @@ export const OPERATIONS_NAV_GROUP_ORDER = [
   'System',
 ] as const;
 
+/** Cooperative Members menu + `/members` RouteGuard (parity with backend `ACCOUNT_MEMBERSHIP_LIST_PERMISSIONS`). */
+export const MEMBERS_NAV_PERMISSIONS: readonly string[] = [
+  'manage_users',
+  'create_suppliers',
+  'update_suppliers',
+  'view_suppliers',
+];
+
 /**
  * Admin section navigation items.
  * Visibility is enforced in the sidebar/layout using `role + permissions`.
@@ -227,6 +236,14 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
     requiresPermission: 'mcc_view_operations',
   },
   { icon: faBuilding, label: 'Suppliers', href: '/suppliers', section: 'operations', navGroup: 'Contacts', requiresPermission: 'view_suppliers' },
+  {
+    icon: faUserFriends,
+    label: 'Members',
+    href: '/members',
+    section: 'operations',
+    navGroup: 'Contacts',
+    requiresAnyPermission: [...MEMBERS_NAV_PERMISSIONS],
+  },
   { icon: faStore, label: 'Customers', href: '/customers', section: 'operations', navGroup: 'Contacts', requiresPermission: 'view_customers' },
   {
     icon: faWarehouse,

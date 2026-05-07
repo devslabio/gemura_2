@@ -39,20 +39,4 @@ export const accountMembershipsApi = {
       },
     });
   },
-
-  create: async (payload: {
-    account_id: string;
-    user_id: string;
-    status?: 'pending' | 'active' | 'inactive';
-    member_since?: string;
-  }): Promise<{ code: number; status: string; message: string; data?: AccountMembershipRow }> => {
-    return apiClient.post('/account-memberships', payload);
-  },
-
-  update: async (
-    id: string,
-    payload: { status?: 'pending' | 'active' | 'inactive'; member_since?: string | null },
-  ): Promise<{ code: number; status: string; message: string; data?: AccountMembershipRow }> => {
-    return apiClient.patch(`/account-memberships/${id}`, payload);
-  },
 };
