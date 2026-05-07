@@ -74,8 +74,13 @@ async function bootstrap() {
       'http://127.0.0.1:3006',
       'http://127.0.0.1:3015',
       'http://209.74.80.195:3006',  // Gemura UI on Kwezi
+      'http://209.74.80.195:3024',  // Gemura UAT UI on Kwezi
+      'http://209.74.80.195:3027',  // Gemura Admin UAT UI on Kwezi
       'http://209.74.80.195:3011',  // Orora Web on Kwezi
       'https://app.gemura.rw',  // Gemura UI (Cloudflare)
+      'https://admin.gemura.rw',  // Gemura Admin (Cloudflare)
+      'https://uat.gemura.rw',  // Gemura UAT (Cloudflare)
+      'https://admin-uat.gemura.rw',  // Gemura Admin UAT (Cloudflare)
       'https://app.orora.rw',   // Orora Web (Cloudflare)
     ];
     const allowedOrigins = process.env.CORS_ORIGIN
