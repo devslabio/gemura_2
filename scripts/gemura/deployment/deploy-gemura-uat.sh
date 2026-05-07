@@ -66,7 +66,7 @@ else
 fi
 
 # Include public UAT hostnames (Orora/Cursor hit https://uat.orora.rw/api with Origin: https://uat.orora.rw — must be allowed).
-UAT_CORS_ORIGIN="http://localhost:${UI_UAT_PORT},http://localhost:${API_UAT_PORT},http://${SERVER_IP}:${UI_UAT_PORT},http://${SERVER_IP}:${API_UAT_PORT},http://${SERVER_IP}:3026,https://uat.gemura.rw,https://uat.orora.rw,https://app.gemura.rw,https://app.orora.rw,https://admin.gemura.rw"
+UAT_CORS_ORIGIN="http://localhost:${UI_UAT_PORT},http://localhost:${API_UAT_PORT},http://${SERVER_IP}:${UI_UAT_PORT},http://${SERVER_IP}:${API_UAT_PORT},http://${SERVER_IP}:3026,https://uat.gemura.rw,https://admin-uat.gemura.rw,https://uat.orora.rw,https://app.gemura.rw,https://app.orora.rw,https://admin.gemura.rw"
 if [ -n "$UAT_PUBLIC_HOST" ]; then
   UAT_CORS_ORIGIN="${UAT_CORS_ORIGIN},http://${UAT_PUBLIC_HOST},${UAT_PUBLIC_SCHEME}://${UAT_PUBLIC_HOST}"
 fi
