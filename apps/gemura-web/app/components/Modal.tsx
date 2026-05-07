@@ -11,8 +11,16 @@ interface ModalProps {
   children: ReactNode;
   /** Optional footer (e.g. Cancel + Submit). If not provided, only the close X is used. */
   footer?: ReactNode;
-  /** Max width of the panel (default max-w-lg). Use max-w-md for narrow, max-w-xl for wider. */
-  maxWidth?: 'max-w-md' | 'max-w-lg' | 'max-w-xl' | 'max-w-2xl' | 'max-w-4xl' | 'max-w-5xl' | 'max-w-6xl';
+  /** Max width of the panel (default max-w-lg). Use max-w-md for narrow, max-w-3xl for wide forms. */
+  maxWidth?:
+    | 'max-w-md'
+    | 'max-w-lg'
+    | 'max-w-xl'
+    | 'max-w-2xl'
+    | 'max-w-3xl'
+    | 'max-w-4xl'
+    | 'max-w-5xl'
+    | 'max-w-6xl';
 }
 
 /**
