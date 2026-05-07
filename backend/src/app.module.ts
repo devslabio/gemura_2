@@ -4,6 +4,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { AccountsModule } from './modules/accounts/accounts.module';
+import { AccountMembershipsModule } from './modules/account-memberships/account-memberships.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { CollectionsModule } from './modules/collections/collections.module';
 import { SalesModule } from './modules/sales/sales.module';
@@ -62,6 +63,7 @@ import { AppController } from './app.controller';
     RbacModule,
     AuthModule,
     AccountsModule,
+    AccountMembershipsModule,
     SuppliersModule,
     CollectionsModule,
     SalesModule,

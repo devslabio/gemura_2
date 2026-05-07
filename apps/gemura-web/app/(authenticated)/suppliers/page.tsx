@@ -290,7 +290,7 @@ export default function SuppliersPage() {
         onSuccess={loadSuppliers}
       />
 
-      <Modal open={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Add Supplier" maxWidth="max-w-lg">
+      <Modal open={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Add Supplier" maxWidth="max-w-3xl">
         <CreateSupplierForm
           onSuccess={() => {
             setCreateModalOpen(false);

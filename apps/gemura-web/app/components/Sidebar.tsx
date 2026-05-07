@@ -63,6 +63,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     '/collections',
     '/inventory',
     '/suppliers',
+    '/members',
     '/customers',
     '/operations',
   ];

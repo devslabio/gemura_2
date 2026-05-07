@@ -9,6 +9,7 @@ import {
   isAdminRole,
   isExternalSupplier,
   isExternalCustomer,
+  MEMBERS_NAV_PERMISSIONS,
 } from '@/lib/config/nav.config';
 
 /** Path prefix -> user needs this permission */
@@ -28,6 +29,7 @@ const OPERATIONS_PATH_PERMISSION: Record<string, string> = {
 
 /** Path prefix -> user needs at least one of these */
 const OPERATIONS_PATH_ANY_PERMISSION: Record<string, string[]> = {
+  '/members': [...MEMBERS_NAV_PERMISSIONS],
   /** Matches OPERATIONS_NAV_ITEMS for Milk collection / Gate deliveries (gate tab vs records tab handled in-page). */
   '/collections': ['mcc_view_operations', 'mcc_view_own_operations', 'view_collections'],
   '/operations/traceability': ['mcc_view_operations', 'mcc_manage_operations'],
@@ -75,6 +77,7 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
     '/collections',
     '/inventory',
     '/suppliers',
+    '/members',
     '/customers',
     '/operations',
   ].some((p) => pathname === p || pathname.startsWith(p + '/'));
