@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { User } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { RequireAnyPermission } from '../../common/decorators/permission.decorator';
@@ -43,6 +43,7 @@ export class MccManagerController {
     summary: 'Update traceability resolution on a rejected gate test',
     description: 'Sets source_resolution_status for an MccMilkTestResult linked to this MCC account.',
   })
+  @ApiParam({ name: 'testResultId', description: 'Milk test result ID' })
   async approveResolution(
     @CurrentUser() user: User,
     @Param('testResultId') testResultId: string,
