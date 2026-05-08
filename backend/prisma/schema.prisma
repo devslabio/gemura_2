@@ -358,6 +358,9 @@ model Account {
   mcc_credit_events_farmer       MccCreditEvent[]          @relation("MccCreditEventFarmer")
   mcc_credit_events_as_mcc       MccCreditEvent[]          @relation("MccCreditEventMccAccount")
   mcc_staff_shifts               MccStaffShift[]           @relation("MccStaffShiftMccAccount")
+  mcc_operational_profile        MccOperationalProfile?
+  mcc_cooling_tank_profiles      MccCoolingTankProfile[]
+  mcc_facility_snapshot          MccFacilitySnapshot?
   user_accounts_umucunda_scope   UserAccount[]             @relation("UserAccountUmucundaSupplierScope")
 
   @@index([code])
@@ -766,6 +769,79 @@ model MccStaffShift {
   @@index([mcc_account_id, started_at(sort: Desc)])
   @@index([user_id, ended_at])
   @@map("mcc_staff_shifts")
+}
+
+/// Account-scoped operational baseline for manager dashboard (seeded from approved onboarding).
+model MccOperationalProfile {
+  id                                   String   @id @default(uuid()) @db.Uuid
+  account_id                           String   @unique @map("account_id") @db.Uuid
+  expected_daily_deliveries            Int?     @map("expected_daily_deliveries")
+  daily_milk_volume_litres             Decimal? @map("daily_milk_volume_litres") @db.Decimal(12, 3)
+  max_milk_one_day_litres              Decimal? @map("max_milk_one_day_litres") @db.Decimal(12, 3)
+  tank_capacity_sufficiency            String?  @map("tank_capacity_sufficiency") @db.VarChar(120)
+  insufficient_capacity_plan           String?  @map("insufficient_capacity_plan") @db.Text
+  power_supply_sources                 Json?    @map("power_supply_sources")
+  generator_capacity_kva               Decimal? @map("generator_capacity_kva") @db.Decimal(10, 2)
+  mobile_connectivity                  String?  @map("mobile_connectivity") @db.VarChar(120)
+  total_farmers_supplying              Int?     @map("total_farmers_supplying")
+  new_farmers_last_3_months            Int?     @map("new_farmers_last_3_months")
+  milk_transporters_count              Int?     @map("milk_transporters_count")
+  average_distance_km                  Decimal? @map("average_distance_km") @db.Decimal(10, 2)
+  furthest_farm_km                     Decimal? @map("furthest_farm_km") @db.Decimal(10, 2)
+  evening_milk_pattern                 String?  @map("evening_milk_pattern") @db.VarChar(120)
+  own_milk_transport_type              String?  @map("own_milk_transport_type") @db.VarChar(160)
+  record_system                        String?  @map("record_system") @db.VarChar(160)
+  avg_days_delivery_to_payment         Int?     @map("avg_days_delivery_to_payment")
+  average_annual_revenue_rwf           Decimal? @map("average_annual_revenue_rwf") @db.Decimal(15, 2)
+  main_buyer_name                      String?  @map("main_buyer_name") @db.VarChar(255)
+  formal_supply_agreement_details      String?  @map("formal_supply_agreement_details") @db.Text
+  source_submission_id                 String?  @map("source_submission_id") @db.Uuid
+  source_submission_code               String?  @map("source_submission_code") @db.VarChar(64)
+  captured_at                          DateTime @default(now()) @map("captured_at")
+  updated_at                           DateTime @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([source_submission_id])
+  @@index([captured_at])
+  @@map("mcc_operational_profiles")
+}
+
+/// One row per configured cooling tank for an MCC account (nullable attributes allowed).
+model MccCoolingTankProfile {
+  id              String   @id @default(uuid()) @db.Uuid
+  account_id      String   @map("account_id") @db.Uuid
+  tank_number     String?  @map("tank_number") @db.VarChar(120)
+  capacity_litres Decimal? @map("capacity_litres") @db.Decimal(12, 3)
+  year_or_age     String?  @map("year_or_age") @db.VarChar(120)
+  condition       String?  @db.VarChar(60)
+  created_at      DateTime @default(now()) @map("created_at")
+  updated_at      DateTime @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([account_id])
+  @@map("mcc_cooling_tank_profiles")
+}
+
+/// Latest facility signal snapshot for manager dashboard. One row per MCC account.
+model MccFacilitySnapshot {
+  id                    String   @id @default(uuid()) @db.Uuid
+  account_id            String   @unique @map("account_id") @db.Uuid
+  tank_used_litres      Decimal? @map("tank_used_litres") @db.Decimal(12, 3)
+  tank_used_pct         Decimal? @map("tank_used_pct") @db.Decimal(6, 2)
+  cooling_temperature_c Decimal? @map("cooling_temperature_c") @db.Decimal(6, 2)
+  power_status          String?  @map("power_status") @db.VarChar(60)
+  generator_status      String?  @map("generator_status") @db.VarChar(60)
+  generator_fuel_pct    Decimal? @map("generator_fuel_pct") @db.Decimal(6, 2)
+  observed_at           DateTime? @map("observed_at")
+  source                String?  @db.VarChar(60)
+  updated_at            DateTime @updatedAt @map("updated_at")
+
+  account Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([observed_at])
+  @@map("mcc_facility_snapshots")
 }
 
 // Milk production (per animal or farm per day) – can be linked to sales later via milk_production_id on MilkSale

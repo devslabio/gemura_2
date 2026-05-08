@@ -19,6 +19,12 @@ function decN(v: { toString(): string } | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function decNOrNull(v: { toString(): string } | null | undefined): number | null {
+  if (v == null) return null;
+  const n = Number(v.toString());
+  return Number.isFinite(n) ? n : null;
+}
+
 @Injectable()
 export class MccManagerService {
   constructor(
@@ -258,6 +264,42 @@ export class MccManagerService {
 
     const staff = scope.mode === 'scoped' ? [] : [...staffFromUa, ...extraRows];
 
+    const [wallet, profile, tankProfiles, facilitySnapshot] = await Promise.all([
+      this.prisma.wallet.findFirst({
+        where: { account_id: accountId, status: 'active' },
+        select: { id: true, code: true, balance: true, currency: true, is_default: true },
+        orderBy: [{ is_default: 'desc' }, { created_at: 'asc' }],
+      }),
+      this.prisma.mccOperationalProfile.findUnique({
+        where: { account_id: accountId },
+        select: {
+          expected_daily_deliveries: true,
+          power_supply_sources: true,
+        },
+      }),
+      this.prisma.mccCoolingTankProfile.findMany({
+        where: { account_id: accountId },
+        select: { capacity_litres: true },
+      }),
+      this.prisma.mccFacilitySnapshot.findUnique({
+        where: { account_id: accountId },
+        select: {
+          tank_used_litres: true,
+          tank_used_pct: true,
+          cooling_temperature_c: true,
+          power_status: true,
+          generator_status: true,
+          generator_fuel_pct: true,
+          observed_at: true,
+        },
+      }),
+    ]);
+
+    const tankCapacityTotal = tankProfiles.reduce((sum, tank) => sum + decN(tank.capacity_litres), 0);
+    const powerSources = Array.isArray(profile?.power_supply_sources)
+      ? profile.power_supply_sources.filter((v): v is string => typeof v === 'string')
+      : [];
+
     return {
       code: 200,
       status: 'success',
@@ -273,6 +315,33 @@ export class MccManagerService {
         manifests,
         rejections: rejectionRows,
         staff,
+        wallet: wallet
+          ? {
+              id: wallet.id,
+              code: wallet.code,
+              balance: decN(wallet.balance),
+              currency: wallet.currency,
+              is_default: wallet.is_default,
+            }
+          : null,
+        profile: profile
+          ? {
+              expected_daily_deliveries: profile.expected_daily_deliveries,
+              cooling_tank_total_capacity_litres: Math.round(tankCapacityTotal * 10) / 10,
+              power_supply_sources: powerSources,
+            }
+          : null,
+        facility_snapshot: facilitySnapshot
+          ? {
+              tank_used_litres: decNOrNull(facilitySnapshot.tank_used_litres),
+              tank_used_pct: decNOrNull(facilitySnapshot.tank_used_pct),
+              cooling_temperature_c: decNOrNull(facilitySnapshot.cooling_temperature_c),
+              power_status: facilitySnapshot.power_status,
+              generator_status: facilitySnapshot.generator_status,
+              generator_fuel_pct: decNOrNull(facilitySnapshot.generator_fuel_pct),
+              observed_at: facilitySnapshot.observed_at?.toISOString() ?? null,
+            }
+          : null,
       },
     };
   }

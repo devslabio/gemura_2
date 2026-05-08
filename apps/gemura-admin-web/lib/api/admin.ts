@@ -271,6 +271,34 @@ export type UserActivityMetric = 'suppliers' | 'customers' | 'sales' | 'collecti
 
 export type UserBusinessResource = 'collections' | 'sales' | 'suppliers' | 'customers' | 'farms' | 'accounts' | 'members';
 
+export interface OnboardingOperationalConfigData {
+  submission_id: string;
+  account: { id: string; code: string | null; name: string };
+  profile: {
+    expected_daily_deliveries: number | null;
+  };
+  facility_snapshot: {
+    tank_used_litres: number | null;
+    tank_used_pct: number | null;
+    cooling_temperature_c: number | null;
+    power_status: string | null;
+    generator_status: string | null;
+    generator_fuel_pct: number | null;
+    observed_at: string | null;
+  };
+}
+
+export interface UpdateOnboardingOperationalConfigPayload {
+  expected_daily_deliveries?: number | null;
+  tank_used_litres?: number | null;
+  tank_used_pct?: number | null;
+  cooling_temperature_c?: number | null;
+  power_status?: string | null;
+  generator_status?: string | null;
+  generator_fuel_pct?: number | null;
+  observed_at?: string | null;
+}
+
 export const adminApi = {
   getDashboardStats: async (
     accountId?: string,
@@ -565,6 +593,31 @@ export const adminApi = {
   getOnboardingSubmission: async (submissionId: string, accountId?: string): Promise<{ code: number; data: Record<string, unknown> }> => {
     const params = accountId ? { account_id: accountId } : {};
     return apiClient.get(`/admin/onboarding-submissions/${submissionId}`, { params });
+  },
+
+  getOnboardingOperationalConfig: async (
+    submissionId: string,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: OnboardingOperationalConfigData }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.get(`/admin/onboarding-submissions/${submissionId}/operational-config`, { params });
+  },
+
+  updateOnboardingOperationalConfig: async (
+    submissionId: string,
+    body: UpdateOnboardingOperationalConfigPayload,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: OnboardingOperationalConfigData }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.put(`/admin/onboarding-submissions/${submissionId}/operational-config`, body, { params });
+  },
+
+  syncOnboardingOperationalConfigDefaults: async (
+    submissionId: string,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: OnboardingOperationalConfigData }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.post(`/admin/onboarding-submissions/${submissionId}/operational-config/sync-defaults`, {}, { params });
   },
 
   linkOnboardingSubmission: async (

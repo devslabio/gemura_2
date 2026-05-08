@@ -284,7 +284,7 @@ export default function SystemAdminOverview({
   return (
     <div className="space-y-4">
       {/* KPI strip */}
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-10">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5">
         {kpis.map((k) => {
           const meta = KPI_VISUAL[k.id] ?? KPI_FALLBACK;
           const isOnboardingKpi = k.id === 'onboarding';
@@ -293,18 +293,18 @@ export default function SystemAdminOverview({
               key={k.id}
               type="button"
               onClick={isOnboardingKpi ? () => router.push('/admin/onboarding') : undefined}
-              className={`${overviewCard} !p-2.5 ${isOnboardingKpi ? 'cursor-pointer text-left transition hover:border-[var(--primary)]/35 hover:bg-blue-50/40 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/25' : 'text-left'}`}
+              className={`${overviewCard} !p-3.5 min-h-[88px] ${isOnboardingKpi ? 'cursor-pointer text-left transition hover:border-[var(--primary)]/35 hover:bg-blue-50/40 focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/25' : 'text-left'}`}
             >
               <div className="relative">
                 <div
-                  className="absolute right-0 top-0 flex h-7 w-7 items-center justify-center rounded-md"
+                  className="absolute right-0 top-0 flex h-8 w-8 items-center justify-center rounded-md"
                   style={{ backgroundColor: meta.iconBg, color: meta.iconFg }}
                 >
-                  <Icon icon={meta.icon} size="xs" />
+                  <Icon icon={meta.icon} size="sm" />
                 </div>
-                <div className="min-w-0 pr-8">
+                <div className="min-w-0 pr-9">
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">{k.label}</div>
-                  <div className="mt-1 text-base font-bold tabular-nums leading-tight text-gray-900 sm:text-lg">{k.value}</div>
+                  <div className="mt-1 text-lg font-bold tabular-nums leading-tight text-gray-900 sm:text-xl">{k.value}</div>
                   {k.trend ? (
                     <div
                       className={`mt-1 text-[11px] font-medium ${
