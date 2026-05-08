@@ -10,7 +10,7 @@ import {
   UseGuards,
   HttpCode,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiNotFoundResponse, ApiBadRequestResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiNotFoundResponse, ApiBadRequestResponse, ApiParam } from '@nestjs/swagger';
 import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
@@ -123,6 +123,7 @@ export class CommentsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a comment by ID' })
+  @ApiParam({ name: 'id', description: 'Comment ID' })
   @ApiResponse({ status: 200, description: 'Comment details' })
   @ApiResponse({ status: 404, description: 'Comment not found' })
   findOne(@Param('id') id: string) {
@@ -131,6 +132,7 @@ export class CommentsController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a comment' })
+  @ApiParam({ name: 'id', description: 'Comment ID' })
   @ApiResponse({ status: 200, description: 'Comment updated successfully' })
   @ApiResponse({ status: 404, description: 'Comment not found' })
   update(
@@ -143,6 +145,7 @@ export class CommentsController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a comment' })
+  @ApiParam({ name: 'id', description: 'Comment ID' })
   @ApiResponse({ status: 200, description: 'Comment deleted successfully' })
   @ApiResponse({ status: 404, description: 'Comment not found' })
   remove(@Param('id') id: string, @CurrentUser() user: User) {

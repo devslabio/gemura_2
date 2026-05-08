@@ -264,7 +264,7 @@ export class MccManagerService {
 
     const staff = scope.mode === 'scoped' ? [] : [...staffFromUa, ...extraRows];
 
-    const [wallet, profile, tankProfiles, facilitySnapshot] = await Promise.all([
+    const [wallet, profile, tankProfiles, facilitySnapshot, activeSupplierCount] = await Promise.all([
       this.prisma.wallet.findFirst({
         where: { account_id: accountId, status: 'active' },
         select: { id: true, code: true, balance: true, currency: true, is_default: true },
@@ -293,12 +293,133 @@ export class MccManagerService {
           observed_at: true,
         },
       }),
+      this.prisma.supplierCustomer.count({
+        where: {
+          customer_account_id: accountId,
+          relationship_status: 'active',
+          ...(scope.mode === 'scoped' ? { supplier_account_id: scope.supplierAccountId } : {}),
+        },
+      }),
     ]);
 
     const tankCapacityTotal = tankProfiles.reduce((sum, tank) => sum + decN(tank.capacity_litres), 0);
     const powerSources = Array.isArray(profile?.power_supply_sources)
       ? profile.power_supply_sources.filter((v): v is string => typeof v === 'string')
       : [];
+    const expectedDailyDeliveries = profile?.expected_daily_deliveries ?? (activeSupplierCount > 0 ? activeSupplierCount : null);
+    const pendingManifests = manifests.filter((m) => !m.submitted).length;
+    const alerts: Array<{
+      id: string;
+      priority: number;
+      title: string;
+      detail: string;
+      tone: 'critical' | 'warn' | 'info';
+    }> = [];
+
+    if (rejectionRows.length > 0) {
+      alerts.push({
+        id: 'reject_followup',
+        priority: 0,
+        title: 'Rejection follow-up',
+        detail: `${rejectionRows.length} rejected gate test(s) need traceability action.`,
+        tone: 'critical',
+      });
+    }
+
+    if (pendingManifests > 0) {
+      alerts.push({
+        id: 'manifest_pending',
+        priority: 1,
+        title: 'Manifest window',
+        detail: `${pendingManifests} manifest(s) pending submission/acceptance.`,
+        tone: 'warn',
+      });
+    } else {
+      alerts.push({
+        id: 'manifest_clear',
+        priority: 5,
+        title: 'Manifest window',
+        detail: 'No pending manifests for this day.',
+        tone: 'info',
+      });
+    }
+
+    if (expectedDailyDeliveries && deliveries.length < expectedDailyDeliveries) {
+      alerts.push({
+        id: 'delivery_target',
+        priority: 2,
+        title: 'Delivery target',
+        detail: `Logged ${deliveries.length}/${expectedDailyDeliveries} expected deliveries.`,
+        tone: deliveries.length === 0 ? 'warn' : 'info',
+      });
+    }
+
+    const tankUsedPct = decNOrNull(facilitySnapshot?.tank_used_pct);
+    if (tankUsedPct != null) {
+      if (tankUsedPct >= 85) {
+        alerts.push({
+          id: 'tank_high',
+          priority: 1,
+          title: 'Tank capacity high',
+          detail: `Tank usage at ${Math.round(tankUsedPct)}% exceeds safe threshold.`,
+          tone: 'critical',
+        });
+      } else if (tankUsedPct >= 70) {
+        alerts.push({
+          id: 'tank_watch',
+          priority: 3,
+          title: 'Tank capacity watch',
+          detail: `Tank usage at ${Math.round(tankUsedPct)}%; monitor intake closely.`,
+          tone: 'warn',
+        });
+      }
+    }
+
+    const generatorStatus = (facilitySnapshot?.generator_status ?? '').toLowerCase();
+    if (generatorStatus === 'fault' || generatorStatus === 'offline') {
+      alerts.push({
+        id: 'generator_status',
+        priority: 1,
+        title: 'Generator status',
+        detail: `Generator reported as ${generatorStatus}.`,
+        tone: 'critical',
+      });
+    }
+
+    if (wallet && decN(wallet.balance) <= 0) {
+      alerts.push({
+        id: 'wallet_low',
+        priority: 3,
+        title: 'Wallet balance',
+        detail: 'Available wallet balance is low or zero.',
+        tone: 'warn',
+      });
+    }
+
+    if (staff.length > 0) {
+      const onDuty = staff.filter((s) => s.on_duty).length;
+      if (onDuty === 0) {
+        alerts.push({
+          id: 'staff_shift',
+          priority: 4,
+          title: 'Staff on shift',
+          detail: 'No active shift detected for gate-facing staff.',
+          tone: 'warn',
+        });
+      }
+    }
+
+    if (alerts.length === 0) {
+      alerts.push({
+        id: 'ops_nominal',
+        priority: 9,
+        title: 'Operations status',
+        detail: 'No active alerts for this day.',
+        tone: 'info',
+      });
+    }
+
+    alerts.sort((a, b) => a.priority - b.priority);
 
     return {
       code: 200,
@@ -326,11 +447,15 @@ export class MccManagerService {
           : null,
         profile: profile
           ? {
-              expected_daily_deliveries: profile.expected_daily_deliveries,
+              expected_daily_deliveries: expectedDailyDeliveries,
               cooling_tank_total_capacity_litres: Math.round(tankCapacityTotal * 10) / 10,
               power_supply_sources: powerSources,
             }
-          : null,
+          : {
+              expected_daily_deliveries: expectedDailyDeliveries,
+              cooling_tank_total_capacity_litres: Math.round(tankCapacityTotal * 10) / 10,
+              power_supply_sources: powerSources,
+            },
         facility_snapshot: facilitySnapshot
           ? {
               tank_used_litres: decNOrNull(facilitySnapshot.tank_used_litres),
@@ -341,7 +466,16 @@ export class MccManagerService {
               generator_fuel_pct: decNOrNull(facilitySnapshot.generator_fuel_pct),
               observed_at: facilitySnapshot.observed_at?.toISOString() ?? null,
             }
-          : null,
+          : {
+              tank_used_litres: null,
+              tank_used_pct: null,
+              cooling_temperature_c: null,
+              power_status: null,
+              generator_status: null,
+              generator_fuel_pct: null,
+              observed_at: null,
+            },
+        alerts,
       },
     };
   }

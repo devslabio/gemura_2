@@ -66,6 +66,14 @@ export interface MccManagerFacilitySnapshot {
   observed_at: string | null;
 }
 
+export interface MccManagerAlert {
+  id: string;
+  priority: number;
+  title: string;
+  detail: string;
+  tone: 'critical' | 'warn' | 'info';
+}
+
 export interface MccManagerOverviewData {
   date: string;
   gate: MccManagerGateSummary;
@@ -75,6 +83,7 @@ export interface MccManagerOverviewData {
   wallet: MccManagerWalletSummary | null;
   profile: MccManagerOperationalProfile | null;
   facility_snapshot: MccManagerFacilitySnapshot | null;
+  alerts: MccManagerAlert[];
 }
 
 export interface MccManagerOverviewResponse {
