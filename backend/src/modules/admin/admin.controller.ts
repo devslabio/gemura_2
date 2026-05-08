@@ -37,6 +37,7 @@ import { ApproveOnboardingDto } from './dto/approve-onboarding.dto';
 import { LinkOnboardingSubmissionDto } from './dto/link-onboarding-submission.dto';
 import { RejectOnboardingDto } from './dto/reject-onboarding.dto';
 import { NeedsChangesOnboardingDto } from './dto/needs-changes-onboarding.dto';
+import { UpdateOnboardingOperationalConfigDto } from './dto/update-onboarding-operational-config.dto';
 import { CreatePlatformRoleDto } from './dto/create-platform-role.dto';
 import { UpdatePlatformRoleDto } from './dto/update-platform-role.dto';
 import { AssignUserAccountMembershipDto } from './dto/assign-user-account-membership.dto';
@@ -416,6 +417,56 @@ export class AdminController {
     @Param('submissionId') submissionId: string,
   ) {
     return this.adminService.getMccOnboardingSubmissionById(user, accountId, submissionId);
+  }
+
+  @Get('onboarding-submissions/:submissionId/operational-config')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Get linked account operational config for manager dashboard',
+    description:
+      'Resolves the submission linked account and returns expected deliveries plus latest facility snapshot fields used by the manager dashboard.',
+  })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  async getOnboardingOperationalConfig(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('submissionId') submissionId: string,
+  ) {
+    return this.adminService.getOnboardingOperationalConfig(user, accountId, submissionId);
+  }
+
+  @Put('onboarding-submissions/:submissionId/operational-config')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Update linked account operational config for manager dashboard',
+    description:
+      'Updates expected deliveries and/or facility snapshot values for the submission linked account. Supports nullable fields.',
+  })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiBody({ type: UpdateOnboardingOperationalConfigDto })
+  async updateOnboardingOperationalConfig(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('submissionId') submissionId: string,
+    @Body() dto: UpdateOnboardingOperationalConfigDto,
+  ) {
+    return this.adminService.updateOnboardingOperationalConfig(user, accountId, submissionId, dto);
+  }
+
+  @Post('onboarding-submissions/:submissionId/operational-config/sync-defaults')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Re-sync operational config from onboarding payload defaults',
+    description:
+      'Rebuilds linked account operational profile and facility snapshot from this submission section_payload.',
+  })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  async syncOnboardingOperationalConfigDefaults(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('submissionId') submissionId: string,
+  ) {
+    return this.adminService.syncOnboardingOperationalConfigFromDefaults(user, accountId, submissionId);
   }
 
   @Post('onboarding-submissions/:submissionId/link')

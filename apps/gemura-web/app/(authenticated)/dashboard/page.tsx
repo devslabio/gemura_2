@@ -36,9 +36,9 @@ import CreateSupplierForm from '../suppliers/CreateSupplierForm';
 import CreateInventoryForm from '../inventory/CreateInventoryForm';
 import dynamic from 'next/dynamic';
 import MccManagerDashboardSection from '@/app/components/manager/MccManagerDashboardSection';
+import RegionalSupervisorDashboard from '@/app/components/supervisor/RegionalSupervisorDashboard';
 import VeterinaryQualityStrip from '@/app/components/VeterinaryQualityStrip';
 import VeterinaryQualityDesk from '@/app/components/VeterinaryQualityDesk';
-import { MCC_OPERATIONS_SUB_PANELS } from '@/lib/config/nav.config';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
@@ -111,6 +111,9 @@ function BusinessDashboard() {
   const showMccOpsDashboard =
     (orgType === 'tenant' || orgType === 'branch' || orgType === 'mcc') &&
     hasAnyPermission(['mcc_view_operations', 'mcc_view_own_operations', 'view_collections']);
+  const isRegionalSupervisorRole = ['leadership', 'regulator', 'regional_supervisor'].includes(role);
+  /** Demo Manager (`manager`) and similar: dedicated MCC overview on the Overview tab. */
+  const isMccManagerOverview = showMccOpsDashboard && role === 'manager';
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<OverviewResponse['data'] | null>(null);
   const [error, setError] = useState('');
@@ -130,7 +133,6 @@ function BusinessDashboard() {
   type DashboardTab =
     | 'overview'
     | 'quality'
-    | 'operations'
     | 'sales'
     | 'collections'
     | 'inventory'
@@ -215,7 +217,6 @@ function BusinessDashboard() {
       ];
     }
     const available: { id: DashboardTab; label: string }[] = [{ id: 'overview', label: 'Overview' }];
-    if (showMccOpsDashboard) available.push({ id: 'operations', label: 'Operations' });
     if (canViewSales) available.push({ id: 'sales', label: 'Sales' });
     if (canViewCollections) available.push({ id: 'collections', label: 'Collections' });
     if (canViewInventory) available.push({ id: 'inventory', label: 'Inventory' });
@@ -275,9 +276,12 @@ function BusinessDashboard() {
       cancelled = true;
     };
   }, [accountType, currentAccount?.account_id, dateRange.date_from, dateRange.date_to, refreshKey]);
-  // MCC manager panel data — loaded only on Operations tab (not shown on Overview)
+  // MCC manager panel data — shown on Overview for manager roles (loaded when operations dashboard tab applies).
   useEffect(() => {
-    if (!showMccOpsDashboard || !currentAccount?.account_id || dashboardTab !== 'operations') {
+    if (!showMccOpsDashboard || !currentAccount?.account_id) {
+      return;
+    }
+    if (!(dashboardTab === 'overview' && isMccManagerOverview)) {
       return;
     }
     let cancelled = false;
@@ -320,6 +324,7 @@ function BusinessDashboard() {
     showMccOpsDashboard,
     currentAccount?.account_id,
     dashboardTab,
+    isMccManagerOverview,
     dateRange.date_from,
     dateRange.date_to,
     refreshKey,
@@ -496,7 +501,7 @@ function BusinessDashboard() {
 
   return (
     <div className="-mt-1 space-y-4">
-      {/* Header: tab row — Overview, Operations (MCC), Sales, … — plus period */}
+      {/* Header: tab row — Overview, Sales, … — plus period */}
       <div className="mb-3 pb-3 border-b-2 border-gray-200">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex flex-1 min-w-0 gap-1 overflow-x-auto">
@@ -574,7 +579,9 @@ function BusinessDashboard() {
           />
         )}
 
-      {dashboardTab === 'overview' && (
+      {dashboardTab === 'overview' && isRegionalSupervisorRole && <RegionalSupervisorDashboard />}
+
+      {dashboardTab === 'overview' && !isRegionalSupervisorRole && (
         <>
       {showVetQualityStrip && currentAccount?.account_id ? (
         <VeterinaryQualityStrip
@@ -583,6 +590,19 @@ function BusinessDashboard() {
           dateTo={dateRange.date_to}
         />
       ) : null}
+      {isMccManagerOverview && currentAccount?.account_id ? (
+        <MccManagerDashboardSection
+          accountId={currentAccount.account_id}
+          today={managerToday}
+          last7={managerLast7}
+          loading={managerOpsLoading}
+          refreshKey={refreshKey}
+          periodKey={period}
+          rangeDateFrom={dateRange.date_from}
+          rangeDateTo={dateRange.date_to}
+        />
+      ) : (
+        <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           label="Total Sales"
@@ -920,45 +940,8 @@ function BusinessDashboard() {
         </div>
       </div>
         </>
-      )}
-
-      {/* Operations — MCC control room + links to full work-area screens */}
-      {dashboardTab === 'operations' && showMccOpsDashboard && currentAccount?.account_id && (
-        <div className="space-y-6">
-          <MccManagerDashboardSection
-            accountId={currentAccount.account_id}
-            today={managerToday}
-            last7={managerLast7}
-            loading={managerOpsLoading}
-            refreshKey={refreshKey}
-            periodKey={period}
-            rangeDateFrom={dateRange.date_from}
-            rangeDateTo={dateRange.date_to}
-          />
-          <div>
-            <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide mb-3">Work areas</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {MCC_OPERATIONS_SUB_PANELS.filter(
-                (p) => !p.requiresAnyPermission?.length || hasAnyPermission(p.requiresAnyPermission),
-              ).map(({ href, label, description }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className="group flex flex-col rounded-sm border border-gray-200 bg-white p-5 shadow-sm transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 no-underline"
-                >
-                  <span className="text-base font-semibold text-gray-900 group-hover:text-[var(--primary)]">
-                    {label}
-                  </span>
-                  <span className="text-sm text-gray-600 mt-2 flex-1">{description}</span>
-                  <span className="text-xs font-medium text-[var(--primary)] mt-3 inline-flex items-center gap-1">
-                    Open
-                    <Icon icon={faArrowRight} size="xs" />
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
+    )}
+        </>
       )}
 
       {/* Sales tab */}

@@ -35,6 +35,7 @@ import { RbacService } from '../rbac/rbac.service';
 import { CreatePlatformRoleDto } from './dto/create-platform-role.dto';
 import { UpdatePlatformRoleDto } from './dto/update-platform-role.dto';
 import { AssignUserAccountMembershipDto } from './dto/assign-user-account-membership.dto';
+import { UpdateOnboardingOperationalConfigDto } from './dto/update-onboarding-operational-config.dto';
 
 export type UserActivityMetric =
   | 'suppliers'
@@ -120,6 +121,171 @@ export class AdminService {
   private normalizeGroupCount(row: { _count?: number | { _all?: number } }): number {
     if (typeof row._count === 'number') return row._count;
     return row._count?._all ?? 0;
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  }
+
+  private asString(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+
+  private asInt(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return Math.round(value);
+    if (typeof value !== 'string') return null;
+    const cleaned = value.replace(/,/g, '').trim();
+    if (!cleaned) return null;
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? Math.round(parsed) : null;
+  }
+
+  private asDecimal(value: unknown): Prisma.Decimal | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return new Prisma.Decimal(value);
+    }
+    if (typeof value !== 'string') return null;
+    const cleaned = value.replace(/,/g, '').trim();
+    if (!cleaned) return null;
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? new Prisma.Decimal(parsed) : null;
+  }
+
+  private asStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => this.asString(item))
+      .filter((item): item is string => Boolean(item));
+  }
+
+  private async syncMccOperationalDataFromOnboarding(
+    tx: Prisma.TransactionClient,
+    accountId: string,
+    submission: { id: string; submission_code: string; section_payload: Prisma.JsonValue },
+  ): Promise<void> {
+    const payload = this.asRecord(submission.section_payload);
+    const section2 = this.asRecord(payload.section2);
+    const section3 = this.asRecord(payload.section3);
+    const section6 = this.asRecord(payload.section6);
+    const pick = (source: Record<string, unknown>, keys: string[]): unknown => {
+      for (const key of keys) {
+        if (source[key] != null) return source[key];
+      }
+      return null;
+    };
+
+    const tankRowsRaw = Array.isArray(section2.coolingTanks)
+      ? section2.coolingTanks
+      : Array.isArray(section2.tankRows)
+        ? section2.tankRows
+        : [];
+    const tankRows = tankRowsRaw
+      .map((entry) => {
+        const row = this.asRecord(entry);
+        const tankNumber = this.asString(pick(row, ['tankNumber', 'tankNo']));
+        const capacityLitres = this.asDecimal(pick(row, ['capacityLitres', 'capacity']));
+        const yearOrAge = this.asString(pick(row, ['yearOrAge', 'year']));
+        const condition = this.asString(row.condition);
+        if (!tankNumber && !capacityLitres && !yearOrAge && !condition) return null;
+        return {
+          tank_number: tankNumber,
+          capacity_litres: capacityLitres,
+          year_or_age: yearOrAge,
+          condition,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+    const powerSupplySources = this.asStringArray(
+      pick(section2, ['powerSupplySelections', 'powerSupplyOptions']),
+    );
+    const hasGrid = powerSupplySources.some((source) => /grid|electricity/i.test(source));
+    const hasGenerator = powerSupplySources.some((source) => /generator/i.test(source));
+    const hasSolar = powerSupplySources.some((source) => /solar/i.test(source));
+
+    const expectedDailyDeliveries =
+      this.asInt(section3.expectedDailyDeliveries) ??
+      this.asInt(section3.expectedDeliveriesPerDay) ??
+      this.asInt(section3.expectedDeliveries);
+
+    const profileData = {
+      expected_daily_deliveries: expectedDailyDeliveries,
+      daily_milk_volume_litres: this.asDecimal(pick(section2, ['dailyMilkVolume'])),
+      max_milk_one_day_litres: this.asDecimal(pick(section2, ['maxMilkInOneDay', 'maxMilkOneDay'])),
+      tank_capacity_sufficiency: this.asString(section2.tankCapacitySufficiency),
+      insufficient_capacity_plan: this.asString(section2.insufficientPlan),
+      power_supply_sources: powerSupplySources as Prisma.InputJsonValue,
+      generator_capacity_kva: this.asDecimal(
+        pick(section2, ['generatorCapacityKva', 'generatorCapacity']),
+      ),
+      mobile_connectivity: this.asString(section2.mobileConnectivity),
+      total_farmers_supplying: this.asInt(section3.totalFarmersSupplying),
+      new_farmers_last_3_months: this.asInt(section3.newFarmersLast3Months),
+      milk_transporters_count: this.asInt(section3.milkTransportersCount),
+      average_distance_km: this.asDecimal(pick(section3, ['averageDistanceKm', 'averageDistance'])),
+      furthest_farm_km: this.asDecimal(pick(section3, ['furthestFarmKm', 'furthestFarmDistanceKm'])),
+      evening_milk_pattern: this.asString(section3.eveningMilkPattern),
+      own_milk_transport_type: this.asString(
+        pick(section3, ['ownMilkTransportType', 'ownTransportType']),
+      ),
+      record_system: this.asString(section6.recordSystem),
+      avg_days_delivery_to_payment: this.asInt(section6.avgDaysDeliveryToPayment),
+      average_annual_revenue_rwf: this.asDecimal(
+        pick(section6, ['averageAnnualRevenueRwf', 'averageAnnualRevenue']),
+      ),
+      main_buyer_name: this.asString(section6.mainBuyerName),
+      formal_supply_agreement_details: this.asString(
+        pick(section6, ['formalSupplyAgreementDetails', 'formalSupplyAgreement']),
+      ),
+      source_submission_id: submission.id,
+      source_submission_code: submission.submission_code,
+    };
+
+    await tx.mccOperationalProfile.upsert({
+      where: { account_id: accountId },
+      create: {
+        account_id: accountId,
+        ...profileData,
+      },
+      update: {
+        ...profileData,
+        captured_at: new Date(),
+      },
+    });
+
+    await tx.mccCoolingTankProfile.deleteMany({ where: { account_id: accountId } });
+    if (tankRows.length) {
+      await tx.mccCoolingTankProfile.createMany({
+        data: tankRows.map((row) => ({
+          account_id: accountId,
+          tank_number: row.tank_number,
+          capacity_litres: row.capacity_litres,
+          year_or_age: row.year_or_age,
+          condition: row.condition,
+        })),
+      });
+    }
+
+    await tx.mccFacilitySnapshot.upsert({
+      where: { account_id: accountId },
+      create: {
+        account_id: accountId,
+        power_status: hasGrid ? 'grid' : hasSolar ? 'solar' : hasGenerator ? 'generator' : null,
+        generator_status: hasGenerator ? 'available' : null,
+        observed_at: new Date(),
+        source: 'onboarding',
+      },
+      update: {
+        power_status: hasGrid ? 'grid' : hasSolar ? 'solar' : hasGenerator ? 'generator' : null,
+        generator_status: hasGenerator ? 'available' : null,
+        observed_at: new Date(),
+        source: 'onboarding',
+      },
+    });
   }
 
   private async getUserOperationalStats(userIds: string[]) {
@@ -3699,6 +3865,311 @@ export class AdminService {
     };
   }
 
+  async getOnboardingOperationalConfig(user: User, accountId: string, submissionId: string) {
+    await this.checkAdminPermission(user, accountId);
+
+    const submission = await this.prisma.mccOnboardingSubmission.findUnique({
+      where: { id: submissionId },
+      select: { id: true, linked_account_id: true },
+    });
+    if (!submission) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Onboarding submission not found.',
+      });
+    }
+    if (!submission.linked_account_id) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Submission is not linked to an account yet.',
+      });
+    }
+
+    const account = await this.prisma.account.findUnique({
+      where: { id: submission.linked_account_id },
+      select: { id: true, code: true, name: true },
+    });
+    if (!account) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Linked account not found.',
+      });
+    }
+
+    const [profile, snapshot] = await Promise.all([
+      this.prisma.mccOperationalProfile.findUnique({
+        where: { account_id: account.id },
+        select: { expected_daily_deliveries: true },
+      }),
+      this.prisma.mccFacilitySnapshot.findUnique({
+        where: { account_id: account.id },
+        select: {
+          tank_used_litres: true,
+          tank_used_pct: true,
+          cooling_temperature_c: true,
+          power_status: true,
+          generator_status: true,
+          generator_fuel_pct: true,
+          observed_at: true,
+        },
+      }),
+    ]);
+
+    const decNOrNull = (v: { toString(): string } | null | undefined): number | null => {
+      if (v == null) return null;
+      const n = Number(v.toString());
+      return Number.isFinite(n) ? n : null;
+    };
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Operational config retrieved successfully.',
+      data: {
+        submission_id: submission.id,
+        account,
+        profile: {
+          expected_daily_deliveries: profile?.expected_daily_deliveries ?? null,
+        },
+        facility_snapshot: {
+          tank_used_litres: decNOrNull(snapshot?.tank_used_litres),
+          tank_used_pct: decNOrNull(snapshot?.tank_used_pct),
+          cooling_temperature_c: decNOrNull(snapshot?.cooling_temperature_c),
+          power_status: snapshot?.power_status ?? null,
+          generator_status: snapshot?.generator_status ?? null,
+          generator_fuel_pct: decNOrNull(snapshot?.generator_fuel_pct),
+          observed_at: snapshot?.observed_at?.toISOString() ?? null,
+        },
+      },
+    };
+  }
+
+  async updateOnboardingOperationalConfig(
+    user: User,
+    accountId: string,
+    submissionId: string,
+    dto: UpdateOnboardingOperationalConfigDto,
+  ) {
+    await this.checkAdminPermission(user, accountId);
+
+    const submission = await this.prisma.mccOnboardingSubmission.findUnique({
+      where: { id: submissionId },
+      select: { id: true, linked_account_id: true },
+    });
+    if (!submission) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Onboarding submission not found.',
+      });
+    }
+    if (!submission.linked_account_id) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Submission is not linked to an account yet.',
+      });
+    }
+
+    const linkedAccountId = submission.linked_account_id;
+    const hasKey = (key: keyof UpdateOnboardingOperationalConfigDto) =>
+      Object.prototype.hasOwnProperty.call(dto, key);
+    const asFiniteNumber = (v: Prisma.Decimal | null): number | null => {
+      if (v == null) return null;
+      const n = Number(v.toString());
+      return Number.isFinite(n) ? n : null;
+    };
+    const ensureRange = (label: string, value: number | null, min: number, max: number) => {
+      if (value == null) return;
+      if (value < min || value > max) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `${label} must be between ${min} and ${max}.`,
+        });
+      }
+    };
+
+    const expectedProvided = hasKey('expected_daily_deliveries');
+    if (expectedProvided) {
+      const expectedValue =
+        dto.expected_daily_deliveries == null || dto.expected_daily_deliveries === ''
+          ? null
+          : this.asInt(dto.expected_daily_deliveries);
+      if (dto.expected_daily_deliveries != null && dto.expected_daily_deliveries !== '' && expectedValue == null) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'expected_daily_deliveries must be numeric.',
+        });
+      }
+      ensureRange('expected_daily_deliveries', expectedValue, 0, 1000);
+
+      await this.prisma.mccOperationalProfile.upsert({
+        where: { account_id: linkedAccountId },
+        create: {
+          account_id: linkedAccountId,
+          expected_daily_deliveries: expectedValue,
+        },
+        update: {
+          expected_daily_deliveries: expectedValue,
+        },
+      });
+    }
+
+    const snapshotKeys: Array<keyof UpdateOnboardingOperationalConfigDto> = [
+      'tank_used_litres',
+      'tank_used_pct',
+      'cooling_temperature_c',
+      'power_status',
+      'generator_status',
+      'generator_fuel_pct',
+      'observed_at',
+    ];
+    const snapshotProvided = snapshotKeys.some((key) => hasKey(key));
+
+    if (snapshotProvided) {
+      const updateData: Prisma.MccFacilitySnapshotUpdateInput = {
+        source: 'admin_manual',
+      };
+      const createData: Prisma.MccFacilitySnapshotCreateInput = {
+        account: { connect: { id: linkedAccountId } },
+        source: 'admin_manual',
+      };
+
+      if (hasKey('tank_used_litres')) {
+        const v = dto.tank_used_litres == null || dto.tank_used_litres === '' ? null : this.asDecimal(dto.tank_used_litres);
+        if (dto.tank_used_litres != null && dto.tank_used_litres !== '' && v == null) {
+          throw new BadRequestException({ code: 400, status: 'error', message: 'tank_used_litres must be numeric.' });
+        }
+        ensureRange('tank_used_litres', asFiniteNumber(v), 0, 200000);
+        updateData.tank_used_litres = v;
+        createData.tank_used_litres = v;
+      }
+      if (hasKey('tank_used_pct')) {
+        const v = dto.tank_used_pct == null || dto.tank_used_pct === '' ? null : this.asDecimal(dto.tank_used_pct);
+        if (dto.tank_used_pct != null && dto.tank_used_pct !== '' && v == null) {
+          throw new BadRequestException({ code: 400, status: 'error', message: 'tank_used_pct must be numeric.' });
+        }
+        ensureRange('tank_used_pct', asFiniteNumber(v), 0, 100);
+        updateData.tank_used_pct = v;
+        createData.tank_used_pct = v;
+      }
+      if (hasKey('cooling_temperature_c')) {
+        const v =
+          dto.cooling_temperature_c == null || dto.cooling_temperature_c === ''
+            ? null
+            : this.asDecimal(dto.cooling_temperature_c);
+        if (dto.cooling_temperature_c != null && dto.cooling_temperature_c !== '' && v == null) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'cooling_temperature_c must be numeric.',
+          });
+        }
+        ensureRange('cooling_temperature_c', asFiniteNumber(v), -10, 25);
+        updateData.cooling_temperature_c = v;
+        createData.cooling_temperature_c = v;
+      }
+      if (hasKey('power_status')) {
+        const v = this.asString(dto.power_status)?.toLowerCase() ?? null;
+        updateData.power_status = v;
+        createData.power_status = v;
+      }
+      if (hasKey('generator_status')) {
+        const v = this.asString(dto.generator_status)?.toLowerCase() ?? null;
+        updateData.generator_status = v;
+        createData.generator_status = v;
+      }
+      if (hasKey('generator_fuel_pct')) {
+        const v =
+          dto.generator_fuel_pct == null || dto.generator_fuel_pct === ''
+            ? null
+            : this.asDecimal(dto.generator_fuel_pct);
+        if (dto.generator_fuel_pct != null && dto.generator_fuel_pct !== '' && v == null) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'generator_fuel_pct must be numeric.',
+          });
+        }
+        ensureRange('generator_fuel_pct', asFiniteNumber(v), 0, 100);
+        updateData.generator_fuel_pct = v;
+        createData.generator_fuel_pct = v;
+      }
+      if (hasKey('observed_at')) {
+        if (dto.observed_at == null || dto.observed_at === '') {
+          updateData.observed_at = null;
+          createData.observed_at = null;
+        } else {
+          const observedAt = new Date(dto.observed_at);
+          if (Number.isNaN(observedAt.getTime())) {
+            throw new BadRequestException({
+              code: 400,
+              status: 'error',
+              message: 'observed_at must be a valid ISO date.',
+            });
+          }
+          updateData.observed_at = observedAt;
+          createData.observed_at = observedAt;
+        }
+      } else {
+        const now = new Date();
+        updateData.observed_at = now;
+        createData.observed_at = now;
+      }
+
+      await this.prisma.mccFacilitySnapshot.upsert({
+        where: { account_id: linkedAccountId },
+        create: createData,
+        update: updateData,
+      });
+    }
+
+    return this.getOnboardingOperationalConfig(user, accountId, submissionId);
+  }
+
+  async syncOnboardingOperationalConfigFromDefaults(user: User, accountId: string, submissionId: string) {
+    await this.checkAdminPermission(user, accountId);
+
+    const submission = await this.prisma.mccOnboardingSubmission.findUnique({
+      where: { id: submissionId },
+      select: {
+        id: true,
+        submission_code: true,
+        linked_account_id: true,
+        section_payload: true,
+      },
+    });
+    if (!submission) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Onboarding submission not found.',
+      });
+    }
+    if (!submission.linked_account_id) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Submission is not linked to an account yet.',
+      });
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.syncMccOperationalDataFromOnboarding(tx, submission.linked_account_id!, {
+        id: submission.id,
+        submission_code: submission.submission_code,
+        section_payload: submission.section_payload,
+      });
+    });
+
+    return this.getOnboardingOperationalConfig(user, accountId, submissionId);
+  }
+
   async linkMccOnboardingSubmission(
     user: User,
     accountId: string,
@@ -4201,6 +4672,7 @@ export class AdminService {
             linked_account_id: membership.account.id,
           },
         });
+        await this.syncMccOperationalDataFromOnboarding(tx, membership.account.id, submission);
 
         return {
           flow: 'kyc_existing' as const,
@@ -4282,6 +4754,7 @@ export class AdminService {
               linked_account_id: existingMembership.account.id,
             },
           });
+          await this.syncMccOperationalDataFromOnboarding(tx, existingMembership.account.id, submission);
 
           return {
             flow: 'kyc_existing' as const,
@@ -4370,6 +4843,7 @@ export class AdminService {
           linked_account_id: newAccount.id,
         },
       });
+      await this.syncMccOperationalDataFromOnboarding(tx, newAccount.id, submission);
 
       return {
         flow: 'create_tenant' as const,

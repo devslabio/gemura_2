@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { PermissionService } from '@/lib/services/permission.service';
-import { adminApi } from '@/lib/api/admin';
+import { adminApi, type OnboardingOperationalConfigData } from '@/lib/api/admin';
 import { useToastStore } from '@/store/toast';
 import Icon, { faArrowLeft, faClipboardList } from '@/app/components/Icon';
 import { DetailPageSkeleton } from '@/app/components/SkeletonLoader';
@@ -50,6 +50,18 @@ function formatNumber(value: unknown, suffix = ''): string {
 function formatText(value: unknown): string {
   if (isBlank(value)) return '—';
   return String(value);
+}
+
+function isoToLocalDateTimeInput(value: string | null | undefined): string {
+  if (!value) return '';
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return '';
+  const y = dt.getFullYear();
+  const m = `${dt.getMonth() + 1}`.padStart(2, '0');
+  const d = `${dt.getDate()}`.padStart(2, '0');
+  const h = `${dt.getHours()}`.padStart(2, '0');
+  const min = `${dt.getMinutes()}`.padStart(2, '0');
+  return `${y}-${m}-${d}T${h}:${min}`;
 }
 
 function Card({
@@ -214,6 +226,21 @@ export default function OnboardingSubmissionDetailPage() {
   const [linkUserResults, setLinkUserResults] = useState<Array<{ id: string; name: string; phone: string }>>([]);
   const [linkUserPickId, setLinkUserPickId] = useState<string | null>(null);
   const [linkUserPickLabel, setLinkUserPickLabel] = useState('');
+  const [opsConfig, setOpsConfig] = useState<OnboardingOperationalConfigData | null>(null);
+  const [opsLoading, setOpsLoading] = useState(false);
+  const [opsSaving, setOpsSaving] = useState(false);
+  const [opsSyncing, setOpsSyncing] = useState(false);
+  const [opsForm, setOpsForm] = useState({
+    expectedDailyDeliveries: '',
+    tankUsedLitres: '',
+    tankUsedPct: '',
+    coolingTemperatureC: '',
+    powerStatus: '',
+    generatorStatus: '',
+    generatorFuelPct: '',
+    observedAtLocal: '',
+  });
+  const [opsErrors, setOpsErrors] = useState<Partial<Record<keyof typeof opsForm, string>>>({});
 
   useEffect(() => {
     if (!PermissionService.canManageUsers() && !PermissionService.isAdmin()) {
@@ -253,6 +280,62 @@ export default function OnboardingSubmissionDetailPage() {
     setLinkUserSearch('');
     setLinkUserResults([]);
   }, [submission?.id, submission?.linked_user_id]);
+
+  useEffect(() => {
+    if (!submission?.id || !submission?.linked_account_id) {
+      setOpsConfig(null);
+      setOpsErrors({});
+      setOpsForm({
+        expectedDailyDeliveries: '',
+        tankUsedLitres: '',
+        tankUsedPct: '',
+        coolingTemperatureC: '',
+        powerStatus: '',
+        generatorStatus: '',
+        generatorFuelPct: '',
+        observedAtLocal: '',
+      });
+      return;
+    }
+    let cancelled = false;
+    setOpsLoading(true);
+    adminApi
+      .getOnboardingOperationalConfig(submission.id, currentAccount?.account_id)
+      .then((res) => {
+        if (cancelled || res.code !== 200 || !res.data) return;
+        setOpsConfig(res.data);
+        setOpsForm({
+          expectedDailyDeliveries:
+            res.data.profile.expected_daily_deliveries == null ? '' : String(res.data.profile.expected_daily_deliveries),
+          tankUsedLitres:
+            res.data.facility_snapshot.tank_used_litres == null ? '' : String(res.data.facility_snapshot.tank_used_litres),
+          tankUsedPct:
+            res.data.facility_snapshot.tank_used_pct == null ? '' : String(res.data.facility_snapshot.tank_used_pct),
+          coolingTemperatureC:
+            res.data.facility_snapshot.cooling_temperature_c == null
+              ? ''
+              : String(res.data.facility_snapshot.cooling_temperature_c),
+          powerStatus: res.data.facility_snapshot.power_status ?? '',
+          generatorStatus: res.data.facility_snapshot.generator_status ?? '',
+          generatorFuelPct:
+            res.data.facility_snapshot.generator_fuel_pct == null
+              ? ''
+              : String(res.data.facility_snapshot.generator_fuel_pct),
+          observedAtLocal: isoToLocalDateTimeInput(res.data.facility_snapshot.observed_at),
+        });
+        setOpsErrors({});
+      })
+      .catch(() => {
+        if (!cancelled) setOpsConfig(null);
+      })
+      .finally(() => {
+        if (!cancelled) setOpsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [submission?.id, submission?.linked_account_id, currentAccount?.account_id]);
 
   useEffect(() => {
     if (!currentAccount?.account_id || linkUserPickId) return;
@@ -381,6 +464,155 @@ export default function OnboardingSubmissionDetailPage() {
       useToastStore.getState().error(e?.response?.data?.message || e?.message || 'Request failed');
     } finally {
       setActing(false);
+    }
+  };
+
+  const onSaveOperationalConfig = async () => {
+    if (!submission?.id || !submission?.linked_account_id) return;
+    const nextErrors: Partial<Record<keyof typeof opsForm, string>> = {};
+    const toNullableNumber = (raw: string): number | null => {
+      const cleaned = raw.trim();
+      if (!cleaned) return null;
+      const n = Number(cleaned);
+      return Number.isFinite(n) ? n : NaN;
+    };
+    const expectedDailyDeliveries = toNullableNumber(opsForm.expectedDailyDeliveries);
+    const tankUsedLitres = toNullableNumber(opsForm.tankUsedLitres);
+    const tankUsedPct = toNullableNumber(opsForm.tankUsedPct);
+    const coolingTemperatureC = toNullableNumber(opsForm.coolingTemperatureC);
+    const generatorFuelPct = toNullableNumber(opsForm.generatorFuelPct);
+    const numericFields = [
+      ['Expected daily deliveries', expectedDailyDeliveries],
+      ['Tank used litres', tankUsedLitres],
+      ['Tank used %', tankUsedPct],
+      ['Cooling temperature', coolingTemperatureC],
+      ['Generator fuel %', generatorFuelPct],
+    ] as const;
+    const invalid = numericFields.find(([, v]) => Number.isNaN(v));
+    if (invalid) {
+      const keyByLabel: Record<string, keyof typeof opsForm> = {
+        'Expected daily deliveries': 'expectedDailyDeliveries',
+        'Tank used litres': 'tankUsedLitres',
+        'Tank used %': 'tankUsedPct',
+        'Cooling temperature': 'coolingTemperatureC',
+        'Generator fuel %': 'generatorFuelPct',
+      };
+      nextErrors[keyByLabel[invalid[0]]] = 'Must be a valid number.';
+    }
+    if (expectedDailyDeliveries != null && !Number.isNaN(expectedDailyDeliveries)) {
+      if (expectedDailyDeliveries < 0 || expectedDailyDeliveries > 1000) {
+        nextErrors.expectedDailyDeliveries = 'Use a value between 0 and 1000.';
+      }
+    }
+    if (tankUsedLitres != null && !Number.isNaN(tankUsedLitres)) {
+      if (tankUsedLitres < 0 || tankUsedLitres > 200000) {
+        nextErrors.tankUsedLitres = 'Use a value between 0 and 200000.';
+      }
+    }
+    if (tankUsedPct != null && !Number.isNaN(tankUsedPct)) {
+      if (tankUsedPct < 0 || tankUsedPct > 100) {
+        nextErrors.tankUsedPct = 'Use a value between 0 and 100.';
+      }
+    }
+    if (coolingTemperatureC != null && !Number.isNaN(coolingTemperatureC)) {
+      if (coolingTemperatureC < -10 || coolingTemperatureC > 25) {
+        nextErrors.coolingTemperatureC = 'Use a value between -10 and 25.';
+      }
+    }
+    if (generatorFuelPct != null && !Number.isNaN(generatorFuelPct)) {
+      if (generatorFuelPct < 0 || generatorFuelPct > 100) {
+        nextErrors.generatorFuelPct = 'Use a value between 0 and 100.';
+      }
+    }
+    if (opsForm.observedAtLocal.trim()) {
+      const d = new Date(opsForm.observedAtLocal);
+      if (Number.isNaN(d.getTime())) {
+        nextErrors.observedAtLocal = 'Use a valid date and time.';
+      }
+    }
+    setOpsErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      useToastStore.getState().error('Please fix validation errors before saving.');
+      return;
+    }
+
+    setOpsSaving(true);
+    try {
+      const observedAtIso = opsForm.observedAtLocal.trim()
+        ? new Date(opsForm.observedAtLocal).toISOString()
+        : null;
+      const res = await adminApi.updateOnboardingOperationalConfig(
+        submission.id,
+        {
+          expected_daily_deliveries: expectedDailyDeliveries,
+          tank_used_litres: tankUsedLitres,
+          tank_used_pct: tankUsedPct,
+          cooling_temperature_c: coolingTemperatureC,
+          power_status: opsForm.powerStatus.trim() || null,
+          generator_status: opsForm.generatorStatus.trim() || null,
+          generator_fuel_pct: generatorFuelPct,
+          observed_at: observedAtIso,
+        },
+        currentAccount?.account_id,
+      );
+      if (res.code === 200 && res.data) {
+        setOpsConfig(res.data);
+        setOpsErrors({});
+        useToastStore.getState().success('Operational config saved.');
+      } else {
+        useToastStore.getState().error(res.message || 'Save failed');
+      }
+    } catch (e: any) {
+      useToastStore.getState().error(e?.response?.data?.message || e?.message || 'Save failed');
+    } finally {
+      setOpsSaving(false);
+    }
+  };
+
+  const onSyncOperationalDefaults = async () => {
+    if (!submission?.id || !submission?.linked_account_id) return;
+    setOpsSyncing(true);
+    try {
+      const res = await adminApi.syncOnboardingOperationalConfigDefaults(
+        submission.id,
+        currentAccount?.account_id,
+      );
+      if (res.code === 200 && res.data) {
+        setOpsConfig(res.data);
+        setOpsForm({
+          expectedDailyDeliveries:
+            res.data.profile.expected_daily_deliveries == null
+              ? ''
+              : String(res.data.profile.expected_daily_deliveries),
+          tankUsedLitres:
+            res.data.facility_snapshot.tank_used_litres == null
+              ? ''
+              : String(res.data.facility_snapshot.tank_used_litres),
+          tankUsedPct:
+            res.data.facility_snapshot.tank_used_pct == null
+              ? ''
+              : String(res.data.facility_snapshot.tank_used_pct),
+          coolingTemperatureC:
+            res.data.facility_snapshot.cooling_temperature_c == null
+              ? ''
+              : String(res.data.facility_snapshot.cooling_temperature_c),
+          powerStatus: res.data.facility_snapshot.power_status ?? '',
+          generatorStatus: res.data.facility_snapshot.generator_status ?? '',
+          generatorFuelPct:
+            res.data.facility_snapshot.generator_fuel_pct == null
+              ? ''
+              : String(res.data.facility_snapshot.generator_fuel_pct),
+          observedAtLocal: isoToLocalDateTimeInput(res.data.facility_snapshot.observed_at),
+        });
+        setOpsErrors({});
+        useToastStore.getState().success('Operational defaults synced from onboarding.');
+      } else {
+        useToastStore.getState().error(res.message || 'Sync failed');
+      }
+    } catch (e: any) {
+      useToastStore.getState().error(e?.response?.data?.message || e?.message || 'Sync failed');
+    } finally {
+      setOpsSyncing(false);
     }
   };
 
@@ -641,6 +873,158 @@ export default function OnboardingSubmissionDetailPage() {
           </dl>
         </Card>
       </div>
+
+      {submission.linked_account_id && (
+        <Card
+          title="Manager dashboard operational config"
+          subtitle="Live values used by the manager overview tiles."
+          actions={
+            opsConfig?.account ? (
+              <span className="text-xs text-gray-500">
+                {opsConfig.account.name}
+                {opsConfig.account.code ? ` (${opsConfig.account.code})` : ''}
+              </span>
+            ) : null
+          }
+        >
+          {opsLoading ? (
+            <p className="text-sm text-gray-500">Loading config…</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Expected daily deliveries</label>
+                  <input
+                    className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm"
+                    value={opsForm.expectedDailyDeliveries}
+                    onChange={(e) => setOpsForm((prev) => ({ ...prev, expectedDailyDeliveries: e.target.value }))}
+                    placeholder="e.g. 12"
+                  />
+                  {opsErrors.expectedDailyDeliveries && (
+                    <p className="mt-1 text-xs text-red-600">{opsErrors.expectedDailyDeliveries}</p>
+                  )}
+                  <p className="mt-1 text-[11px] text-gray-400">Range: 0 to 1000</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Tank used litres</label>
+                  <input
+                    className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm"
+                    value={opsForm.tankUsedLitres}
+                    onChange={(e) => setOpsForm((prev) => ({ ...prev, tankUsedLitres: e.target.value }))}
+                    placeholder="e.g. 6200"
+                  />
+                  {opsErrors.tankUsedLitres && (
+                    <p className="mt-1 text-xs text-red-600">{opsErrors.tankUsedLitres}</p>
+                  )}
+                  <p className="mt-1 text-[11px] text-gray-400">Range: 0 to 200000</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Tank used %</label>
+                  <input
+                    className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm"
+                    value={opsForm.tankUsedPct}
+                    onChange={(e) => setOpsForm((prev) => ({ ...prev, tankUsedPct: e.target.value }))}
+                    placeholder="e.g. 62"
+                  />
+                  {opsErrors.tankUsedPct && (
+                    <p className="mt-1 text-xs text-red-600">{opsErrors.tankUsedPct}</p>
+                  )}
+                  <p className="mt-1 text-[11px] text-gray-400">Range: 0 to 100</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Cooling temp (°C)</label>
+                  <input
+                    className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm"
+                    value={opsForm.coolingTemperatureC}
+                    onChange={(e) => setOpsForm((prev) => ({ ...prev, coolingTemperatureC: e.target.value }))}
+                    placeholder="e.g. 3.8"
+                  />
+                  {opsErrors.coolingTemperatureC && (
+                    <p className="mt-1 text-xs text-red-600">{opsErrors.coolingTemperatureC}</p>
+                  )}
+                  <p className="mt-1 text-[11px] text-gray-400">Range: -10 to 25</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Power status</label>
+                  <select
+                    className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm bg-white"
+                    value={opsForm.powerStatus}
+                    onChange={(e) => setOpsForm((prev) => ({ ...prev, powerStatus: e.target.value }))}
+                  >
+                    <option value="">—</option>
+                    <option value="grid">Grid</option>
+                    <option value="generator">Generator</option>
+                    <option value="solar">Solar</option>
+                    <option value="outage">Outage</option>
+                    <option value="unknown">Unknown</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Generator status</label>
+                  <select
+                    className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm bg-white"
+                    value={opsForm.generatorStatus}
+                    onChange={(e) => setOpsForm((prev) => ({ ...prev, generatorStatus: e.target.value }))}
+                  >
+                    <option value="">—</option>
+                    <option value="available">Available</option>
+                    <option value="running">Running</option>
+                    <option value="fault">Fault</option>
+                    <option value="offline">Offline</option>
+                    <option value="unknown">Unknown</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Generator fuel %</label>
+                  <input
+                    className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm"
+                    value={opsForm.generatorFuelPct}
+                    onChange={(e) => setOpsForm((prev) => ({ ...prev, generatorFuelPct: e.target.value }))}
+                    placeholder="e.g. 78"
+                  />
+                  {opsErrors.generatorFuelPct && (
+                    <p className="mt-1 text-xs text-red-600">{opsErrors.generatorFuelPct}</p>
+                  )}
+                  <p className="mt-1 text-[11px] text-gray-400">Range: 0 to 100</p>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">Observed at</label>
+                  <input
+                    type="datetime-local"
+                    className="w-full border border-gray-200 rounded-sm px-3 py-2 text-sm"
+                    value={opsForm.observedAtLocal}
+                    onChange={(e) => setOpsForm((prev) => ({ ...prev, observedAtLocal: e.target.value }))}
+                  />
+                  {opsErrors.observedAtLocal && (
+                    <p className="mt-1 text-xs text-red-600">{opsErrors.observedAtLocal}</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="btn border border-gray-300 bg-white mr-2 min-w-[11rem]"
+                  disabled={opsSyncing || opsSaving}
+                  onClick={onSyncOperationalDefaults}
+                >
+                  {opsSyncing ? 'Syncing…' : 'Sync onboarding defaults'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary min-w-[9rem]"
+                  disabled={opsSaving || opsSyncing}
+                  onClick={onSaveOperationalConfig}
+                >
+                  {opsSaving ? 'Saving…' : 'Save config'}
+                </button>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
 
       <Card title="Location" step="1" subtitle="Section 1 — MCC location & geo">
         {locLabels?.path && locLabels.path !== '—' && (
