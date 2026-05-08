@@ -177,7 +177,10 @@ async function bootstrap() {
     .addBearerAuth()
     .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, 'X-API-Key')
     .build();
-  const document = SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, config, {
+    // Ensures routes nested in imported modules are fully discovered in Swagger.
+    deepScanRoutes: true,
+  });
   SwaggerModule.setup('api/docs', app, document, {
     customCssUrl: 'https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.11.0/swagger-ui.min.css',
     customJs: [

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { mccOperationsApi, type MccGateDeliveryRow } from '@/lib/api/mcc-operations';
 import { suppliersApi, type Supplier } from '@/lib/api/suppliers';
 import { useAuthStore } from '@/store/auth';
@@ -22,6 +23,7 @@ const INPUT_FULL =
 const SOURCE_TYPE_OPTIONS = [
   { value: '', label: 'All types' },
   { value: 'direct', label: 'Direct farmer' },
+  { value: 'umucunda', label: 'Umucunda (all)' },
   { value: 'umucunda_a', label: 'Umucunda A' },
   { value: 'umucunda_b', label: 'Umucunda B' },
 ];
@@ -42,8 +44,23 @@ function defaultFromDate() {
   return isoDate(x);
 }
 
+function sanitizeDateParam(value: string | null, fallback: string) {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback;
+}
+
+function sanitizeSourceType(value: string | null) {
+  return ['direct', 'umucunda', 'umucunda_a', 'umucunda_b'].includes(value ?? '') ? (value as string) : '';
+}
+
+function sanitizeManifestFilter(value: string | null) {
+  return value === 'none' || value === 'has' ? value : '';
+}
+
 /** Gate intake log + record modal (same behavior as legacy `/operations/gate`). */
 export default function GateArrivalsPanel({ showPageHeading = false }: { showPageHeading?: boolean }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
   const { hasAnyPermission } = usePermission();
   const canManage = hasAnyPermission([
@@ -58,11 +75,11 @@ export default function GateArrivalsPanel({ showPageHeading = false }: { showPag
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [from, setFrom] = useState(defaultFromDate);
-  const [to, setTo] = useState(() => isoDate(new Date()));
-  const [supplierAccountIdFilter, setSupplierAccountIdFilter] = useState('');
-  const [sourceTypeFilter, setSourceTypeFilter] = useState('');
-  const [manifestFilter, setManifestFilter] = useState('');
+  const [from, setFrom] = useState(() => sanitizeDateParam(searchParams.get('from'), defaultFromDate()));
+  const [to, setTo] = useState(() => sanitizeDateParam(searchParams.get('to'), isoDate(new Date())));
+  const [supplierAccountIdFilter, setSupplierAccountIdFilter] = useState(() => searchParams.get('supplier_account_id') ?? '');
+  const [sourceTypeFilter, setSourceTypeFilter] = useState(() => sanitizeSourceType(searchParams.get('source_type')));
+  const [manifestFilter, setManifestFilter] = useState(() => sanitizeManifestFilter(searchParams.get('manifest')));
 
   const [sourceType, setSourceType] = useState<'direct' | 'umucunda_a' | 'umucunda_b'>('direct');
   const [sourceAccountId, setSourceAccountId] = useState('');
@@ -85,7 +102,8 @@ export default function GateArrivalsPanel({ showPageHeading = false }: { showPag
 
   const filteredRows = useMemo(() => {
     return rows.filter((r) => {
-      if (sourceTypeFilter && r.source_type !== sourceTypeFilter) return false;
+      if (sourceTypeFilter === 'umucunda' && !['umucunda_a', 'umucunda_b'].includes(r.source_type)) return false;
+      if (sourceTypeFilter && sourceTypeFilter !== 'umucunda' && r.source_type !== sourceTypeFilter) return false;
       if (manifestFilter === 'none' && r.manifest) return false;
       if (manifestFilter === 'has' && !r.manifest) return false;
       if (supplierAccountIdFilter && r.source_account?.id !== supplierAccountIdFilter) return false;
@@ -116,6 +134,24 @@ export default function GateArrivalsPanel({ showPageHeading = false }: { showPag
   const handleApplyFilters = () => {
     void load();
   };
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    const setOrDelete = (key: string, value: string) => {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    };
+    setOrDelete('from', from);
+    setOrDelete('to', to);
+    setOrDelete('supplier_account_id', supplierAccountIdFilter);
+    setOrDelete('source_type', sourceTypeFilter);
+    setOrDelete('manifest', manifestFilter);
+    const current = searchParams.toString();
+    const next = params.toString();
+    if (next !== current) {
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    }
+  }, [from, to, supplierAccountIdFilter, sourceTypeFilter, manifestFilter, pathname, router, searchParams]);
 
   const load = useCallback(async () => {
     if (!accountId) {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { mccOperationsApi, type MccGateDeliveryRow, type MccManifestRow } from '@/lib/api/mcc-operations';
 import { suppliersApi, type Supplier } from '@/lib/api/suppliers';
 import { useAuthStore } from '@/store/auth';
@@ -28,6 +29,10 @@ function defaultManifestFrom() {
   return isoDate(x);
 }
 
+function sanitizeDateParam(value: string | null, fallback: string) {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback;
+}
+
 type DraftLine = { farmer_supplier_account_id: string; declared_litres: string; container_id: string };
 
 function emptyDraftLine(): DraftLine {
@@ -44,6 +49,9 @@ function linesFromManifest(m: MccManifestRow): DraftLine[] {
 }
 
 export default function OperationsManifestsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
   const { hasPermission, hasAnyPermission } = usePermission();
   const accountId = currentAccount?.account_id ?? '';
@@ -64,12 +72,23 @@ export default function OperationsManifestsPage() {
   const [rejectManifest, setRejectManifest] = useState<MccManifestRow | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [saving, setSaving] = useState(false);
-  const [from, setFrom] = useState(defaultManifestFrom);
-  const [to, setTo] = useState(() => isoDate(new Date()));
+  const [from, setFrom] = useState(() => sanitizeDateParam(searchParams.get('from'), defaultManifestFrom()));
+  const [to, setTo] = useState(() => sanitizeDateParam(searchParams.get('to'), isoDate(new Date())));
 
   const [gateId, setGateId] = useState('');
   const [createLines, setCreateLines] = useState<DraftLine[]>([emptyDraftLine()]);
   const [editLines, setEditLines] = useState<DraftLine[]>([emptyDraftLine()]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('from', from);
+    params.set('to', to);
+    const current = searchParams.toString();
+    const next = params.toString();
+    if (next !== current) {
+      router.replace(`${pathname}?${next}`, { scroll: false });
+    }
+  }, [from, to, pathname, router, searchParams]);
 
   const {
     page: manifestPage,

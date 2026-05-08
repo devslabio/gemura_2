@@ -34,9 +34,9 @@ const PANEL =
   'bg-white border border-gray-200 rounded-sm p-5 min-h-0 h-full flex flex-col';
 const PANEL_TITLE = 'text-sm font-semibold text-gray-900';
 const PANEL_DESC = 'text-xs text-gray-500 mt-1 mb-4';
-const TH = 'text-left py-2 px-3 text-[11px] font-medium text-gray-700 border-b border-gray-200';
-const TD = 'py-2.5 px-3 text-[13px] text-gray-900 border-b border-gray-100 align-middle';
-const TD_MUTED = 'py-2.5 px-3 text-[13px] text-gray-600 border-b border-gray-100 align-middle';
+const TH = 'text-left py-2 px-3 text-[11px] font-medium text-gray-700 border-b border-gray-200 whitespace-nowrap';
+const TD = 'py-2.5 px-3 text-[13px] text-gray-900 border-b border-gray-100 align-middle whitespace-nowrap';
+const TD_MUTED = 'py-2.5 px-3 text-[13px] text-gray-600 border-b border-gray-100 align-middle whitespace-nowrap';
 const EMPTY = 'text-sm text-gray-500 py-10 text-center';
 
 const GATE_ROLE_OPTIONS = [
@@ -133,6 +133,15 @@ function resolutionLabel(status: string): string {
   return 'Unresolved';
 }
 
+function staffRoleLabel(role: string): string {
+  const match = GATE_ROLE_OPTIONS.find((opt) => opt.value === role);
+  if (match) return match.label;
+  return role
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 function badgeSubmitted(on: boolean) {
   return on
     ? 'inline-flex rounded-sm bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-800'
@@ -149,12 +158,14 @@ function KpiTile({
   sub,
   icon,
   accent,
+  href,
 }: {
   label: string;
   value: string;
   sub: string;
   icon: Parameters<typeof Icon>[0]['icon'];
   accent: 'blue' | 'green' | 'amber' | 'red' | 'slate';
+  href?: string;
 }) {
   const iconAccents = {
     blue: { bg: '#eff6ff', fg: '#004AAD' },
@@ -164,8 +175,8 @@ function KpiTile({
     slate: { bg: '#f3f4f6', fg: '#4b5563' },
   };
 
-  return (
-    <div className="rounded-sm border border-gray-200 bg-white p-4 min-h-[96px] min-w-0 transition-colors hover:border-gray-300">
+  const content = (
+    <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="mb-1 text-[11px] font-semibold text-gray-500 truncate">{label}</p>
@@ -179,6 +190,18 @@ function KpiTile({
           <Icon icon={icon} size="sm" />
         </div>
       </div>
+    </>
+  );
+  if (href) {
+    return (
+      <Link href={href} className="block rounded-sm border border-gray-200 bg-white p-4 min-h-[96px] min-w-0 transition-colors hover:border-gray-300">
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <div className="rounded-sm border border-gray-200 bg-white p-4 min-h-[96px] min-w-0 transition-colors hover:border-gray-300">
+      {content}
     </div>
   );
 }
@@ -306,81 +329,7 @@ export default function MccManagerDashboardSection({
     return 'bad' as const;
   }, [periodAvgDaily, litres7Avg]);
 
-  const rejectionAlertCount = gateRejections.length + rejectedMilkInPeriod.length;
-
-  const alerts = useMemo(() => {
-    const list: { id: string; priority: number; title: string; detail: string; tone: 'critical' | 'warn' | 'info' }[] =
-      [];
-    if (periodKey === 'day' && litresPeriod > 8000) {
-      list.push({
-        id: 'tank',
-        priority: 1,
-        title: 'Tank capacity',
-        detail: 'Cold storage trending high versus typical evening fill — confirm sensor or dip reading.',
-        tone: 'warn',
-      });
-    }
-    const pendingManifests = manifestRows.filter((m) => !m.submitted).length;
-    if (pendingManifests > 0) {
-      list.push({
-        id: 'manifest',
-        priority: 2,
-        title: 'Umucunda manifest window',
-        detail: `${pendingManifests} route(s) still pending submission or acceptance.`,
-        tone: 'warn',
-      });
-    } else {
-      list.push({
-        id: 'manifest',
-        priority: 4,
-        title: 'Umucunda manifest window',
-        detail:
-          periodKey === 'day'
-            ? 'No manifest flags on today’s gate data.'
-            : `No manifest flags on gate snapshot (${rangeDateTo}).`,
-        tone: 'info',
-      });
-    }
-    if (rejectionAlertCount > 0) {
-      list.push({
-        id: 'reject',
-        priority: 0,
-        title: 'Rejection follow-up',
-        detail: `${gateRejections.length} gate test(s), ${rejectedMilkInPeriod.length} milk sale record(s) — review within 48h.`,
-        tone: 'critical',
-      });
-    }
-    list.push({
-      id: 'gen',
-      priority: 3,
-      title: 'Generator fuel check',
-      detail: 'Weekly walk-down due when maintenance scheduling is enabled.',
-      tone: 'info',
-    });
-    list.push({
-      id: 'credit',
-      priority: 5,
-      title: 'Farmer credit tier',
-      detail: 'No automatic tier changes pending.',
-      tone: 'info',
-    });
-    list.push({
-      id: 'ops',
-      priority: 6,
-      title: 'Gemura Ops',
-      detail: 'No inbound escalations.',
-      tone: 'info',
-    });
-    return list.sort((a, b) => a.priority - b.priority);
-  }, [
-    litresPeriod,
-    periodKey,
-    rangeDateTo,
-    rejectionAlertCount,
-    gateRejections.length,
-    rejectedMilkInPeriod.length,
-    manifestRows,
-  ]);
+  const alerts = mcc?.alerts ?? [];
 
   const reassignRole = useCallback(
     async (userAccountId: string, newRole: string) => {
@@ -471,15 +420,18 @@ export default function MccManagerDashboardSection({
   const deliveryPct = deliveryExpected > 0 ? Math.round((deliveryLogged / deliveryExpected) * 100) : 0;
   const manifestPct = manifestRows.length > 0 ? Math.round((submittedCount / manifestRows.length) * 100) : 100;
   const profileTankCapacity = mcc?.profile?.cooling_tank_total_capacity_litres ?? null;
-  const tankCapacityLitres = profileTankCapacity && profileTankCapacity > 0 ? profileTankCapacity : 10000;
+  const tankCapacityLitres = profileTankCapacity && profileTankCapacity > 0 ? profileTankCapacity : 0;
   const snapshotTankLitres = mcc?.facility_snapshot?.tank_used_litres;
   const tankLitres = snapshotTankLitres ?? gate?.total_litres ?? litresPeriod;
   const snapshotTankPct = mcc?.facility_snapshot?.tank_used_pct;
-  const tankPct =
+  const tankPct: number | null =
     snapshotTankPct != null
       ? Math.max(0, Math.min(100, Math.round(snapshotTankPct)))
-      : Math.max(0, Math.min(100, Math.round((tankLitres / tankCapacityLitres) * 100)));
-  const tankTone: 'green' | 'amber' | 'red' = tankPct >= 85 ? 'red' : tankPct >= 70 ? 'amber' : 'green';
+      : tankCapacityLitres > 0
+        ? Math.max(0, Math.min(100, Math.round((tankLitres / tankCapacityLitres) * 100)))
+        : null;
+  const tankTone: 'green' | 'amber' | 'red' | 'slate' =
+    tankPct == null ? 'slate' : tankPct >= 85 ? 'red' : tankPct >= 70 ? 'amber' : 'green';
   const litresTrend = (today?.breakdown?.length ? today.breakdown : last7?.breakdown ?? [])
     .slice(-14)
     .map((d) => ({
@@ -504,7 +456,10 @@ export default function MccManagerDashboardSection({
         .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
         .join(' ')
     : 'Unknown';
-  const tankTitle = `Bulk milk tank (${Math.round(tankCapacityLitres).toLocaleString()} L)`;
+  const tankTitle =
+    tankCapacityLitres > 0
+      ? `Bulk milk tank (${Math.round(tankCapacityLitres).toLocaleString()} L)`
+      : 'Bulk milk tank';
   const donutSeries = splitTotal > 0 ? [directL, umucundaL] : [0, 0];
   const deliveryShareOptions: ApexOptions = {
     chart: { type: 'donut', toolbar: { show: false }, fontFamily: 'inherit' },
@@ -552,6 +507,22 @@ export default function MccManagerDashboardSection({
     { name: 'Actual (L)', type: 'column', data: litresTrend.map((t) => Math.round(t.litres)) },
     { name: 'Expected (L)', type: 'line', data: trendExpected },
   ];
+  const buildOpsHref = (path: string, extra?: Record<string, string>) => {
+    const params = new URLSearchParams({
+      from: rangeDateFrom,
+      to: rangeDateTo,
+      ...(extra ?? {}),
+    });
+    return `${path}?${params.toString()}`;
+  };
+  const buildCollectionsHref = (extra?: Record<string, string>) => {
+    const params = new URLSearchParams({
+      date_from: rangeDateFrom,
+      date_to: rangeDateTo,
+      ...(extra ?? {}),
+    });
+    return `/collections?${params.toString()}`;
+  };
 
   return (
     <div className="space-y-4 mb-4">
@@ -572,6 +543,7 @@ export default function MccManagerDashboardSection({
           }
           icon={faBox}
           accent={intakeVsAvg === 'good' ? 'green' : intakeVsAvg === 'amber' ? 'amber' : intakeVsAvg === 'bad' ? 'red' : 'blue'}
+          href={buildCollectionsHref()}
         />
         <KpiTile
           label="Deliveries logged / expected"
@@ -585,6 +557,7 @@ export default function MccManagerDashboardSection({
           }
           icon={faClipboardList}
           accent={deliveryPct >= 95 ? 'green' : deliveryPct >= 80 ? 'amber' : 'red'}
+          href={buildOpsHref('/operations/gate')}
         />
         <KpiTile
           label="Via Umucunda"
@@ -592,6 +565,7 @@ export default function MccManagerDashboardSection({
           sub={splitTotal > 0 ? `${pctUmu}% of intake` : 'No split yet'}
           icon={faChartLine}
           accent="blue"
+          href={buildOpsHref('/operations/gate', { source_type: 'umucunda' })}
         />
         <KpiTile
           label="Direct Farmer"
@@ -599,6 +573,7 @@ export default function MccManagerDashboardSection({
           sub={splitTotal > 0 ? `${pctDirect}% of intake` : 'No split yet'}
           icon={faCheck}
           accent="green"
+          href={buildCollectionsHref()}
         />
         <KpiTile
           label={rejectionsStatLabel(periodKey)}
@@ -606,6 +581,7 @@ export default function MccManagerDashboardSection({
           sub={`${gateRejections.length} gate • ${rejectedMilkInPeriod.length} sale`}
           icon={faTriangleExclamation}
           accent={rejectedLitres > 0 ? 'amber' : 'green'}
+          href={buildOpsHref('/operations/traceability', { outcome: 'rejected' })}
         />
         <KpiTile
           label="Unresolved Sources"
@@ -613,13 +589,19 @@ export default function MccManagerDashboardSection({
           sub={unresolvedGateRejections.length > 0 ? 'Needs follow-up' : 'No pending approvals'}
           icon={faTriangleExclamation}
           accent={unresolvedGateRejections.length > 0 ? 'red' : 'green'}
+          href={buildOpsHref('/operations/traceability', { outcome: 'rejected' })}
         />
         <KpiTile
           label="Tank Capacity Used"
-          value={`${tankPct}%`}
-          sub={`${Math.round(tankLitres).toLocaleString()} / ${tankCapacityLitres.toLocaleString()} L`}
+          value={tankPct == null ? '—' : `${tankPct}%`}
+          sub={
+            tankCapacityLitres > 0
+              ? `${Math.round(tankLitres).toLocaleString()} / ${tankCapacityLitres.toLocaleString()} L`
+              : 'Set tank capacity'
+          }
           icon={faClock}
           accent={tankTone}
+          href={buildOpsHref('/operations/gate')}
         />
         <KpiTile
           label="Manifest Compliance"
@@ -627,6 +609,7 @@ export default function MccManagerDashboardSection({
           sub={manifestRows.length ? `${submittedCount}/${manifestRows.length} submitted` : 'No manifests'}
           icon={faClipboardList}
           accent={manifestPct >= 90 ? 'green' : manifestPct >= 80 ? 'amber' : 'red'}
+          href={buildOpsHref('/operations/manifests')}
         />
         <KpiTile
           label="Wallet balance"
@@ -634,6 +617,7 @@ export default function MccManagerDashboardSection({
           sub="Available"
           icon={faWallet}
           accent="slate"
+          href={buildOpsHref('/finance/transactions')}
         />
         <KpiTile
           label="Staff on shift"
@@ -641,6 +625,7 @@ export default function MccManagerDashboardSection({
           sub={`${staffRows.length} scheduled`}
           icon={faUserFriends}
           accent={onDutyCount > 0 ? 'green' : 'amber'}
+          href={buildOpsHref('/operations/staff')}
         />
       </div>
 
@@ -707,10 +692,12 @@ export default function MccManagerDashboardSection({
               </table>
             </div>
           )}
-          <Link href="/operations/manifests" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
-            All manifests
-            <Icon icon={faArrowRight} size="xs" />
-          </Link>
+          <div className="mt-auto pt-3 flex justify-center">
+            <Link href={buildOpsHref('/operations/manifests')} className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
+              All manifests
+              <Icon icon={faArrowRight} size="xs" />
+            </Link>
+          </div>
         </section>
 
         <section className={PANEL}>
@@ -735,13 +722,13 @@ export default function MccManagerDashboardSection({
                     <tr key={r.test_result_id} className="hover:bg-gray-50/80">
                       <td className={TD}>{r.source_label}</td>
                       <td className={`${TD} text-right tabular-nums`}>{r.volume_litres}</td>
-                      <td className={`${TD} max-w-[140px]`}>
-                        <span className="line-clamp-2" title={r.rejection_cause}>
+                      <td className={TD}>
+                        <span title={r.rejection_cause}>
                           {r.rejection_cause}
                         </span>
                       </td>
-                      <td className={`${TD} max-w-[90px]`}>
-                        <span className="line-clamp-2 text-gray-600" title={r.farms_summary}>
+                      <td className={TD}>
+                        <span className="text-gray-600" title={r.farms_summary}>
                           {r.farms_summary}
                         </span>
                       </td>
@@ -754,10 +741,12 @@ export default function MccManagerDashboardSection({
               </table>
             </div>
           )}
-          <Link href="/operations/traceability" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
-            Rejection log
-            <Icon icon={faArrowRight} size="xs" />
-          </Link>
+          <div className="mt-auto pt-3 flex justify-center">
+            <Link href={buildOpsHref('/operations/traceability', { outcome: 'rejected' })} className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
+              Rejection log
+              <Icon icon={faArrowRight} size="xs" />
+            </Link>
+          </div>
         </section>
       </div>
 
@@ -768,16 +757,18 @@ export default function MccManagerDashboardSection({
             <div className="rounded-sm border border-gray-200 p-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-700">{tankTitle}</span>
-                <span className="text-sm font-semibold text-gray-900">{tankPct}%</span>
+                <span className="text-sm font-semibold text-gray-900">{tankPct == null ? '—' : `${tankPct}%`}</span>
               </div>
               <div className="mt-2 h-2.5 overflow-hidden rounded-sm bg-gray-100">
                 <div
-                  className={`h-full rounded-sm ${tankTone === 'red' ? 'bg-red-500' : tankTone === 'amber' ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                  style={{ width: `${tankPct}%` }}
+                  className={`h-full rounded-sm ${tankTone === 'red' ? 'bg-red-500' : tankTone === 'amber' ? 'bg-amber-500' : tankTone === 'green' ? 'bg-emerald-500' : 'bg-gray-300'}`}
+                  style={{ width: `${tankPct ?? 0}%` }}
                 />
               </div>
               <p className="mt-2 text-xs text-gray-500">
-                {Math.round(tankLitres).toLocaleString()} / {tankCapacityLitres.toLocaleString()} L
+                {tankCapacityLitres > 0
+                  ? `${Math.round(tankLitres).toLocaleString()} / ${tankCapacityLitres.toLocaleString()} L`
+                  : 'Tank capacity not set'}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -795,10 +786,16 @@ export default function MccManagerDashboardSection({
               </div>
               <div className="rounded-sm border border-gray-200 p-3">
                 <p className="text-xs uppercase tracking-wide text-gray-500">Capacity status</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">{tankTone === 'red' ? 'Critical' : tankTone === 'amber' ? 'Watch' : 'Safe'}</p>
+                <p className="mt-1 text-sm font-semibold text-gray-900">
+                  {tankPct == null ? 'Not set' : tankTone === 'red' ? 'Critical' : tankTone === 'amber' ? 'Watch' : 'Safe'}
+                </p>
               </div>
             </div>
-            <p className="text-xs text-gray-500">Target: keep below 85% by evening intake close.</p>
+            <p className="text-xs text-gray-500">
+              {tankCapacityLitres > 0
+                ? 'Target: keep below 85% by evening intake close.'
+                : 'Set tank capacity in operational profile to enable utilization targets.'}
+            </p>
           </div>
         </section>
 
@@ -826,25 +823,9 @@ export default function MccManagerDashboardSection({
                     <tr key={row.user_account_id} className="hover:bg-gray-50/80">
                       <td className={`${TD} font-medium`}>{row.name}</td>
                       <td className={TD}>
-                        {canReassignGateStaff ? (
-                          <select
-                            value={row.role}
-                            onChange={(e) => reassignRole(row.user_account_id, e.target.value)}
-                            className="w-full min-w-0 max-w-[170px] rounded-sm border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
-                            aria-label={`Role for ${row.name}`}
-                          >
-                            {!GATE_ROLE_OPTIONS.some((o) => o.value === row.role) ? (
-                              <option value={row.role}>{row.role}</option>
-                            ) : null}
-                            {GATE_ROLE_OPTIONS.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <span className="text-sm text-gray-800">{row.role}</span>
-                        )}
+                        <span className="inline-flex rounded-sm border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-semibold text-gray-700">
+                          {staffRoleLabel(row.role)}
+                        </span>
                       </td>
                       <td className={`${TD} text-right`}>
                         <div className="inline-flex items-center gap-2 min-w-[78px]">
@@ -880,10 +861,12 @@ export default function MccManagerDashboardSection({
               </table>
             </div>
           )}
-          <Link href="/operations/staff" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
-            View full staff schedule
-            <Icon icon={faArrowRight} size="xs" />
-          </Link>
+          <div className="mt-auto pt-3 flex justify-start">
+            <Link href={buildOpsHref('/operations/staff')} className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
+              View full staff schedule
+              <Icon icon={faArrowRight} size="xs" />
+            </Link>
+          </div>
         </section>
 
         <section className={PANEL}>
@@ -950,8 +933,8 @@ export default function MccManagerDashboardSection({
                   <tr key={r.test_result_id} className="hover:bg-gray-50/80">
                     <td className={TD}>{r.source_label}</td>
                     <td className={`${TD} text-right tabular-nums`}>{r.volume_litres}</td>
-                    <td className={`${TD} max-w-[220px]`}>
-                      <span className="line-clamp-2" title={r.rejection_cause}>
+                    <td className={TD}>
+                      <span title={r.rejection_cause}>
                         {r.rejection_cause}
                       </span>
                     </td>

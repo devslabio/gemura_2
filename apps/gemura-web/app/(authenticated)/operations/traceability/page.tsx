@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   mccOperationsApi,
   type MccGateDeliveryRow,
@@ -33,6 +33,14 @@ function defaultTraceabilityFrom() {
   const x = new Date();
   x.setUTCDate(x.getUTCDate() - 30);
   return isoDate(x);
+}
+
+function sanitizeDateParam(value: string | null, fallback: string) {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback;
+}
+
+function sanitizeOutcomeParam(value: string | null) {
+  return value === 'pending' || value === 'accepted' || value === 'rejected' ? value : '';
 }
 
 function isUmucundaSource(sourceType: string) {
@@ -86,15 +94,16 @@ function TraceabilityPageInner() {
   const { mccTraceabilityMutations: canManage } = useCrudPermissions();
   const toast = useToastStore();
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const accountId = currentAccount?.account_id ?? '';
   const [rows, setRows] = useState<MccTestResultRow[]>([]);
   const [gates, setGates] = useState<MccGateDeliveryRow[]>([]);
   const [manifests, setManifests] = useState<MccManifestRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [outcome, setOutcome] = useState<string>('');
-  const [from, setFrom] = useState(defaultTraceabilityFrom);
-  const [to, setTo] = useState(() => isoDate(new Date()));
+  const [outcome, setOutcome] = useState<string>(() => sanitizeOutcomeParam(searchParams.get('outcome')));
+  const [from, setFrom] = useState(() => sanitizeDateParam(searchParams.get('from'), defaultTraceabilityFrom()));
+  const [to, setTo] = useState(() => sanitizeDateParam(searchParams.get('to'), isoDate(new Date())));
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
   const [editingRow, setEditingRow] = useState<MccTestResultRow | null>(null);
@@ -111,7 +120,6 @@ function TraceabilityPageInner() {
   const [qualityNotes, setQualityNotes] = useState('');
   const [manifestLineId, setManifestLineId] = useState('');
   const testNextHandledRef = useRef(false);
-  const outcomeDeepLinkConsumedRef = useRef(false);
   const [resolvingTestId, setResolvingTestId] = useState<string | null>(null);
 
   const sortedTestRows = useMemo(() => {
@@ -284,29 +292,37 @@ function TraceabilityPageInner() {
   }, []);
 
   useEffect(() => {
-    if (searchParams.get('outcome') !== 'pending') {
-      outcomeDeepLinkConsumedRef.current = false;
-      return;
+    const params = new URLSearchParams(searchParams.toString());
+    const setOrDelete = (key: string, value: string) => {
+      if (value) params.set(key, value);
+      else params.delete(key);
+    };
+    setOrDelete('outcome', outcome);
+    setOrDelete('from', from);
+    setOrDelete('to', to);
+    const current = searchParams.toString();
+    const next = params.toString();
+    if (next !== current) {
+      router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
     }
-    if (outcomeDeepLinkConsumedRef.current) return;
-    outcomeDeepLinkConsumedRef.current = true;
-    setOutcome('pending');
-    router.replace('/operations/traceability', { scroll: false });
-  }, [searchParams, router]);
+  }, [outcome, from, to, pathname, router, searchParams]);
 
   useEffect(() => {
     if (searchParams.get('testNext') !== '1') return;
     if (!canManage || loading) return;
     if (testNextHandledRef.current) return;
     testNextHandledRef.current = true;
-    router.replace('/operations/traceability', { scroll: false });
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('testNext');
+    const next = params.toString();
+    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
     const first = gatesEligibleForTest[0];
     if (first) {
       openCreateModal(first.id);
     } else {
       toast.error('No eligible gate delivery for a new test.');
     }
-  }, [searchParams, loading, canManage, gatesEligibleForTest, router, toast, openCreateModal]);
+  }, [searchParams, loading, canManage, gatesEligibleForTest, pathname, router, toast, openCreateModal]);
 
   useEffect(() => {
     if (searchParams.get('testNext') !== '1') testNextHandledRef.current = false;

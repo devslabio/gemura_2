@@ -2,6 +2,7 @@ import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@ne
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
@@ -57,6 +58,7 @@ export class AccountMembershipsController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update membership status / member_since' })
+  @ApiParam({ name: 'id', description: 'Account membership ID' })
   @ApiUnauthorizedResponse()
   async update(
     @CurrentUser() user: User,
