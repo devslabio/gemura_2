@@ -362,12 +362,20 @@ model Account {
   mcc_cooling_tank_profiles      MccCoolingTankProfile[]
   mcc_facility_snapshot          MccFacilitySnapshot?
   user_accounts_umucunda_scope   UserAccount[]             @relation("UserAccountUmucundaSupplierScope")
+  /// Finest admin location (typically village) for MCC/tenant placement; used for regional supervision.
+  operational_location_id String?   @map("operational_location_id") @db.Uuid
+  operational_location    Location? @relation("AccountOperationalLocation", fields: [operational_location_id], references: [id], onDelete: SetNull)
+  /// Denormalized district (from path of operational_location_id) for filtering and supervisor scope matching.
+  operational_district_id String? @map("operational_district_id") @db.Uuid
+  operational_district    Location? @relation("AccountOperationalDistrict", fields: [operational_district_id], references: [id], onDelete: SetNull)
 
   @@index([code])
   @@index([type])
   @@index([status])
   @@index([parent_id])
   @@index([created_at])
+  @@index([operational_location_id])
+  @@index([operational_district_id])
   @@map("accounts")
 }
 
@@ -455,6 +463,7 @@ model User {
   inventory_sales_created      InventorySale[]           @relation("InventorySaleCreatedBy")
   inventory_movements_created  InventoryMovement[]       @relation("InventoryMovementCreatedBy")
   api_keys_created             ApiKey[]
+  regional_supervisor_districts RegionalSupervisorDistrict[]
 
   @@index([code])
   @@index([phone])
@@ -1824,11 +1833,30 @@ model Location {
   parent   Location?  @relation("LocationParent", fields: [parent_id], references: [id], onDelete: Restrict)
   children Location[] @relation("LocationParent")
   farms    Farm[]
+  accounts_operational_location Account[] @relation("AccountOperationalLocation")
+  accounts_operational_district   Account[] @relation("AccountOperationalDistrict")
+  regional_supervisor_districts   RegionalSupervisorDistrict[]
 
   @@unique([code])
   @@index([location_type])
   @@index([parent_id])
   @@map("locations")
+}
+
+/// Districts a platform user may supervise when they hold the `regional_supervisor` role (admin-managed).
+model RegionalSupervisorDistrict {
+  id                   String   @id @default(uuid()) @db.Uuid
+  user_id              String   @map("user_id") @db.Uuid
+  district_location_id String   @map("district_location_id") @db.Uuid
+  created_at           DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  district Location @relation(fields: [district_location_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, district_location_id])
+  @@index([user_id])
+  @@index([district_location_id])
+  @@map("regional_supervisor_districts")
 }
 
 model Farm {
