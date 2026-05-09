@@ -171,6 +171,81 @@ export interface UsageDashboardData {
   }>;
 }
 
+export type AdminPlatformPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+export interface PlatformMilkSaleRow {
+  id: string;
+  quantity: number;
+  unit_price: number;
+  amount_paid: number;
+  status: string;
+  sale_at: string;
+  supplier_name: string | null;
+  supplier_code: string | null;
+  customer_name: string | null;
+  customer_code: string | null;
+}
+
+export interface PlatformLoanRow {
+  id: string;
+  principal: number;
+  amount_repaid: number;
+  status: string;
+  disbursement_date: string;
+  borrower_label: string;
+  borrower_code: string | null;
+  lender_name: string | null;
+  lender_code: string | null;
+}
+
+export interface PlatformLoanRepaymentRow {
+  id: string;
+  amount: number;
+  repayment_date: string;
+  source: string;
+  loan_id: string;
+  borrower_label: string;
+  lender_name: string | null;
+}
+
+export interface PlatformPayrollRunRow {
+  id: string;
+  run_name: string;
+  run_date: string;
+  total_amount: number;
+  status: string;
+  account_name: string | null;
+  account_code: string | null;
+}
+
+export interface PlatformInventorySaleRow {
+  id: string;
+  quantity: number;
+  unit_price: number;
+  total_amount: number;
+  sale_date: string;
+  buyer_label: string;
+  buyer_code: string | null;
+  product_name: string;
+  payment_status: string;
+}
+
+export interface PlatformAuditEventRow {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  user_id: string | null;
+  user_label: string | null;
+  created_at: string;
+  ip_address: string | null;
+}
+
 export interface UserListItem {
   id: string;
   name: string;
@@ -675,5 +750,158 @@ export const adminApi = {
   ): Promise<{ code: number; status: string; message: string; data: unknown }> => {
     const params = accountId ? { account_id: accountId } : {};
     return apiClient.post(`/admin/onboarding-submissions/${submissionId}/needs-changes`, { notes }, { params });
+  },
+
+  listPlatformMilkSales: async (
+    accountId: string | undefined,
+    params: {
+      scope: 'collections' | 'rejections';
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: {
+      scope: string;
+      period: { start: string; end: string };
+      rows: PlatformMilkSaleRow[];
+      pagination: AdminPlatformPagination;
+    };
+  }> => {
+    const q: Record<string, unknown> = {
+      scope: params.scope,
+      page: params.page ?? 1,
+      limit: params.limit ?? 25,
+    };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/milk-sales', { params: q });
+  },
+
+  listPlatformLoans: async (
+    accountId: string | undefined,
+    params: {
+      mode: 'active_portfolio' | 'disbursed_in_period';
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { mode: string; rows: PlatformLoanRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = {
+      mode: params.mode,
+      page: params.page ?? 1,
+      limit: params.limit ?? 25,
+    };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/loans', { params: q });
+  },
+
+  listPlatformLoanRepayments: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformLoanRepaymentRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/loan-repayments', { params: q });
+  },
+
+  listPlatformPayrollRuns: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformPayrollRunRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/payroll-runs', { params: q });
+  },
+
+  listPlatformInventorySales: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformInventorySaleRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/inventory-sales', { params: q });
+  },
+
+  listPlatformAuditEvents: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformAuditEventRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/audit-events', { params: q });
   },
 };

@@ -3318,6 +3318,419 @@ export class AdminService {
     };
   }
 
+  /** Paginated milk sales for Gemura Admin drill-down (matches dashboard period semantics). */
+  async listPlatformMilkSales(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      scope: 'collections' | 'rejections';
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.MilkSaleWhereInput =
+      opts.scope === 'rejections'
+        ? {
+            status: 'rejected',
+            sale_at: { gte: bounds.gte, lte: bounds.lte },
+          }
+        : {
+            status: { not: 'deleted' },
+            sale_at: { gte: bounds.gte, lte: bounds.lte },
+          };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.milkSale.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { sale_at: 'desc' },
+        select: {
+          id: true,
+          quantity: true,
+          unit_price: true,
+          status: true,
+          sale_at: true,
+          amount_paid: true,
+          supplier_account: { select: { id: true, name: true, code: true } },
+          customer_account: { select: { id: true, name: true, code: true } },
+        },
+      }),
+      this.prisma.milkSale.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Milk transactions retrieved successfully.',
+      data: {
+        scope: opts.scope,
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          quantity: Number(r.quantity),
+          unit_price: Number(r.unit_price),
+          amount_paid: Number(r.amount_paid),
+          status: r.status,
+          sale_at: r.sale_at.toISOString(),
+          supplier_name: r.supplier_account?.name ?? null,
+          supplier_code: r.supplier_account?.code ?? null,
+          customer_name: r.customer_account?.name ?? null,
+          customer_code: r.customer_account?.code ?? null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  /** Active loans (portfolio) or loans disbursed in the dashboard period. */
+  async listPlatformLoans(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      mode: 'active_portfolio' | 'disbursed_in_period';
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.LoanWhereInput =
+      opts.mode === 'active_portfolio'
+        ? { status: 'active' }
+        : (() => {
+            const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+            return { disbursement_date: { gte: bounds.gte, lte: bounds.lte } };
+          })();
+
+    const [rows, total] = await Promise.all([
+      this.prisma.loan.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { disbursement_date: 'desc' },
+        select: {
+          id: true,
+          principal: true,
+          amount_repaid: true,
+          status: true,
+          disbursement_date: true,
+          borrower_name: true,
+          borrower_account: { select: { name: true, code: true } },
+          lender_account: { select: { name: true, code: true } },
+        },
+      }),
+      this.prisma.loan.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Loans retrieved successfully.',
+      data: {
+        mode: opts.mode,
+        rows: rows.map((r) => ({
+          id: r.id,
+          principal: Number(r.principal),
+          amount_repaid: Number(r.amount_repaid),
+          status: r.status,
+          disbursement_date: r.disbursement_date.toISOString(),
+          borrower_label: r.borrower_account?.name ?? r.borrower_name ?? 'Borrower',
+          borrower_code: r.borrower_account?.code ?? null,
+          lender_name: r.lender_account?.name ?? null,
+          lender_code: r.lender_account?.code ?? null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  async listPlatformLoanRepayments(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where = { repayment_date: { gte: bounds.gte, lte: bounds.lte } };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.loanRepayment.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { repayment_date: 'desc' },
+        select: {
+          id: true,
+          amount: true,
+          repayment_date: true,
+          source: true,
+          loan: {
+            select: {
+              id: true,
+              borrower_name: true,
+              borrower_account: { select: { name: true, code: true } },
+              lender_account: { select: { name: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.loanRepayment.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Loan repayments retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          amount: Number(r.amount),
+          repayment_date: r.repayment_date.toISOString(),
+          source: r.source,
+          loan_id: r.loan.id,
+          borrower_label: r.loan.borrower_account?.name ?? r.loan.borrower_name ?? 'Borrower',
+          lender_name: r.loan.lender_account?.name ?? null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  async listPlatformPayrollRuns(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where = {
+      run_date: { gte: bounds.gte, lte: bounds.lte },
+      status: 'completed',
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.payrollRun.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { run_date: 'desc' },
+        select: {
+          id: true,
+          run_name: true,
+          run_date: true,
+          total_amount: true,
+          status: true,
+          account: { select: { name: true, code: true } },
+        },
+      }),
+      this.prisma.payrollRun.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Payroll runs retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          run_name: r.run_name ?? 'Payroll run',
+          run_date: r.run_date.toISOString(),
+          total_amount: Number(r.total_amount),
+          status: r.status,
+          account_name: r.account?.name ?? null,
+          account_code: r.account?.code ?? null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  async listPlatformInventorySales(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where = { sale_date: { gte: bounds.gte, lte: bounds.lte } };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.inventorySale.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { sale_date: 'desc' },
+        select: {
+          id: true,
+          quantity: true,
+          unit_price: true,
+          total_amount: true,
+          sale_date: true,
+          buyer_name: true,
+          payment_status: true,
+          product: { select: { name: true } },
+          buyer_account: { select: { name: true, code: true } },
+        },
+      }),
+      this.prisma.inventorySale.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Inventory sales retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          quantity: Number(r.quantity),
+          unit_price: Number(r.unit_price),
+          total_amount: Number(r.total_amount),
+          sale_date: r.sale_date.toISOString(),
+          buyer_label: r.buyer_account?.name ?? r.buyer_name ?? 'Buyer',
+          buyer_code: r.buyer_account?.code ?? null,
+          product_name: r.product?.name ?? 'Product',
+          payment_status: r.payment_status,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  async listPlatformAuditLogs(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where = { created_at: { gte: bounds.gte, lte: bounds.lte } };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { created_at: 'desc' },
+        select: {
+          id: true,
+          entity_type: true,
+          entity_id: true,
+          action: true,
+          user_id: true,
+          created_at: true,
+          ip_address: true,
+        },
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+
+    const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))] as string[];
+    const users =
+      userIds.length > 0
+        ? await this.prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, email: true, first_name: true, last_name: true },
+          })
+        : [];
+    const userLabel = new Map(
+      users.map((u) => [
+        u.id,
+        [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || u.id,
+      ]),
+    );
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Audit events retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          entity_type: r.entity_type,
+          entity_id: r.entity_id,
+          action: r.action,
+          user_id: r.user_id,
+          user_label: r.user_id ? userLabel.get(r.user_id) ?? null : null,
+          created_at: r.created_at.toISOString(),
+          ip_address: r.ip_address,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
   /**
    * Get all platform roles with permission codes (database-backed).
    * Initial links come from config only when a role has none yet; admins change grants via `updatePlatformRole`.
