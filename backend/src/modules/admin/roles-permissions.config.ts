@@ -54,6 +54,13 @@ export interface PermissionDef {
 export const PERMISSIONS: PermissionDef[] = [
   { code: 'dashboard.view', name: 'View dashboard', description: 'Access admin/overview dashboard', category: 'Admin' },
   { code: 'manage_users', name: 'Manage users', description: 'Create, edit, and manage users and roles', category: 'Admin' },
+  {
+    code: 'view_regional_accounts',
+    name: 'View regional platform accounts',
+    description:
+      'List and open platform tenant/branch accounts whose operational district is in the regional supervisor scope (assigned by admins).',
+    category: 'Admin',
+  },
   { code: 'view_sales', name: 'View sales', description: 'View sales list and details', category: 'Sales' },
   { code: 'create_sales', name: 'Create sales', description: 'Create new sales', category: 'Sales' },
   { code: 'update_sales', name: 'Update sales', description: 'Edit and update sales', category: 'Sales' },
@@ -203,6 +210,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
     'mcc_view_operations',
     'view_inventory',
     'view_analytics',
+    'view_regional_accounts',
   ],
   umucunda_a: [
     'dashboard.view',

@@ -41,8 +41,9 @@ export default function AccountDetailsPage() {
   const accountId = params.id as string;
   const { setCurrentAccount } = useAuthStore();
   const { currentAccount } = useAuthStore();
-  const { canManageUsers, isAdmin } = usePermission();
-  const allowed = canManageUsers() || isAdmin();
+  const { canManageUsers, isAdmin, canViewPlatformAccounts } = usePermission();
+  const allowed = canViewPlatformAccounts();
+  const canEditPlatformAccount = canManageUsers() || isAdmin();
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -193,15 +194,17 @@ export default function AccountDetailsPage() {
                     <Icon icon={faMapPin} size="sm" className="mr-2 text-gray-400 mt-0.5" />
                     <span className="text-gray-900">{platform.operational_location_label || 'Not set'}</span>
                   </div>
-                  <div className="mt-3">
-                    <Link
-                      href="/admin/regional-supervision"
-                      className="btn btn-secondary text-sm inline-flex items-center w-fit"
-                    >
-                      <Icon icon={faUserPlus} size="sm" className="mr-2" />
-                      Add supervisor
-                    </Link>
-                  </div>
+                  {canEditPlatformAccount ? (
+                    <div className="mt-3">
+                      <Link
+                        href="/admin/regional-supervision"
+                        className="btn btn-secondary text-sm inline-flex items-center w-fit"
+                      >
+                        <Icon icon={faUserPlus} size="sm" className="mr-2" />
+                        Add supervisor
+                      </Link>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
@@ -216,7 +219,12 @@ export default function AccountDetailsPage() {
             )}
 
             {(platform.type === 'tenant' || platform.type === 'branch') && (
-              <AccountOperationalMetricsSection adminAccountId={adminAccountId} detail={platform} onReload={load} />
+              <AccountOperationalMetricsSection
+                adminAccountId={adminAccountId}
+                detail={platform}
+                onReload={load}
+                allowEdit={canEditPlatformAccount}
+              />
             )}
           </div>
 
@@ -261,14 +269,16 @@ export default function AccountDetailsPage() {
                         Geolocation
                       </h2>
                     </div>
-                    <button
-                      type="button"
-                      className="btn btn-primary text-sm shrink-0 self-start sm:self-auto"
-                      onClick={() => setGeolocationModalOpen(true)}
-                    >
-                      <Icon icon={faEdit} size="sm" className="mr-2" />
-                      Edit geolocation
-                    </button>
+                    {canEditPlatformAccount ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary text-sm shrink-0 self-start sm:self-auto"
+                        onClick={() => setGeolocationModalOpen(true)}
+                      >
+                        <Icon icon={faEdit} size="sm" className="mr-2" />
+                        Edit geolocation
+                      </button>
+                    ) : null}
                   </div>
                   <div>
                     <label className="block text-sm text-gray-500 mb-1">Location</label>
@@ -337,18 +347,20 @@ export default function AccountDetailsPage() {
                     All platform accounts
                   </Link>
                 </li>
-                <li>
-                  <Link href="/admin/regional-supervision" className="text-[var(--primary)] hover:underline">
-                    Regional supervision
-                  </Link>
-                </li>
+                {canEditPlatformAccount ? (
+                  <li>
+                    <Link href="/admin/regional-supervision" className="text-[var(--primary)] hover:underline">
+                      Regional supervision
+                    </Link>
+                  </li>
+                ) : null}
               </ul>
             </div>
           </div>
         </div>
       )}
 
-      {platform && (platform.type === 'tenant' || platform.type === 'branch') ? (
+      {canEditPlatformAccount && platform && (platform.type === 'tenant' || platform.type === 'branch') ? (
         <Modal
           open={geolocationModalOpen}
           onClose={() => setGeolocationModalOpen(false)}

@@ -368,6 +368,9 @@ model Account {
   /// Denormalized district (from path of operational_location_id) for filtering and supervisor scope matching.
   operational_district_id String? @map("operational_district_id") @db.Uuid
   operational_district    Location? @relation("AccountOperationalDistrict", fields: [operational_district_id], references: [id], onDelete: SetNull)
+  /// Platform user with `regional_supervisor` role responsible for this account (admin-assigned).
+  regional_supervisor_user_id String? @map("regional_supervisor_user_id") @db.Uuid
+  regional_supervisor         User?   @relation("AccountRegionalSupervisor", fields: [regional_supervisor_user_id], references: [id], onDelete: SetNull)
 
   @@index([code])
   @@index([type])
@@ -376,6 +379,7 @@ model Account {
   @@index([created_at])
   @@index([operational_location_id])
   @@index([operational_district_id])
+  @@index([regional_supervisor_user_id])
   @@map("accounts")
 }
 
@@ -464,6 +468,7 @@ model User {
   inventory_movements_created  InventoryMovement[]       @relation("InventoryMovementCreatedBy")
   api_keys_created             ApiKey[]
   regional_supervisor_districts RegionalSupervisorDistrict[]
+  accounts_as_regional_supervisor Account[] @relation("AccountRegionalSupervisor")
 
   @@index([code])
   @@index([phone])

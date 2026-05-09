@@ -15,7 +15,7 @@ import {
 import { AdminService, UserActivityMetric, UserBusinessResource } from './admin.service';
 import { TokenGuard } from '../../common/guards/token.guard';
 import { PermissionGuard } from '../../common/guards/permission.guard';
-import { RequirePermission, RequireRole } from '../../common/decorators/permission.decorator';
+import { RequireAnyPermission, RequirePermission, RequireRole } from '../../common/decorators/permission.decorator';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { CurrentAccount } from '../../common/decorators/account.decorator';
 import { User } from '@prisma/client';
@@ -33,6 +33,7 @@ import { AssignUserAccountMembershipDto } from './dto/assign-user-account-member
 import { UpdateAccountOperationalLocationDto } from './dto/update-account-operational-location.dto';
 import { UpdateTenantAccountOperationalMetricsDto } from './dto/update-tenant-account-operational-metrics.dto';
 import { SetRegionalSupervisorScopeDto } from './dto/set-regional-supervisor-scope.dto';
+import { UpdateAccountRegionalSupervisorDto } from './dto/update-account-regional-supervisor.dto';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -861,17 +862,22 @@ export class AdminController {
   }
 
   @Get('tenant-accounts')
-  @RequirePermission('manage_users')
+  @RequireAnyPermission(['manage_users', 'view_regional_accounts'])
   @ApiOperation({
     summary: 'List all platform accounts (system-wide)',
     description:
-      'Paginated list of tenant/branch/admin accounts with operational geography. Filter by district_location_id (Location UUID, type DISTRICT) using denormalized operational_district_id.',
+      'Paginated list of tenant/branch/admin accounts with operational geography. Filter by district_location_id (Location UUID, type DISTRICT) using denormalized operational_district_id. Regional supervisors only see accounts in districts assigned to them.',
   })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'account_type', required: false, enum: ['tenant', 'branch', 'admin', 'all'] })
   @ApiQuery({ name: 'district_location_id', required: false, description: 'Filter accounts whose operational village lies in this district.' })
+  @ApiQuery({
+    name: 'regional_supervisor_user_id',
+    required: false,
+    description: 'Filter by assigned regional supervisor user UUID, or the literal `unassigned`.',
+  })
   async listTenantAccountsForAdmin(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -880,9 +886,10 @@ export class AdminController {
     @Query('search') search?: string,
     @Query('account_type') accountType?: string,
     @Query('district_location_id') districtLocationId?: string,
+    @Query('regional_supervisor_user_id') regionalSupervisorUserId?: string,
   ) {
     const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
-    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '20', 10) || 20));
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '10', 10) || 10));
     const at =
       accountType === 'tenant' || accountType === 'branch' || accountType === 'admin' || accountType === 'all'
         ? accountType
@@ -893,11 +900,12 @@ export class AdminController {
       search,
       account_type: at,
       district_location_id: districtLocationId?.trim() || undefined,
+      regional_supervisor_user_id: regionalSupervisorUserId?.trim() || undefined,
     });
   }
 
   @Get('tenant-accounts/:accountId')
-  @RequirePermission('manage_users')
+  @RequireAnyPermission(['manage_users', 'view_regional_accounts'])
   @ApiOperation({ summary: 'Get one platform account by id (for admin geography editor)' })
   @ApiParam({ name: 'accountId', description: 'Account UUID.' })
   async getTenantAccountForAdmin(
@@ -924,6 +932,24 @@ export class AdminController {
     @Body() dto: UpdateAccountOperationalLocationDto,
   ) {
     return this.adminService.updateAccountOperationalLocationForAdmin(user, accountId, targetAccountId, dto);
+  }
+
+  @Put('tenant-accounts/:accountId/regional-supervisor')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Assign or clear the regional supervisor for a platform account',
+    description:
+      'Sets `regional_supervisor_user_id` on the account. The user must have the regional_supervisor role on this admin account. If the account has an operational district, that district is added to the supervisor’s district scope when needed.',
+  })
+  @ApiParam({ name: 'accountId', description: 'Account UUID.' })
+  @ApiBody({ type: UpdateAccountRegionalSupervisorDto })
+  async updateTenantAccountRegionalSupervisor(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('accountId') targetAccountId: string,
+    @Body() dto: UpdateAccountRegionalSupervisorDto,
+  ) {
+    return this.adminService.setTenantAccountRegionalSupervisorForAdmin(user, accountId, targetAccountId, dto);
   }
 
   @Put('tenant-accounts/:accountId/operational-metrics')

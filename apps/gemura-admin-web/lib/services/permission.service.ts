@@ -52,6 +52,11 @@ export class PermissionService {
     return this.isAdmin() || this.hasPermission('manage_users');
   }
 
+  /** Platform accounts list/detail (full admins or regional supervisors in scoped districts). */
+  static canViewPlatformAccounts(): boolean {
+    return this.canManageUsers() || this.hasPermission('view_regional_accounts');
+  }
+
   static canViewDashboard(): boolean {
     return this.isAdmin() || this.hasPermission('dashboard.view');
   }

@@ -77,15 +77,22 @@ export default function AccountOperationalMetricsSection({
   adminAccountId,
   detail,
   onReload,
+  allowEdit = true,
 }: {
   adminAccountId: string | undefined;
   detail: TenantAccountAdminDetail;
   onReload: () => Promise<void>;
+  /** When false, metrics are read-only (e.g. regional supervisor directory view). */
+  allowEdit?: boolean;
 }) {
   const successToast = useToastStore((s) => s.success);
   const errorToast = useToastStore((s) => s.error);
 
   const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (!allowEdit) setEditing(false);
+  }, [allowEdit]);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingFacility, setSavingFacility] = useState(false);
   const [savingTanks, setSavingTanks] = useState(false);
@@ -329,19 +336,23 @@ export default function AccountOperationalMetricsSection({
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-gray-900">Operational metrics</h2>
             <p className="text-xs text-gray-500 mt-1 max-w-2xl">
-              Milk operations baseline, facility signals, and cooling tanks. Preview is read-only; use Edit to change values.
+              {allowEdit
+                ? 'Milk operations baseline, facility signals, and cooling tanks. Preview is read-only; use Edit to change values.'
+                : 'Milk operations baseline, facility signals, and cooling tanks (read-only).'}
             </p>
           </div>
-          {!editing ? (
-            <button type="button" className="btn btn-primary text-sm shrink-0" onClick={startEditing}>
-              <Icon icon={faEdit} size="sm" className="mr-2" />
-              Edit metrics
-            </button>
-          ) : (
-            <button type="button" className="btn btn-secondary text-sm shrink-0" onClick={cancelEditing}>
-              Cancel editing
-            </button>
-          )}
+          {allowEdit ? (
+            !editing ? (
+              <button type="button" className="btn btn-primary text-sm shrink-0" onClick={startEditing}>
+                <Icon icon={faEdit} size="sm" className="mr-2" />
+                Edit metrics
+              </button>
+            ) : (
+              <button type="button" className="btn btn-secondary text-sm shrink-0" onClick={cancelEditing}>
+                Cancel editing
+              </button>
+            )
+          ) : null}
         </div>
       </div>
 

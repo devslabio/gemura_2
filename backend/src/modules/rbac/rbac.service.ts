@@ -239,11 +239,20 @@ export class RbacService implements OnModuleInit {
         where: { platform_role_id: userAccount.platform_role_id },
         include: { permission: true },
       });
-      const fromRole = links.map((l) => l.permission.code);
+      let fromRole = links.map((l) => l.permission.code);
+      const slug = await this.resolveSlugFromPlatformRoleId(userAccount.platform_role_id);
+      if (slug === 'regional_supervisor') {
+        fromRole = [...new Set([...fromRole, 'view_regional_accounts'])];
+      }
       return this.mergeLegacyOverrides(fromRole, userAccount.permissions);
     }
 
-    return this.permissionsJsonToCodes(userAccount.permissions);
+    const legacy = this.permissionsJsonToCodes(userAccount.permissions);
+    const slugLegacy = canonicalPlatformRoleSlug(userAccount.role);
+    if (slugLegacy === 'regional_supervisor') {
+      return [...new Set([...legacy, 'view_regional_accounts'])];
+    }
+    return legacy;
   }
 
   private mergeLegacyOverrides(fromRole: string[], permissions: unknown): string[] {
