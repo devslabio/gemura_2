@@ -21,6 +21,11 @@ export interface DashboardStats {
   collections: {
     total: number;
   };
+  /** Milk sale rows with status `rejected` in the selected dashboard period (platform-wide). */
+  rejections?: {
+    transactions: number;
+    liters: number;
+  };
   suppliers: {
     total: number;
   };
