@@ -1,0 +1,170 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+
+import PlatformDrilldownShell from '@/app/components/admin/PlatformDrilldownShell';
+import DataTable, { TableColumn } from '@/app/components/DataTable';
+import Pagination from '@/app/components/Pagination';
+import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
+import { adminApi, type PlatformMilkSaleRow } from '@/lib/api/admin';
+import { useAuthStore } from '@/store/auth';
+import { usePermission } from '@/hooks/usePermission';
+
+function formatRf(n: number) {
+  return `RF ${new Intl.NumberFormat('en-RW', { maximumFractionDigits: 0 }).format(n)}`;
+}
+
+export default function MilkCollectionsReportPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const { currentAccount } = useAuthStore();
+  const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
+  const allowed = canViewDashboard() || canManageUsers() || isAdmin();
+
+  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<PlatformMilkSaleRow[]>([]);
+  const [period, setPeriod] = useState<{ start: string; end: string } | null>(null);
+  const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, totalPages: 0 });
+  const [error, setError] = useState('');
+
+  const apiParams = useMemo(() => {
+    const page = Math.max(1, Number(searchParams.get('page') || 1) || 1);
+    const limit = Math.min(100, Math.max(10, Number(searchParams.get('limit') || 25) || 25));
+    const date_from = searchParams.get('date_from') ?? undefined;
+    const date_to = searchParams.get('date_to') ?? undefined;
+    const tzRaw = searchParams.get('tz_offset_minutes');
+    const tzParsed = tzRaw !== null && tzRaw !== '' ? Number.parseInt(tzRaw, 10) : NaN;
+    const tz_offset_minutes = Number.isFinite(tzParsed) ? tzParsed : undefined;
+    return { page, limit, date_from, date_to, tz_offset_minutes };
+  }, [searchParams.toString()]);
+
+  const load = useCallback(async () => {
+    if (!allowed) return;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await adminApi.listPlatformMilkSales(currentAccount?.account_id, {
+        scope: 'collections',
+        ...apiParams,
+      });
+      if (res.code === 200 && res.data) {
+        setRows(res.data.rows);
+        setPeriod(res.data.period);
+        setPagination(res.data.pagination);
+      } else {
+        setError(res.message || 'Failed to load');
+        setRows([]);
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to load');
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [allowed, currentAccount?.account_id, apiParams]);
+
+  useEffect(() => {
+    if (!allowed) {
+      router.replace('/dashboard');
+      return;
+    }
+    load();
+  }, [allowed, load, router]);
+
+  const onPageChange = (page: number) => {
+    const p = new URLSearchParams(searchParams.toString());
+    p.set('page', String(page));
+    router.push(`${pathname}?${p.toString()}`);
+  };
+
+  const backHref = useMemo(() => {
+    const p = new URLSearchParams(searchParams.toString());
+    p.delete('page');
+    const s = p.toString();
+    return `/admin/dashboard/overview${s ? `?${s}` : ''}`;
+  }, [searchParams]);
+
+  const rejectionsHref = useMemo(() => {
+    const p = new URLSearchParams(searchParams.toString());
+    p.set('page', '1');
+    return `/admin/milk/rejections?${p.toString()}`;
+  }, [searchParams]);
+
+  const periodLabel = period
+    ? `UTC window: ${new Date(period.start).toLocaleString()} → ${new Date(period.end).toLocaleString()}`
+    : undefined;
+
+  const columns: TableColumn<PlatformMilkSaleRow>[] = [
+    { key: 'sale_at', label: 'Sale at', render: (v) => new Date(v as string).toLocaleString() },
+    { key: 'status', label: 'Status' },
+    {
+      key: 'quantity',
+      label: 'Qty (L)',
+      render: (v) => Number(v).toLocaleString(),
+    },
+    {
+      key: 'unit_price',
+      label: 'Unit',
+      render: (v) => formatRf(Number(v)),
+    },
+    {
+      key: 'supplier_name',
+      label: 'Supplier',
+      render: (v, row) => (v as string) || row.supplier_code || '—',
+    },
+    {
+      key: 'customer_name',
+      label: 'Customer',
+      render: (v, row) => (v as string) || row.customer_code || '—',
+    },
+    {
+      key: 'amount_paid',
+      label: 'Paid',
+      render: (v) => formatRf(Number(v)),
+    },
+  ];
+
+  if (!allowed) return null;
+
+  if (loading && rows.length === 0) {
+    return (
+      <PlatformDrilldownShell title="Milk collections" backHref={backHref}>
+        <ListPageSkeleton title="" filterFields={0} tableRows={8} tableCols={7} />
+      </PlatformDrilldownShell>
+    );
+  }
+
+  return (
+    <PlatformDrilldownShell title="Milk collections (period)" periodLabel={periodLabel} backHref={backHref}>
+      {error ? (
+        <div className="rounded-sm border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{error}</div>
+      ) : null}
+      <div className="overflow-x-auto rounded-sm border border-gray-200 bg-white">
+        <DataTable
+          columns={columns}
+          data={rows}
+          loading={loading}
+          showRowNumbers
+          emptyMessage="No milk transactions in this period."
+        />
+      </div>
+      <Pagination
+        currentPage={pagination.page}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.total}
+        pageSize={pagination.limit}
+        itemLabel="transactions"
+        onPageChange={onPageChange}
+      />
+      <p className="text-xs text-gray-500">
+        Same scope as dashboard collections (non-deleted milk sales).{' '}
+        <Link href={rejectionsHref} className="font-medium text-[var(--primary)] hover:underline">
+          Rejected milk →
+        </Link>
+      </p>
+    </PlatformDrilldownShell>
+  );
+}

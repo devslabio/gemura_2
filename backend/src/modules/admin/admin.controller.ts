@@ -203,6 +203,187 @@ export class AdminController {
     return this.adminService.getUsageDashboardStats(user, accountId, dateFrom, dateTo, tzOffsetMinutes);
   }
 
+  @Get('platform/milk-sales')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated platform milk transactions (admin drill-down)' })
+  @ApiQuery({ name: 'scope', required: false, description: '`collections` (default) or `rejections`' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'date_from', required: false })
+  @ApiQuery({ name: 'date_to', required: false })
+  @ApiQuery({ name: 'tz_offset_minutes', required: false })
+  async listPlatformMilkSales(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('scope') scopeRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    const scope = scopeRaw === 'rejections' ? 'rejections' : 'collections';
+    return this.adminService.listPlatformMilkSales(user, accountId, {
+      page,
+      limit,
+      scope,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/loans')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated platform loans (active portfolio or disbursed in period)' })
+  @ApiQuery({ name: 'mode', required: false, description: '`active_portfolio` (default) or `disbursed_in_period`' })
+  async listPlatformLoans(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('mode') modeRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    const mode = modeRaw === 'disbursed_in_period' ? 'disbursed_in_period' : 'active_portfolio';
+    return this.adminService.listPlatformLoans(user, accountId, {
+      page,
+      limit,
+      mode,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/loan-repayments')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated platform loan repayments in dashboard period' })
+  async listPlatformLoanRepayments(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformLoanRepayments(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/payroll-runs')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated completed payroll runs in dashboard period' })
+  async listPlatformPayrollRuns(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformPayrollRuns(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/inventory-sales')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated inventory sales in dashboard period' })
+  async listPlatformInventorySales(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformInventorySales(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/audit-events')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated audit log events in dashboard period' })
+  async listPlatformAuditLogs(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformAuditLogs(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
   @Get('roles')
   @RequirePermission('manage_users')
   @ApiOperation({

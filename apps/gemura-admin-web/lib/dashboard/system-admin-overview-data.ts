@@ -58,7 +58,7 @@ export type ActivityItem = {
 export const EMPTY_KPIS_BASE: OverviewKpi[] = [
   {
     id: 'mccs',
-    label: 'Active MCCs',
+    label: 'Active users',
     value: '—',
     hint: 'No data in selected range',
   },
@@ -106,7 +106,7 @@ export const EMPTY_KPIS_BASE: OverviewKpi[] = [
   },
   {
     id: 'users',
-    label: 'Platform active users',
+    label: 'Total users',
     value: '—',
     hint: 'No data in selected range',
   },
@@ -210,19 +210,24 @@ export function mergeOverviewKpis(
         hint: 'Distinct supplier accounts · platform',
       };
     }
-    if (row.id === 'users' && stats?.users?.active != null) {
+    if (row.id === 'users' && stats?.users) {
+      const u = stats.users;
+      const total = Number(u.total ?? 0);
+      const active = Number(u.active ?? 0);
       return {
         ...row,
-        value: String(stats.users.active),
-        hint: `${stats.users.total} total users`,
+        value: String(total),
+        hint: `${active} active · platform`,
       };
     }
-    if (row.id === 'mccs' && stats?.accounts?.total != null) {
-      const t = stats.accounts.total;
+    if (row.id === 'mccs' && stats?.users) {
+      const u = stats.users;
+      const active = Number(u.active ?? 0);
+      const total = Number(u.total ?? 0);
       return {
         ...row,
-        value: String(t),
-        hint: 'Accounts on platform · API',
+        value: String(active),
+        hint: `${total} total users · platform`,
       };
     }
     if (row.id === 'onboarding') {
