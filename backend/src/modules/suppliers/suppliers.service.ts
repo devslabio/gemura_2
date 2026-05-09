@@ -18,7 +18,7 @@ import {
 } from './dto/register-supplier-onboarding.dto';
 import * as bcrypt from 'bcryptjs';
 import { randomBytes, randomUUID } from 'crypto';
-import { composeUserFullName } from '../../common/utils/user-name.util';
+import { composeUserFullName, splitIntoFirstLast } from '../../common/utils/user-name.util';
 
 @Injectable()
 export class SuppliersService {
@@ -1013,11 +1013,19 @@ export class SuppliersService {
     const normalizedBankAccountNumber = dto.bank_account_number?.trim() || null;
     const pricePerLiter = Number(dto.price_per_liter);
 
+    const trimmedName = dto.name.trim();
+    const { first_name: fnPart, last_name: lnPart } = splitIntoFirstLast(trimmedName);
+    const fn = (fnPart || trimmedName || 'User').trim();
+    const ln = (lnPart || '-').trim();
+    const userDisplayName = composeUserFullName(fn, ln);
+
     const { newUser, account } = await this.prisma.$transaction(async (tx) => {
       const nu = await tx.user.create({
         data: {
           code: userCode,
-          name: dto.name.trim(),
+          first_name: fn,
+          last_name: ln,
+          name: userDisplayName,
           phone: normalizedPhone,
           nid: dto.nid,
           address: normalizedAddress,
@@ -1028,7 +1036,6 @@ export class SuppliersService {
           account_type: appAccountType,
           supplier_segment: segment,
           registration_type: 'onboarded',
-          default_account_id: null,
           created_by: agentUser.id,
         },
       });
@@ -1036,7 +1043,7 @@ export class SuppliersService {
       const acc = await tx.account.create({
         data: {
           code: accountCode,
-          name: dto.name.trim(),
+          name: userDisplayName,
           bank_name: normalizedBankName,
           bank_account_number: normalizedBankAccountNumber,
           type: 'tenant',
