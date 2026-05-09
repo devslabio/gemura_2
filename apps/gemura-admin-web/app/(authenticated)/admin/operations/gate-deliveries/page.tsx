@@ -28,7 +28,7 @@ function GateDeliveriesReportInner() {
   const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
   const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
-  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters } =
+  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters, backToOverviewHref } =
     useAdminReportNavigation();
 
   const [loading, setLoading] = useState(true);
@@ -113,6 +113,7 @@ function GateDeliveriesReportInner() {
   return (
     <AdminReportListChrome
       title="Gate deliveries"
+      backHref={backToOverviewHref}
       periodHint={periodHint}
       dateFrom={filterInputs.dateFrom}
       dateTo={filterInputs.dateTo}

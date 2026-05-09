@@ -27,7 +27,7 @@ function SupplierLinksReportInner() {
   const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
   const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
-  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters } =
+  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters, backToOverviewHref } =
     useAdminReportNavigation();
 
   const [loading, setLoading] = useState(true);
@@ -109,6 +109,7 @@ function SupplierLinksReportInner() {
   return (
     <AdminReportListChrome
       title="Supplier–customer links"
+      backHref={backToOverviewHref}
       periodHint={periodHint}
       dateFrom={filterInputs.dateFrom}
       dateTo={filterInputs.dateTo}

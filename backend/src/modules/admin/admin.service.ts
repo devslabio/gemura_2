@@ -3731,6 +3731,370 @@ export class AdminService {
     };
   }
 
+  /** Supplier charge definitions created or updated in the dashboard period (platform-wide). */
+  async listPlatformCharges(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.ChargeWhereInput = {
+      OR: [
+        { created_at: { gte: bounds.gte, lte: bounds.lte } },
+        { updated_at: { gte: bounds.gte, lte: bounds.lte } },
+      ],
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.charge.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { updated_at: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          kind: true,
+          amount_type: true,
+          amount: true,
+          recurrence: true,
+          is_active: true,
+          apply_to_all_suppliers: true,
+          effective_from: true,
+          effective_to: true,
+          created_at: true,
+          updated_at: true,
+          customer_account: { select: { name: true, code: true } },
+        },
+      }),
+      this.prisma.charge.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Charges retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          kind: r.kind,
+          amount_type: r.amount_type,
+          amount: Number(r.amount),
+          recurrence: r.recurrence,
+          is_active: r.is_active,
+          apply_to_all_suppliers: r.apply_to_all_suppliers,
+          effective_from: r.effective_from?.toISOString() ?? null,
+          effective_to: r.effective_to?.toISOString() ?? null,
+          created_at: r.created_at.toISOString(),
+          updated_at: r.updated_at.toISOString(),
+          mcc_name: r.customer_account?.name ?? null,
+          mcc_code: r.customer_account?.code ?? null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  /** New supplier–customer links created in the dashboard period. */
+  async listPlatformSupplierCustomerLinks(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.SupplierCustomerWhereInput = {
+      created_at: { gte: bounds.gte, lte: bounds.lte },
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.supplierCustomer.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { created_at: 'desc' },
+        select: {
+          id: true,
+          price_per_liter: true,
+          relationship_status: true,
+          created_at: true,
+          supplier_account: { select: { name: true, code: true } },
+          customer_account: { select: { name: true, code: true } },
+        },
+      }),
+      this.prisma.supplierCustomer.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Supplier–customer links retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          price_per_liter: Number(r.price_per_liter),
+          relationship_status: r.relationship_status,
+          created_at: r.created_at.toISOString(),
+          supplier_name: r.supplier_account?.name ?? null,
+          supplier_code: r.supplier_account?.code ?? null,
+          customer_name: r.customer_account?.name ?? null,
+          customer_code: r.customer_account?.code ?? null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  /** Chart-of-accounts journal batches dated in the dashboard period. */
+  async listPlatformAccountingTransactions(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.AccountingTransactionWhereInput = {
+      transaction_date: { gte: bounds.gte, lte: bounds.lte },
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.accountingTransaction.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { transaction_date: 'desc' },
+        select: {
+          id: true,
+          transaction_date: true,
+          reference_number: true,
+          description: true,
+          total_amount: true,
+          farm_id: true,
+          created_at: true,
+          _count: { select: { entries: true } },
+        },
+      }),
+      this.prisma.accountingTransaction.count({ where }),
+    ]);
+
+    const farmIds = [...new Set(rows.map((r) => r.farm_id).filter(Boolean))] as string[];
+    const farms =
+      farmIds.length > 0
+        ? await this.prisma.farm.findMany({
+            where: { id: { in: farmIds } },
+            select: { id: true, name: true, code: true },
+          })
+        : [];
+    const farmLabel = new Map(farms.map((f) => [f.id, f.name || f.code || f.id]));
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Accounting transactions retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          transaction_date: r.transaction_date.toISOString(),
+          reference_number: r.reference_number,
+          description: r.description,
+          total_amount: Number(r.total_amount),
+          farm_id: r.farm_id,
+          farm_name: r.farm_id ? farmLabel.get(r.farm_id) ?? null : null,
+          entry_lines: r._count.entries,
+          created_at: r.created_at.toISOString(),
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  /** MCC gate deliveries by arrival time in the dashboard period. */
+  async listPlatformGateDeliveries(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.MccGateDeliveryWhereInput = {
+      arrived_at: { gte: bounds.gte, lte: bounds.lte },
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.mccGateDelivery.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { arrived_at: 'desc' },
+        select: {
+          id: true,
+          source_type: true,
+          gate_volume_litres: true,
+          arrived_at: true,
+          notes: true,
+          mcc_account: { select: { name: true, code: true } },
+          source_account: { select: { name: true, code: true } },
+          recorded_by: { select: { first_name: true, last_name: true, email: true } },
+        },
+      }),
+      this.prisma.mccGateDelivery.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Gate deliveries retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          source_type: r.source_type,
+          gate_volume_litres: Number(r.gate_volume_litres),
+          arrived_at: r.arrived_at.toISOString(),
+          notes: r.notes,
+          mcc_name: r.mcc_account?.name ?? null,
+          mcc_code: r.mcc_account?.code ?? null,
+          source_name: r.source_account?.name ?? null,
+          source_code: r.source_account?.code ?? null,
+          recorded_by_label:
+            [r.recorded_by.first_name, r.recorded_by.last_name].filter(Boolean).join(' ').trim() ||
+            r.recorded_by.email ||
+            null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  /** Umucunda milk manifests created in the dashboard period. */
+  async listPlatformMilkManifests(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.MccMilkManifestWhereInput = {
+      created_at: { gte: bounds.gte, lte: bounds.lte },
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.mccMilkManifest.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { created_at: 'desc' },
+        select: {
+          id: true,
+          manifest_ref: true,
+          status: true,
+          created_at: true,
+          submitted_at: true,
+          accepted_at: true,
+          rejected_at: true,
+          mcc_account: { select: { name: true, code: true } },
+          umucunda_supplier: { select: { name: true, code: true } },
+          gate_delivery: {
+            select: { arrived_at: true, gate_volume_litres: true },
+          },
+          _count: { select: { lines: true } },
+        },
+      }),
+      this.prisma.mccMilkManifest.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Milk manifests retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          manifest_ref: r.manifest_ref,
+          status: r.status,
+          created_at: r.created_at.toISOString(),
+          submitted_at: r.submitted_at?.toISOString() ?? null,
+          accepted_at: r.accepted_at?.toISOString() ?? null,
+          rejected_at: r.rejected_at?.toISOString() ?? null,
+          line_count: r._count.lines,
+          mcc_name: r.mcc_account?.name ?? null,
+          mcc_code: r.mcc_account?.code ?? null,
+          umucunda_name: r.umucunda_supplier?.name ?? null,
+          umucunda_code: r.umucunda_supplier?.code ?? null,
+          gate_arrived_at: r.gate_delivery?.arrived_at.toISOString() ?? null,
+          gate_volume_litres: r.gate_delivery ? Number(r.gate_delivery.gate_volume_litres) : null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
   /**
    * Get all platform roles with permission codes (database-backed).
    * Initial links come from config only when a role has none yet; admins change grants via `updatePlatformRole`.

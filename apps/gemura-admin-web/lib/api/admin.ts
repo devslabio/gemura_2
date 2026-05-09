@@ -246,6 +246,76 @@ export interface PlatformAuditEventRow {
   ip_address: string | null;
 }
 
+export interface PlatformChargeRow {
+  id: string;
+  name: string;
+  kind: string;
+  amount_type: string;
+  amount: number;
+  recurrence: string | null;
+  is_active: boolean;
+  apply_to_all_suppliers: boolean;
+  effective_from: string | null;
+  effective_to: string | null;
+  created_at: string;
+  updated_at: string;
+  mcc_name: string | null;
+  mcc_code: string | null;
+}
+
+export interface PlatformSupplierCustomerLinkRow {
+  id: string;
+  price_per_liter: number;
+  relationship_status: string;
+  created_at: string;
+  supplier_name: string | null;
+  supplier_code: string | null;
+  customer_name: string | null;
+  customer_code: string | null;
+}
+
+export interface PlatformAccountingTransactionRow {
+  id: string;
+  transaction_date: string;
+  reference_number: string | null;
+  description: string | null;
+  total_amount: number;
+  farm_id: string | null;
+  farm_name: string | null;
+  entry_lines: number;
+  created_at: string;
+}
+
+export interface PlatformGateDeliveryRow {
+  id: string;
+  source_type: string;
+  gate_volume_litres: number;
+  arrived_at: string;
+  notes: string | null;
+  mcc_name: string | null;
+  mcc_code: string | null;
+  source_name: string | null;
+  source_code: string | null;
+  recorded_by_label: string | null;
+}
+
+export interface PlatformMilkManifestRow {
+  id: string;
+  manifest_ref: string;
+  status: string;
+  created_at: string;
+  submitted_at: string | null;
+  accepted_at: string | null;
+  rejected_at: string | null;
+  line_count: number;
+  mcc_name: string | null;
+  mcc_code: string | null;
+  umucunda_name: string | null;
+  umucunda_code: string | null;
+  gate_arrived_at: string | null;
+  gate_volume_litres: number | null;
+}
+
 export interface UserListItem {
   id: string;
   name: string;
@@ -903,5 +973,128 @@ export const adminApi = {
     if (params.date_to) q.date_to = params.date_to;
     if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
     return apiClient.get('/admin/platform/audit-events', { params: q });
+  },
+
+  listPlatformCharges: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformChargeRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/charges', { params: q });
+  },
+
+  listPlatformSupplierCustomerLinks: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: {
+      period: { start: string; end: string };
+      rows: PlatformSupplierCustomerLinkRow[];
+      pagination: AdminPlatformPagination;
+    };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/supplier-customer-links', { params: q });
+  },
+
+  listPlatformAccountingTransactions: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: {
+      period: { start: string; end: string };
+      rows: PlatformAccountingTransactionRow[];
+      pagination: AdminPlatformPagination;
+    };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/accounting-transactions', { params: q });
+  },
+
+  listPlatformGateDeliveries: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformGateDeliveryRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/gate-deliveries', { params: q });
+  },
+
+  listPlatformMilkManifests: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformMilkManifestRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/milk-manifests', { params: q });
   },
 };
