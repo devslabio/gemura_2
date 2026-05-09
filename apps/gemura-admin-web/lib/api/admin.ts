@@ -316,6 +316,23 @@ export interface PlatformMilkManifestRow {
   gate_volume_litres: number | null;
 }
 
+export interface TenantAccountRow {
+  id: string;
+  code: string | null;
+  name: string;
+  type: string;
+  status: string;
+  operational_location_id: string | null;
+  operational_district_id: string | null;
+  operational_location_label: string | null;
+}
+
+export interface RegionalSupervisorDistrictRef {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export interface UserListItem {
   id: string;
   name: string;
@@ -1096,5 +1113,91 @@ export const adminApi = {
     if (params.date_to) q.date_to = params.date_to;
     if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
     return apiClient.get('/admin/platform/milk-manifests', { params: q });
+  },
+
+  listTenantAccountsForAdmin: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      account_type?: 'tenant' | 'branch' | 'admin' | 'all';
+      district_location_id?: string;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { rows: TenantAccountRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 20 };
+    if (accountId) q.account_id = accountId;
+    if (params.search?.trim()) q.search = params.search.trim();
+    if (params.account_type) q.account_type = params.account_type;
+    if (params.district_location_id) q.district_location_id = params.district_location_id;
+    return apiClient.get('/admin/tenant-accounts', { params: q });
+  },
+
+  getTenantAccountForAdmin: async (
+    accountId: string | undefined,
+    targetAccountId: string,
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: TenantAccountRow & { operational_location_label: string | null };
+  }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    return apiClient.get(`/admin/tenant-accounts/${targetAccountId}`, { params: q });
+  },
+
+  updateTenantAccountOperationalLocation: async (
+    accountId: string | undefined,
+    targetAccountId: string,
+    body: { operational_location_id?: string | null },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: {
+      id: string;
+      operational_location_id: string | null;
+      operational_district_id: string | null;
+      operational_location_label: string | null;
+    };
+  }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    return apiClient.put(`/admin/tenant-accounts/${targetAccountId}/operational-location`, body, { params: q });
+  },
+
+  getRegionalSupervisorScope: async (
+    accountId: string | undefined,
+    userId: string,
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { user_id: string; districts: RegionalSupervisorDistrictRef[] };
+  }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    return apiClient.get(`/admin/users/${userId}/regional-supervisor-scope`, { params: q });
+  },
+
+  setRegionalSupervisorScope: async (
+    accountId: string | undefined,
+    userId: string,
+    body: { district_location_ids: string[] },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { user_id: string; districts: RegionalSupervisorDistrictRef[] };
+  }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    return apiClient.put(`/admin/users/${userId}/regional-supervisor-scope`, body, { params: q });
   },
 };

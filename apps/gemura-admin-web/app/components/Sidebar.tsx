@@ -30,6 +30,7 @@ import Icon, {
   faList,
   faUserFriends,
   faTruck,
+  faMapPin,
 } from './Icon';
 import { getRoleLabel } from '@/lib/utils/role';
 import { adminApi } from '@/lib/api/admin';
@@ -215,6 +216,12 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
       });
       entries.push({ kind: 'link', href: '/admin/roles', label: 'Roles', icon: faUserShield });
       entries.push({ kind: 'link', href: '/admin/permissions', label: 'Permissions', icon: faLock });
+      entries.push({
+        kind: 'link',
+        href: '/admin/regional-supervision',
+        label: 'Regional supervision',
+        icon: faMapPin,
+      });
     }
 
     entries.push({ kind: 'section', label: 'Platform' });

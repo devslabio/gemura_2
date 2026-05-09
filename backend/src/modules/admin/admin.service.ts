@@ -6,7 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { MccOnboardingReviewStatus, Prisma, User } from '@prisma/client';
+import { AccountType, LocationType, MccOnboardingReviewStatus, Prisma, User } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ImmisService } from '../immis/immis.service';
@@ -36,6 +36,8 @@ import { CreatePlatformRoleDto } from './dto/create-platform-role.dto';
 import { UpdatePlatformRoleDto } from './dto/update-platform-role.dto';
 import { AssignUserAccountMembershipDto } from './dto/assign-user-account-membership.dto';
 import { UpdateOnboardingOperationalConfigDto } from './dto/update-onboarding-operational-config.dto';
+import { UpdateAccountOperationalLocationDto } from './dto/update-account-operational-location.dto';
+import { SetRegionalSupervisorScopeDto } from './dto/set-regional-supervisor-scope.dto';
 
 export type UserActivityMetric =
   | 'suppliers'
@@ -4093,6 +4095,268 @@ export class AdminService {
         },
       },
     };
+  }
+
+  private locationPathLabel(path: { name: string }[]): string {
+    return path.map((p) => p.name).join(' → ');
+  }
+
+  private async resolveDistrictIdFromOperationalLocation(operationalLocationId: string | null): Promise<string | null> {
+    if (!operationalLocationId) return null;
+    const path = await this.locationsService.getPath(operationalLocationId);
+    const d = path.find((p) => p.location_type === 'DISTRICT');
+    return d?.id ?? null;
+  }
+
+  /** List platform accounts with optional district filter (operational_district_id). Requires manage_users. */
+  async listTenantAccountsForAdmin(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      search?: string;
+      account_type?: 'tenant' | 'branch' | 'admin' | 'all';
+      district_location_id?: string;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId);
+    const skip = (opts.page - 1) * opts.limit;
+    const typeFilter = opts.account_type;
+    const types: AccountType[] =
+      !typeFilter || typeFilter === 'all'
+        ? [AccountType.tenant, AccountType.branch, AccountType.admin]
+        : [typeFilter as AccountType];
+
+    const where: Prisma.AccountWhereInput = {
+      type: types.length === 1 ? types[0] : { in: types },
+      ...(opts.search?.trim()
+        ? {
+            OR: [
+              { name: { contains: opts.search.trim(), mode: 'insensitive' } },
+              { code: { contains: opts.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+      ...(opts.district_location_id ? { operational_district_id: opts.district_location_id } : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.account.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          type: true,
+          status: true,
+          operational_location_id: true,
+          operational_district_id: true,
+        },
+      }),
+      this.prisma.account.count({ where }),
+    ]);
+
+    const uniqueOpIds = [...new Set(rows.map((r) => r.operational_location_id).filter(Boolean))] as string[];
+    const pathLabelByOpId = new Map<string, string>();
+    await Promise.all(
+      uniqueOpIds.map(async (id) => {
+        const path = await this.locationsService.getPath(id);
+        pathLabelByOpId.set(id, this.locationPathLabel(path));
+      }),
+    );
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Accounts retrieved.',
+      data: {
+        rows: rows.map((r) => ({
+          id: r.id,
+          code: r.code,
+          name: r.name,
+          type: r.type,
+          status: r.status,
+          operational_location_id: r.operational_location_id,
+          operational_district_id: r.operational_district_id,
+          operational_location_label: r.operational_location_id
+            ? pathLabelByOpId.get(r.operational_location_id) ?? null
+            : null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  async getTenantAccountForAdmin(user: User, adminAccountId: string, targetAccountId: string) {
+    await this.checkAdminPermission(user, adminAccountId);
+    const row = await this.prisma.account.findFirst({
+      where: { id: targetAccountId },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        type: true,
+        status: true,
+        operational_location_id: true,
+        operational_district_id: true,
+      },
+    });
+    if (!row) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'Account not found.', data: null });
+    }
+    let operational_location_label: string | null = null;
+    if (row.operational_location_id) {
+      const path = await this.locationsService.getPath(row.operational_location_id);
+      operational_location_label = this.locationPathLabel(path);
+    }
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Account retrieved.',
+      data: {
+        ...row,
+        operational_location_label,
+      },
+    };
+  }
+
+  async updateAccountOperationalLocationForAdmin(
+    user: User,
+    adminAccountId: string,
+    targetAccountId: string,
+    dto: UpdateAccountOperationalLocationDto,
+  ) {
+    await this.checkAdminPermission(user, adminAccountId);
+    const exists = await this.prisma.account.findFirst({ where: { id: targetAccountId }, select: { id: true } });
+    if (!exists) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'Account not found.', data: null });
+    }
+
+    let operational_location_id: string | null = dto.operational_location_id ?? null;
+    if (operational_location_id === '') operational_location_id = null;
+
+    if (operational_location_id) {
+      const loc = await this.prisma.location.findUnique({
+        where: { id: operational_location_id },
+        select: { id: true, location_type: true },
+      });
+      if (!loc) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'Location not found.', data: null });
+      }
+      if (loc.location_type !== LocationType.VILLAGE) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Operational location must be a village (select province through village).',
+          data: null,
+        });
+      }
+    }
+
+    const operational_district_id = operational_location_id
+      ? await this.resolveDistrictIdFromOperationalLocation(operational_location_id)
+      : null;
+
+    await this.prisma.account.update({
+      where: { id: targetAccountId },
+      data: {
+        operational_location_id,
+        operational_district_id,
+      },
+    });
+
+    const path = operational_location_id ? await this.locationsService.getPath(operational_location_id) : [];
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Account geography updated.',
+      data: {
+        id: targetAccountId,
+        operational_location_id,
+        operational_district_id,
+        operational_location_label: operational_location_id ? this.locationPathLabel(path) : null,
+      },
+    };
+  }
+
+  async getRegionalSupervisorScope(user: User, adminAccountId: string, targetUserId: string) {
+    await this.checkAdminPermission(user, adminAccountId);
+    const target = await this.prisma.user.findFirst({ where: { id: targetUserId }, select: { id: true } });
+    if (!target) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'User not found.', data: null });
+    }
+    const rows = await this.prisma.regionalSupervisorDistrict.findMany({
+      where: { user_id: targetUserId },
+      include: { district: { select: { id: true, code: true, name: true, location_type: true } } },
+      orderBy: { created_at: 'asc' },
+    });
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Regional supervisor scope retrieved.',
+      data: {
+        user_id: targetUserId,
+        districts: rows.map((r) => ({
+          id: r.district.id,
+          code: r.district.code,
+          name: r.district.name,
+        })),
+      },
+    };
+  }
+
+  async setRegionalSupervisorScope(
+    user: User,
+    adminAccountId: string,
+    targetUserId: string,
+    dto: SetRegionalSupervisorScopeDto,
+  ) {
+    await this.checkAdminPermission(user, adminAccountId);
+    const target = await this.prisma.user.findFirst({ where: { id: targetUserId }, select: { id: true } });
+    if (!target) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'User not found.', data: null });
+    }
+
+    const ids = [...new Set(dto.district_location_ids ?? [])];
+    for (const did of ids) {
+      const loc = await this.prisma.location.findUnique({
+        where: { id: did },
+        select: { id: true, location_type: true },
+      });
+      if (!loc || loc.location_type !== LocationType.DISTRICT) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `Invalid district location id: ${did}`,
+          data: null,
+        });
+      }
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.regionalSupervisorDistrict.deleteMany({ where: { user_id: targetUserId } }),
+      ...(ids.length
+        ? [
+            this.prisma.regionalSupervisorDistrict.createMany({
+              data: ids.map((district_location_id) => ({
+                user_id: targetUserId,
+                district_location_id,
+              })),
+            }),
+          ]
+        : []),
+    ]);
+
+    return this.getRegionalSupervisorScope(user, adminAccountId, targetUserId);
   }
 
   /**

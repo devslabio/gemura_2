@@ -30,6 +30,8 @@ import { UpdateOnboardingOperationalConfigDto } from './dto/update-onboarding-op
 import { CreatePlatformRoleDto } from './dto/create-platform-role.dto';
 import { UpdatePlatformRoleDto } from './dto/update-platform-role.dto';
 import { AssignUserAccountMembershipDto } from './dto/assign-user-account-membership.dto';
+import { UpdateAccountOperationalLocationDto } from './dto/update-account-operational-location.dto';
+import { SetRegionalSupervisorScopeDto } from './dto/set-regional-supervisor-scope.dto';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -855,6 +857,101 @@ export class AdminController {
     @Body() dto: NeedsChangesOnboardingDto,
   ) {
     return this.adminService.needsChangesMccOnboardingSubmission(user, accountId, submissionId, dto.notes);
+  }
+
+  @Get('tenant-accounts')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'List all platform accounts (system-wide)',
+    description:
+      'Paginated list of tenant/branch/admin accounts with operational geography. Filter by district_location_id (Location UUID, type DISTRICT) using denormalized operational_district_id.',
+  })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'account_type', required: false, enum: ['tenant', 'branch', 'admin', 'all'] })
+  @ApiQuery({ name: 'district_location_id', required: false, description: 'Filter accounts whose operational village lies in this district.' })
+  async listTenantAccountsForAdmin(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('search') search?: string,
+    @Query('account_type') accountType?: string,
+    @Query('district_location_id') districtLocationId?: string,
+  ) {
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '20', 10) || 20));
+    const at =
+      accountType === 'tenant' || accountType === 'branch' || accountType === 'admin' || accountType === 'all'
+        ? accountType
+        : 'all';
+    return this.adminService.listTenantAccountsForAdmin(user, accountId, {
+      page,
+      limit,
+      search,
+      account_type: at,
+      district_location_id: districtLocationId?.trim() || undefined,
+    });
+  }
+
+  @Get('tenant-accounts/:accountId')
+  @RequirePermission('manage_users')
+  @ApiOperation({ summary: 'Get one platform account by id (for admin geography editor)' })
+  @ApiParam({ name: 'accountId', description: 'Account UUID.' })
+  async getTenantAccountForAdmin(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('accountId') targetAccountId: string,
+  ) {
+    return this.adminService.getTenantAccountForAdmin(user, accountId, targetAccountId);
+  }
+
+  @Put('tenant-accounts/:accountId/operational-location')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Set account operational location (village)',
+    description:
+      'Stores the finest admin location (village) for the account and denormalizes the containing district for regional filters.',
+  })
+  @ApiParam({ name: 'accountId', description: 'Account UUID.' })
+  @ApiBody({ type: UpdateAccountOperationalLocationDto })
+  async updateTenantAccountOperationalLocation(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('accountId') targetAccountId: string,
+    @Body() dto: UpdateAccountOperationalLocationDto,
+  ) {
+    return this.adminService.updateAccountOperationalLocationForAdmin(user, accountId, targetAccountId, dto);
+  }
+
+  @Get('users/:userId/regional-supervisor-scope')
+  @RequirePermission('manage_users')
+  @ApiOperation({ summary: 'List district scope for a regional supervisor user' })
+  @ApiParam({ name: 'userId', description: 'User UUID.' })
+  async getRegionalSupervisorScope(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('userId') targetUserId: string,
+  ) {
+    return this.adminService.getRegionalSupervisorScope(user, accountId, targetUserId);
+  }
+
+  @Put('users/:userId/regional-supervisor-scope')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Replace district scope for a regional supervisor user',
+    description: 'Each id must be a Location row with type DISTRICT. Pass an empty array to clear.',
+  })
+  @ApiParam({ name: 'userId', description: 'User UUID.' })
+  @ApiBody({ type: SetRegionalSupervisorScopeDto })
+  async setRegionalSupervisorScope(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('userId') targetUserId: string,
+    @Body() dto: SetRegionalSupervisorScopeDto,
+  ) {
+    return this.adminService.setRegionalSupervisorScope(user, accountId, targetUserId, dto);
   }
 
   @Get('users/export-csv')
