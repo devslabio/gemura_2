@@ -40,6 +40,9 @@ export interface Account {
   updatedAt: string;
 }
 
+/** Segment for supplier accounts: mirrors onboarding collector_kind + direct farm supply. */
+export type SupplierSegment = 'direct_farmer' | 'farmer_collector' | 'pure_collector';
+
 export interface UserAccount {
   account_id: string;
   account_code: string;
@@ -51,6 +54,8 @@ export interface UserAccount {
   user_account_status: string;
   access_granted_at: string;
   is_default: boolean;
+  /** When account_type is supplier, set from backend after onboarding. */
+  supplier_segment?: SupplierSegment;
 }
 
 export interface Sale {

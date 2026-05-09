@@ -8,6 +8,28 @@ export const REFUGEE_DISTRICTS = ['Gicumbi', 'Kirehe', 'Nyamasheke', 'Rusizi', '
 
 export type GpsUiStatus = 'idle' | 'acquiring' | 'captured' | 'unavailable';
 
+/**
+ * Milk collector profile (MCC spec): farmer–collector (own + others) vs pure collection only.
+ * Direct-to-MCC suppliers use the separate `farmer` supplier flow, not these values.
+ */
+export type MilkCollectorKind = 'farmer_collector' | 'pure_collector';
+
+export const MILK_COLLECTOR_KIND: Record<
+  MilkCollectorKind,
+  { label: string; description: string }
+> = {
+  farmer_collector: {
+    label: 'Farmer–collector',
+    description:
+      'You produce milk and also collect from other farms. Own milk and collection fee are separate; farm-by-farm manifest applies to collected milk.',
+  },
+  pure_collector: {
+    label: 'Pure collector',
+    description:
+      'You do not sell your own production here — you only collect for others. Performance is mainly manifest and route compliance (no credit product in the collector role).',
+  },
+};
+
 export interface FarmerFormState {
   identity: {
     surname: string;
@@ -106,6 +128,8 @@ export interface FarmerFormState {
 }
 
 export interface CollectorFormState {
+  /** Set on type picker before the wizard. */
+  collectorKind: '' | MilkCollectorKind;
   c1: {
     surname: string;
     firstName: string;
@@ -280,6 +304,7 @@ export function initialFarmerState(): FarmerFormState {
 
 export function initialCollectorState(): CollectorFormState {
   return {
+    collectorKind: '',
     c1: {
       surname: '',
       firstName: '',
@@ -354,6 +379,7 @@ export function isFarmerDirty(f: FarmerFormState): boolean {
 }
 
 export function isCollectorDirty(c: CollectorFormState): boolean {
+  if (c.collectorKind) return true;
   const x = c.c1;
   if (x.surname || x.firstName || x.primaryPhone || x.nid) return true;
   if (c.roster.length > 0) return true;

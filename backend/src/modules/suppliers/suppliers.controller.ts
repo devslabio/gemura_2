@@ -8,6 +8,17 @@ import { User } from '@prisma/client';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
 import { BulkCreateSuppliersDto } from './dto/bulk-create-suppliers.dto';
+import {
+  RegisterSupplierOnboardingDto,
+  UpdateSupplierMilkOnboardingDto,
+  CreateManagedFarmDto,
+  UpdateManagedFarmDto,
+  DeleteManagedFarmDto,
+  CreateManagedCollectionDto,
+  CreateManagedProductionDto,
+  CreateManagedTransferDto,
+  SubmitManagedTransferDto,
+} from './dto/register-supplier-onboarding.dto';
 
 @ApiTags('Suppliers')
 @Controller('suppliers')
@@ -99,6 +110,111 @@ export class SuppliersController {
   })
   async createSupplier(@CurrentUser() user: User, @Body() createDto: CreateSupplierDto) {
     return this.suppliersService.createOrUpdateSupplier(user, createDto);
+  }
+
+  @Post('onboarding/register')
+  @ApiOperation({
+    summary: 'Create supplier/farmer app user after MCC completes onboarding',
+    description:
+      'Persists the wizard payload, creates user + tenant account + wallet, links to the MCC, and stores JSON for /suppliers/my-onboarding.',
+  })
+  @ApiBody({ type: RegisterSupplierOnboardingDto })
+  @ApiResponse({ status: 201, description: 'User created' })
+  async registerFromOnboarding(@CurrentUser() user: User, @Body() body: RegisterSupplierOnboardingDto) {
+    return this.suppliersService.registerFromOnboarding(user, body);
+  }
+
+  @Get('my-onboarding')
+  @ApiOperation({ summary: 'Get stored milk onboarding JSON for the current user' })
+  @ApiResponse({ status: 200, description: 'Onboarding object or null' })
+  async getMyOnboarding(@CurrentUser() user: User) {
+    return this.suppliersService.getMyOnboarding(user);
+  }
+
+  @Put('my-onboarding')
+  @ApiOperation({ summary: 'Merge fields into the stored draft section of milk onboarding' })
+  @ApiBody({ type: UpdateSupplierMilkOnboardingDto })
+  async putMyOnboarding(@CurrentUser() user: User, @Body() body: UpdateSupplierMilkOnboardingDto) {
+    return this.suppliersService.putMyOnboarding(user, body);
+  }
+
+  @Get('ops/summary')
+  @ApiOperation({ summary: 'Farmer-collector management summary (farms, own/external, transfers)' })
+  async getOpsSummary(@CurrentUser() user: User) {
+    return this.suppliersService.getOpsSummary(user);
+  }
+
+  @Get('my-farms')
+  @ApiOperation({ summary: 'List farms managed by current supplier/farmer collector' })
+  async getMyFarms(@CurrentUser() user: User) {
+    return this.suppliersService.getMyFarms(user);
+  }
+
+  @Post('my-farms')
+  @ApiBody({ type: CreateManagedFarmDto })
+  @ApiOperation({ summary: 'Add a managed farm for current supplier/farmer collector' })
+  async createMyFarm(@CurrentUser() user: User, @Body() body: CreateManagedFarmDto) {
+    return this.suppliersService.createMyFarm(user, body);
+  }
+
+  @Put('my-farms')
+  @ApiBody({ type: UpdateManagedFarmDto })
+  @ApiOperation({ summary: 'Update a managed farm' })
+  async updateMyFarm(@CurrentUser() user: User, @Body() body: UpdateManagedFarmDto) {
+    return this.suppliersService.updateMyFarm(user, body);
+  }
+
+  @Delete('my-farms')
+  @ApiBody({ type: DeleteManagedFarmDto })
+  @ApiOperation({ summary: 'Delete a managed farm' })
+  async deleteMyFarm(@CurrentUser() user: User, @Body() body: DeleteManagedFarmDto) {
+    return this.suppliersService.deleteMyFarm(user, body);
+  }
+
+  @Get('my-collections')
+  @ApiOperation({ summary: 'List supplier-managed collection records' })
+  async getMyCollections(@CurrentUser() user: User) {
+    return this.suppliersService.getMyCollections(user);
+  }
+
+  @Post('my-collections')
+  @ApiBody({ type: CreateManagedCollectionDto })
+  @ApiOperation({ summary: 'Record collection entry (own farm or external farm)' })
+  async createMyCollection(@CurrentUser() user: User, @Body() body: CreateManagedCollectionDto) {
+    return this.suppliersService.createMyCollection(user, body);
+  }
+
+  @Get('my-production')
+  @ApiOperation({ summary: 'List own farm production records' })
+  async getMyProduction(@CurrentUser() user: User) {
+    return this.suppliersService.getMyProduction(user);
+  }
+
+  @Post('my-production')
+  @ApiBody({ type: CreateManagedProductionDto })
+  @ApiOperation({ summary: 'Record own production liters' })
+  async createMyProduction(@CurrentUser() user: User, @Body() body: CreateManagedProductionDto) {
+    return this.suppliersService.createMyProduction(user, body);
+  }
+
+  @Get('my-transfers')
+  @ApiOperation({ summary: 'List transfer manifests staged by supplier for MCC' })
+  async getMyTransfers(@CurrentUser() user: User) {
+    return this.suppliersService.getMyTransfers(user);
+  }
+
+  @Post('my-transfers')
+  @ApiBody({ type: CreateManagedTransferDto })
+  @ApiOperation({ summary: 'Create transfer manifest from non-transferred collections' })
+  async createMyTransfer(@CurrentUser() user: User, @Body() body: CreateManagedTransferDto) {
+    return this.suppliersService.createMyTransfer(user, body);
+  }
+
+  @Post('my-transfers/submit')
+  @ApiBody({ type: SubmitManagedTransferDto })
+  @ApiOperation({ summary: 'Submit transfer manifest to MCC and lock included collections' })
+  async submitMyTransfer(@CurrentUser() user: User, @Body() body: SubmitManagedTransferDto) {
+    return this.suppliersService.submitMyTransfer(user, body);
   }
 
   @Get('template')

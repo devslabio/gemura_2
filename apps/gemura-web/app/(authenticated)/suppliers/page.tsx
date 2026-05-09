@@ -282,7 +282,11 @@ export default function SuppliersPage() {
         onSuccess={loadSuppliers}
       />
 
-      <SupplierOnboardingModal open={onboardModalOpen} onClose={() => setOnboardModalOpen(false)} />
+      <SupplierOnboardingModal
+        open={onboardModalOpen}
+        onClose={() => setOnboardModalOpen(false)}
+        onRegistered={() => loadSuppliers()}
+      />
 
       <Modal open={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Add Supplier" maxWidth="max-w-lg">
         <CreateSupplierForm

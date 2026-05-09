@@ -11,6 +11,7 @@ import {
   type OnboardingAutoSummary,
   type AutoInsightTone,
 } from './onboardingAutoResults';
+import { MILK_COLLECTOR_KIND } from './model';
 
 const BL: Record<BreedKey, string> = {
   friesian: 'Friesian',
@@ -29,7 +30,7 @@ function joinObj(o: Record<string, string>): string {
 function insightToneClass(tone: AutoInsightTone): string {
   switch (tone) {
     case 'positive':
-      return 'border-l-emerald-500 bg-emerald-50/60 text-emerald-950';
+      return 'border-l-[#004AAD] bg-[#004AAD]/10 text-[#031A3A]';
     case 'caution':
       return 'border-l-amber-500 bg-amber-50/70 text-amber-950';
     default:
@@ -42,19 +43,17 @@ function AutoSummaryPanel({
   accent,
 }: {
   summary: OnboardingAutoSummary;
-  accent: 'emerald' | 'teal';
+  accent: 'primary' | 'secondary';
 }) {
-  const ring =
-    accent === 'emerald'
-      ? 'border-emerald-200/90 ring-emerald-600/10'
-      : 'border-teal-200/90 ring-teal-600/10';
+  const borderAccent =
+    accent === 'primary' ? 'border-[#004AAD]/20' : 'border-[#052A54]/25';
   const bar =
-    accent === 'emerald'
-      ? 'bg-gradient-to-r from-emerald-600 to-teal-500'
-      : 'bg-gradient-to-r from-teal-600 to-cyan-500';
+    accent === 'primary'
+      ? 'bg-gradient-to-r from-[#031A3A] to-[#004AAD]'
+      : 'bg-gradient-to-r from-[#052A54] to-[#004AAD]';
 
   return (
-    <div className={`rounded-2xl border ${ring} ring-1 bg-white/90 shadow-sm overflow-hidden`}>
+    <div className={`rounded-sm border bg-white overflow-hidden ${borderAccent}`}>
       <div className="px-4 py-3 sm:px-5 sm:py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/90 to-white">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Auto-generated from answers</p>
         <h3 className="text-base sm:text-lg font-semibold text-slate-900 mt-0.5">{summary.headline}</h3>
@@ -65,8 +64,8 @@ function AutoSummaryPanel({
               <span>Readiness index</span>
               <span className="font-semibold tabular-nums text-slate-900">{summary.score}/100</span>
             </div>
-            <div className="h-2.5 rounded-full bg-slate-200/90 overflow-hidden">
-              <div className={`h-full rounded-full ${bar} transition-all`} style={{ width: `${summary.score}%` }} />
+            <div className="h-2.5 rounded-sm bg-slate-200/90 overflow-hidden border border-slate-300/60 box-border">
+              <div className={`h-full rounded-sm ${bar} transition-all`} style={{ width: `${summary.score}%` }} />
             </div>
             <p className="text-[11px] text-slate-500 mt-1">
               Heuristic blend of production data, digital signals, and (for collectors) cold-chain fit — not a credit decision.
@@ -123,7 +122,7 @@ function AutoSummaryPanel({
           {summary.insights.map((ins, i) => (
             <li
               key={`${ins.title}-${i}`}
-              className={`text-sm pl-3 py-2 rounded-lg border-l-4 ${insightToneClass(ins.tone)}`}
+              className={`text-sm pl-3 py-2 rounded-sm border-l-4 ${insightToneClass(ins.tone)}`}
             >
               <span className="font-medium">{ins.title}</span>
               <span className="text-slate-700"> — {ins.detail}</span>
@@ -139,7 +138,7 @@ function AutoSummaryPanel({
             {summary.agentCompare.map((row) => (
               <div
                 key={row.field}
-                className="rounded-lg border border-slate-200/80 bg-white px-3 py-2.5"
+                className="rounded-sm border border-slate-200/80 bg-white px-3 py-2.5"
               >
                 <div className="font-medium text-slate-800">{row.field}</div>
                 <div className="mt-1 text-xs text-slate-600">
@@ -153,7 +152,7 @@ function AutoSummaryPanel({
                 {row.aligned != null && (
                   <div
                     className={`text-xs font-medium mt-1.5 ${
-                      row.aligned ? 'text-emerald-800' : 'text-amber-800'
+                      row.aligned ? 'text-[#052A54]' : 'text-amber-800'
                     }`}
                   >
                     {row.aligned ? 'Aligned' : 'Review mismatch'}
@@ -182,12 +181,12 @@ export function FarmerOnboardingPreview({
 
   return (
     <div className="space-y-4 max-h-[min(70vh,560px)] overflow-y-auto pr-1">
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 px-4 py-3 text-sm text-emerald-950">
+      <div className="rounded-sm border border-[#004AAD]/25 bg-[#004AAD]/10 px-4 py-3 text-sm text-[#031A3A]">
         <p className="font-semibold">Direct farmer — review</p>
-        <p className="text-emerald-800/90 mt-1">Check all answers before saving. You can go Back to edit any step.</p>
+        <p className="text-[#052A54]/90 mt-1">Check all answers before saving. You can go Back to edit any step.</p>
       </div>
 
-      <AutoSummaryPanel summary={auto} accent="emerald" />
+      <AutoSummaryPanel summary={auto} accent="primary" />
 
       <ReviewSection title="Location & capture">
         <ReviewRow label="GPS" value={gpsText} />
@@ -279,16 +278,26 @@ export function CollectorOnboardingPreview({
 
   return (
     <div className="space-y-4 max-h-[min(70vh,560px)] overflow-y-auto pr-1">
-      <div className="rounded-xl border border-teal-200 bg-teal-50/50 px-4 py-3 text-sm text-teal-950">
+      <div className="rounded-sm border border-[#052A54]/25 bg-[#052A54]/10 px-4 py-3 text-sm text-[#031A3A]">
         <p className="font-semibold">Milk collector — review</p>
-        <p className="text-teal-900/90 mt-1">Verify roster and logistics before saving.</p>
+        <p className="text-[#052A54]/90 mt-1">Verify roster and logistics before saving.</p>
       </div>
 
-      <AutoSummaryPanel summary={auto} accent="teal" />
+      <AutoSummaryPanel summary={auto} accent="secondary" />
 
       <ReviewSection title="Location & capture">
         <ReviewRow label="GPS" value={gpsText} />
         <ReviewRow label="National ID photo" value={hasNidPhoto ? 'Attached' : 'Not attached'} />
+      </ReviewSection>
+
+      <ReviewSection title="Collector profile">
+        <ReviewRow
+          label="Type"
+          value={c.collectorKind ? MILK_COLLECTOR_KIND[c.collectorKind].label : '—'}
+        />
+        <p className="text-xs text-slate-600 -mt-2 mb-0">
+          {c.collectorKind ? MILK_COLLECTOR_KIND[c.collectorKind].description : null}
+        </p>
       </ReviewSection>
 
       <ReviewSection title="C1 — Identity">

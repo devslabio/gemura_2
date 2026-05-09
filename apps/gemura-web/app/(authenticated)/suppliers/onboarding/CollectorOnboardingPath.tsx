@@ -1,7 +1,8 @@
 'use client';
 
 import type { Dispatch, SetStateAction } from 'react';
-import type { CollectorFormState } from './model';
+import type { CollectorFormState, MilkCollectorKind } from './model';
+import { MILK_COLLECTOR_KIND } from './model';
 import { REFUGEE_DISTRICTS } from './model';
 import {
   AgentPanel,
@@ -13,6 +14,7 @@ import {
   TextArea,
   TextInput,
   WizardStepPanel,
+  wizardNativeSelectClass,
 } from './formPrimitives';
 import { P } from './fieldPlaceholders';
 
@@ -31,8 +33,14 @@ const MCC_OPTIONS = [
   { value: 'other', label: 'Other — specify' },
 ];
 
+function creditTierSatisfied(c: CollectorFormState): boolean {
+  if (c.collectorKind === 'pure_collector') return true;
+  return c.agentCollector.creditTier !== '';
+}
+
 export function computeCollectorProgress(c: CollectorFormState): number {
   const checks = [
+    c.collectorKind !== '',
     !!c.c1.surname.trim(),
     !!c.c1.firstName.trim(),
     !!c.c1.primaryPhone.trim(),
@@ -43,7 +51,7 @@ export function computeCollectorProgress(c: CollectorFormState): number {
     c.workforceC.total.trim() !== '' && Number(c.workforceC.total) >= 1,
     c.financeC.phoneType !== '',
     c.goalsC.goal12m !== '',
-    c.agentCollector.creditTier !== '',
+    creditTierSatisfied(c),
   ];
   return (checks.filter(Boolean).length / checks.length) * 100;
 }
@@ -80,12 +88,29 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
 
   const { total, reg, notReg } = rosterSummary(c);
 
+  const kindLabel = (k: MilkCollectorKind) => MILK_COLLECTOR_KIND[k].label;
+  const profileBanner =
+    c.collectorKind === 'farmer_collector' ? (
+      <Hint>
+        <span className="font-semibold text-slate-800">{kindLabel('farmer_collector')}.</span>{' '}
+        Own-farm production and collection for others are separate in reporting: manifests apply to milk from other
+        farms; your credit (if any) is based on your own production only.
+      </Hint>
+    ) : c.collectorKind === 'pure_collector' ? (
+      <Hint>
+        <span className="font-semibold text-slate-800">{kindLabel('pure_collector')}.</span>{' '}
+        No own milk on this profile — only collected volumes, fees, and manifest compliance. Gemura credit products do
+        not apply to the collector role (use a separate farmer account if you also produce).
+      </Hint>
+    ) : null;
+
   const refugeeHit =
     districtForRefugeeHint &&
     REFUGEE_DISTRICTS.some((d) => d.toLowerCase() === districtForRefugeeHint.trim().toLowerCase());
 
   return (
     <div className="space-y-4">
+      {onlyStep && profileBanner}
       {onlyStep === 'c1' && refugeeHit && (
         <RiskBanner>
           Refugee district block applies — auto-detected from district (same as farmer path).
@@ -96,7 +121,11 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
       <WizardStepPanel
         id="c-s1"
         title="C1 — Collector identity & registration"
-        subtitle="Identity, location, linked MCC, business type"
+        subtitle={
+          c.collectorKind
+            ? `${MILK_COLLECTOR_KIND[c.collectorKind].label} — identity, location, linked MCC, business type`
+            : 'Identity, location, linked MCC, business type'
+        }
       >
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
@@ -154,9 +183,16 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             <FieldLabel htmlFor="cnid">National ID number</FieldLabel>
             <TextInput
               id="cnid"
+              inputMode="numeric"
+              maxLength={16}
               value={c.c1.nid}
               placeholder={P.nid}
-              onChange={(e) => setC((p) => ({ ...p, c1: { ...p.c1, nid: e.target.value } }))}
+              onChange={(e) =>
+                setC((p) => ({
+                  ...p,
+                  c1: { ...p.c1, nid: e.target.value.replace(/\D/g, '').slice(0, 16) },
+                }))
+              }
             />
             <Hint>Photo capture below; NID parsing on sync.</Hint>
           </div>
@@ -209,7 +245,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             <FieldLabel htmlFor="cmcc">Linked MCC</FieldLabel>
             <select
               id="cmcc"
-              className="input w-full min-h-[44px] text-base text-gray-900"
+              className={wizardNativeSelectClass()}
               value={c.c1.linkedMcc}
               onChange={(e) => setC((p) => ({ ...p, c1: { ...p.c1, linkedMcc: e.target.value } }))}
             >
@@ -275,6 +311,18 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
         title="C2 — Collection operations"
         subtitle="Volumes, transport, cooling, transit time"
       >
+        {c.collectorKind === 'pure_collector' && (
+          <Hint>
+            Peak and low = total litres you collect for other farms and deliver to the MCC (no own-herd production on
+            this profile).
+          </Hint>
+        )}
+        {c.collectorKind === 'farmer_collector' && (
+          <Hint>
+            Peak and low = combined daily volume you bring to the MCC (your own milk plus others). Farm-by-farm
+            manifest will split the collected portion.
+          </Hint>
+        )}
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
             <FieldLabel htmlFor="c2sec">Collection area — sector</FieldLabel>
@@ -305,7 +353,9 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             />
           </div>
           <div>
-            <FieldLabel htmlFor="cfarms">Farms collected from (count)</FieldLabel>
+            <FieldLabel htmlFor="cfarms">
+              {c.collectorKind === 'pure_collector' ? 'Farms you collect from (count)' : 'Farms on route (count)'}
+            </FieldLabel>
             <TextInput
               id="cfarms"
               inputMode="numeric"
@@ -329,7 +379,11 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
         />
         <div className="grid sm:grid-cols-2 gap-3">
           <div>
-            <FieldLabel htmlFor="cpk">Peak season avg daily volume (L)</FieldLabel>
+            <FieldLabel htmlFor="cpk">
+              {c.collectorKind === 'pure_collector'
+                ? 'Peak season — total collected (L/day)'
+                : 'Peak season avg daily volume (L)'}
+            </FieldLabel>
             <TextInput
               id="cpk"
               inputMode="decimal"
@@ -339,7 +393,11 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             />
           </div>
           <div>
-            <FieldLabel htmlFor="clow">Low season avg daily volume (L)</FieldLabel>
+            <FieldLabel htmlFor="clow">
+              {c.collectorKind === 'pure_collector'
+                ? 'Low season — total collected (L/day)'
+                : 'Low season avg daily volume (L)'}
+            </FieldLabel>
             <TextInput
               id="clow"
               inputMode="decimal"
@@ -473,7 +531,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             Add farm
           </button>
         </div>
-        <div className="rounded-lg border border-gray-200 overflow-x-auto">
+        <div className="rounded-sm border border-gray-200 overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50">
               <tr>
@@ -502,7 +560,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
                   </td>
                   <td className="p-2">
                     <select
-                      className="input w-full min-h-[44px]"
+                      className={wizardNativeSelectClass()}
                       value={row.registration}
                       onChange={(e) =>
                         setC((p) => ({
@@ -539,14 +597,14 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             </tbody>
           </table>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-center text-sm bg-gray-50 rounded p-3 border border-gray-200">
+        <div className="grid grid-cols-3 gap-2 text-center text-sm bg-gray-50 rounded-sm p-3 border border-gray-200">
           <div>
             <div className="text-gray-500">Total farms</div>
             <div className="text-lg font-semibold">{total}</div>
           </div>
           <div>
             <div className="text-gray-500">Registered</div>
-            <div className="text-lg font-semibold text-emerald-800">{reg}</div>
+            <div className="text-lg font-semibold text-[#052A54]">{reg}</div>
           </div>
           <div>
             <div className="text-gray-500">Not registered</div>
@@ -624,6 +682,18 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
         title="C5 — Digital & financial readiness"
         subtitle="Records, payments, revenue, credit intent"
       >
+        {c.collectorKind === 'pure_collector' && (
+          <Hint>
+            Pure collectors often pre-pay farmers at the gate; advances and settlement are reconciled when the MCC
+            accepts the batch. Capture how you usually pay farmers below; add detail in agent notes if needed.
+          </Hint>
+        )}
+        {c.collectorKind === 'farmer_collector' && (
+          <Hint>
+            You may receive both farmer milk income and collection fees — payment methods here cover what you use with
+            route farms.
+          </Hint>
+        )}
         <RadioRow
           name="crec"
           legend="Record-keeping for collections"
@@ -859,9 +929,16 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             { value: 'no', label: 'No action yet' },
           ]}
         />
+        {c.collectorKind === 'pure_collector' && (
+          <Hint>
+            <span className="font-medium text-slate-800">Credit tier (optional)</span> — pure collectors are not
+            offered Gemura credit in the collector role. You may still pick a band for routing, limits, and reporting, or
+            leave blank.
+          </Hint>
+        )}
         <RadioRow
           name="ctier"
-          legend="Credit tier"
+          legend={c.collectorKind === 'pure_collector' ? 'Volume band (optional)' : 'Initial credit tier'}
           value={c.agentCollector.creditTier}
           onChange={(v) =>
             setC((p) => ({

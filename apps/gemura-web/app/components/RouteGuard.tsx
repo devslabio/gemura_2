@@ -74,7 +74,14 @@ export default function RouteGuard({ children }: { children: React.ReactNode }) 
       return;
     }
     if (isExternalSupplier(accountType) || isExternalCustomer(accountType)) {
-      router.replace('/dashboard');
+      const externalAllowed = ['/dashboard', '/accounts', '/settings', '/profile', '/supplier'].some(
+        (p) => pathname === p || pathname.startsWith(`${p}/`)
+      );
+      if (!externalAllowed) {
+        router.replace('/dashboard');
+        return;
+      }
+      setAllowed(true);
       return;
     }
 

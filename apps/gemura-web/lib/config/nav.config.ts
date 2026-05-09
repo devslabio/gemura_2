@@ -26,6 +26,7 @@ import {
   faHandHoldingDollar,
   faTag,
   faIdCard,
+  faTruck,
 } from '@/app/components/Icon';
 
 /** Account types that see user/operations menu (filtered by role + permissions) */
@@ -65,6 +66,7 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
   { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'operations', requiresPermission: 'dashboard.view' },
   { icon: faReceipt, label: 'Sales', href: '/sales', section: 'operations', requiresPermission: 'view_sales' },
   { icon: faBox, label: 'Collections', href: '/collections', section: 'operations', requiresPermission: 'view_collections' },
+  { icon: faTruck, label: 'Incoming Transfers', href: '/transfers/incoming', section: 'operations', requiresPermission: 'view_collections' },
   { icon: faBuilding, label: 'Suppliers', href: '/suppliers', section: 'operations', requiresPermission: 'view_suppliers' },
   { icon: faStore, label: 'Customers', href: '/customers', section: 'operations', requiresPermission: 'view_customers' },
   { icon: faWarehouse, label: 'Inventory', href: '/inventory/items', section: 'operations', requiresPermission: 'view_inventory', children: [{ label: 'Items', href: '/inventory/items' }, { label: 'Movements', href: '/inventory/movements' }] },
@@ -82,6 +84,11 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
  */
 export const EXTERNAL_SUPPLIER_NAV_ITEMS: NavItem[] = [
   { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'external_supplier' },
+  { icon: faWarehouse, label: 'Farms', href: '/supplier/farms', section: 'external_supplier' },
+  { icon: faClipboardList, label: 'Collections', href: '/supplier/collections', section: 'external_supplier' },
+  { icon: faChartLine, label: 'Production', href: '/supplier/production', section: 'external_supplier' },
+  { icon: faReceipt, label: 'Transfers', href: '/supplier/transfers', section: 'external_supplier' },
+  { icon: faIdCard, label: 'Profile', href: '/profile', section: 'external_supplier' },
   { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'external_supplier' },
   { icon: faCog, label: 'Settings', href: '/settings', section: 'external_supplier' },
 ];
@@ -91,6 +98,19 @@ export const EXTERNAL_SUPPLIER_NAV_ITEMS: NavItem[] = [
  */
 export const EXTERNAL_CUSTOMER_NAV_ITEMS: NavItem[] = [
   { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'external_customer' },
+  { icon: faIdCard, label: 'Profile', href: '/profile', section: 'external_customer' },
+  { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'external_customer' },
+  { icon: faCog, label: 'Settings', href: '/settings', section: 'external_customer' },
+];
+
+/** External farmer (direct or farmer-collector) tools */
+export const EXTERNAL_FARMER_NAV_ITEMS: NavItem[] = [
+  { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'external_customer' },
+  { icon: faWarehouse, label: 'Farms', href: '/supplier/farms', section: 'external_customer' },
+  { icon: faClipboardList, label: 'Collections', href: '/supplier/collections', section: 'external_customer' },
+  { icon: faChartLine, label: 'Production', href: '/supplier/production', section: 'external_customer' },
+  { icon: faReceipt, label: 'Transfers', href: '/supplier/transfers', section: 'external_customer' },
+  { icon: faIdCard, label: 'Profile', href: '/profile', section: 'external_customer' },
   { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'external_customer' },
   { icon: faCog, label: 'Settings', href: '/settings', section: 'external_customer' },
 ];

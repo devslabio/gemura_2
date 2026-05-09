@@ -4,7 +4,7 @@
  */
 
 import type { CollectorFormState, FarmerFormState } from './model';
-import { BREEDS, REFUGEE_DISTRICTS } from './model';
+import { BREEDS, MILK_COLLECTOR_KIND, REFUGEE_DISTRICTS } from './model';
 import { deriveFarmerVibeCodes, herdSuggestsBreedImprovement, type VibeFarmerCodes } from './vibeReporting';
 
 export type AutoInsightTone = 'positive' | 'info' | 'caution';
@@ -351,6 +351,24 @@ export function computeCollectorAutoSummary(
   const metrics: { label: string; value: string }[] = [];
   const insights: AutoInsight[] = [];
 
+  if (c.collectorKind) {
+    metrics.push({ label: 'Collector profile', value: MILK_COLLECTOR_KIND[c.collectorKind].label });
+  }
+
+  if (c.collectorKind === 'pure_collector') {
+    insights.push({
+      title: 'Pure collector',
+      detail: 'Expect manifest-led workflows and (optionally) pre-payment settlement. Credit tier on the form is for routing, not a loan product in this role.',
+      tone: 'info',
+    });
+  } else if (c.collectorKind === 'farmer_collector') {
+    insights.push({
+      title: 'Farmer–collector',
+      detail: 'Own milk and collected milk are reported separately: credit follows own production; collection fees and manifests follow route rules.',
+      tone: 'info',
+    });
+  }
+
   const peak = n(c.c2.peakL);
   const transit = n(c.c2.transitMin);
   if (!Number.isNaN(peak) && peak > 0) {
@@ -433,18 +451,27 @@ export function computeCollectorAutoSummary(
 
   const agentCompare: AgentFieldCompare[] = [];
 
-  if (c.agentCollector.creditTier && (suggestedTier === 'starter' || suggestedTier === 'reliable')) {
-    const aligned = c.agentCollector.creditTier === suggestedTier;
+  if (c.collectorKind !== 'pure_collector') {
+    if (c.agentCollector.creditTier && (suggestedTier === 'starter' || suggestedTier === 'reliable')) {
+      const aligned = c.agentCollector.creditTier === suggestedTier;
+      agentCompare.push({
+        field: 'Credit tier',
+        fromAnswers: collectorTierLabel[suggestedTier],
+        fromAgent: c.agentCollector.creditTier === 'starter' ? collectorTierLabel.starter : collectorTierLabel.reliable,
+        aligned,
+      });
+    } else if (c.agentCollector.creditTier && suggestedTier === '') {
+      agentCompare.push({
+        field: 'Credit tier',
+        fromAnswers: 'Unclear (peak between ~50 and ~100 L or missing)',
+        fromAgent: c.agentCollector.creditTier === 'starter' ? collectorTierLabel.starter : collectorTierLabel.reliable,
+        aligned: null,
+      });
+    }
+  } else if (c.agentCollector.creditTier) {
     agentCompare.push({
-      field: 'Credit tier',
-      fromAnswers: collectorTierLabel[suggestedTier],
-      fromAgent: c.agentCollector.creditTier === 'starter' ? collectorTierLabel.starter : collectorTierLabel.reliable,
-      aligned,
-    });
-  } else if (c.agentCollector.creditTier && suggestedTier === '') {
-    agentCompare.push({
-      field: 'Credit tier',
-      fromAnswers: 'Unclear (peak between ~50 and ~100 L or missing)',
+      field: 'Volume band (agent)',
+      fromAnswers: 'Optional for pure collectors — not a credit product in the collector role.',
       fromAgent: c.agentCollector.creditTier === 'starter' ? collectorTierLabel.starter : collectorTierLabel.reliable,
       aligned: null,
     });

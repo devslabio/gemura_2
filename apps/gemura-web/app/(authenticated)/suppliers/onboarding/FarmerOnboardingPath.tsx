@@ -306,9 +306,16 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
             <FieldLabel htmlFor="fnid">National ID number</FieldLabel>
             <TextInput
               id="fnid"
+              inputMode="numeric"
+              maxLength={16}
               value={f.identity.nid}
               placeholder={P.nid}
-              onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, nid: e.target.value } }))}
+              onChange={(e) =>
+                setF((p) => ({
+                  ...p,
+                  identity: { ...p.identity, nid: e.target.value.replace(/\D/g, '').slice(0, 16) },
+                }))
+              }
             />
             <Hint>VIBE C16–C21, C79 auto-derived from ID capture on sync — not manual here.</Hint>
           </div>
@@ -359,7 +366,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
         />
 
         {showCoop && (
-          <div className="grid sm:grid-cols-2 gap-3 p-3 rounded-lg bg-gray-50 border border-gray-200">
+          <div className="grid sm:grid-cols-2 gap-3 p-3 rounded-sm bg-gray-50 border border-gray-200">
             <p className="sm:col-span-2 text-sm font-medium">Cooperative (A9–A12)</p>
             <div>
               <FieldLabel htmlFor="cmem">Total members (C28)</FieldLabel>
@@ -1005,7 +1012,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
           </div>
         </div>
         {showManagerFields && (
-          <div className="grid sm:grid-cols-2 gap-3 p-3 rounded border border-gray-200 bg-gray-50">
+          <div className="grid sm:grid-cols-2 gap-3 p-3 rounded-sm border border-gray-200 bg-gray-50">
             <p className="sm:col-span-2 text-sm font-medium">Separate farm manager (C43–C44)</p>
             <RadioRow
               name="msx"

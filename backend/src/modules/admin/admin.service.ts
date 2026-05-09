@@ -308,8 +308,26 @@ export class AdminService {
         status: createDto.status || 'active',
         default_account_id: accountId,
         created_by: user.id,
+        ...(createDto.supplier_segment
+          ? { supplier_segment: createDto.supplier_segment }
+          : {}),
       },
     });
+
+    if (createDto.onboarding_payload) {
+      await this.prisma.supplierMilkOnboarding.upsert({
+        where: { user_id: newUser.id },
+        create: {
+          user_id: newUser.id,
+          payload: createDto.onboarding_payload as object,
+          mcc_account_id: accountId,
+        },
+        update: {
+          payload: createDto.onboarding_payload as object,
+          mcc_account_id: accountId,
+        },
+      });
+    }
 
     // Create user account access
     if (createDto.role || createDto.permissions) {

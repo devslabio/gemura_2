@@ -1,7 +1,14 @@
 import { useAuthStore } from '@/store/auth';
+import { isExternalCustomer, isExternalSupplier } from '@/lib/config/nav.config';
 
 export interface Permission {
   [key: string]: boolean;
+}
+
+/** Milk app “external” accounts: must not inherit MCC owner/admin powers from UserAccount.role. */
+function isExternalMilkAccount(accountType: string | undefined): boolean {
+  const t = (accountType || '').toLowerCase();
+  return isExternalSupplier(t) || isExternalCustomer(t);
 }
 
 export class PermissionService {
@@ -15,8 +22,11 @@ export class PermissionService {
       return false;
     }
 
-    // Owner and admin have all permissions
-    if (currentAccount.role === 'owner' || currentAccount.role === 'admin') {
+    // Owner and admin have all permissions on MCC/operations accounts only — not on farmer/supplier/customer logins.
+    if (
+      !isExternalMilkAccount(currentAccount.account_type) &&
+      (currentAccount.role === 'owner' || currentAccount.role === 'admin')
+    ) {
       return true;
     }
 
@@ -62,7 +72,11 @@ export class PermissionService {
    */
   static isAdmin(): boolean {
     const { currentAccount } = useAuthStore.getState();
-    return currentAccount?.role === 'admin' || currentAccount?.role === 'owner';
+    if (!currentAccount) return false;
+    if (isExternalMilkAccount(currentAccount.account_type)) {
+      return false;
+    }
+    return currentAccount.role === 'admin' || currentAccount.role === 'owner';
   }
 
   /**

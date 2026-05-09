@@ -41,6 +41,7 @@ import { MilkProductionModule } from './modules/milk-production/milk-production.
 import { ImmisModule } from './modules/immis/immis.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { PublicAnalyticsModule } from './modules/public-analytics/public-analytics.module';
+import { TransfersModule } from './modules/transfers/transfers.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -95,6 +96,7 @@ import { AppController } from './app.controller';
     ImmisModule,
     AdminModule,
     PublicAnalyticsModule,
+    TransfersModule,
   ],
 })
 export class AppModule {}

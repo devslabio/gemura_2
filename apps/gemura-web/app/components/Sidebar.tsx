@@ -14,6 +14,7 @@ import {
   OPERATIONS_NAV_ITEMS,
   EXTERNAL_SUPPLIER_NAV_ITEMS,
   EXTERNAL_CUSTOMER_NAV_ITEMS,
+  EXTERNAL_FARMER_NAV_ITEMS,
   isBusinessAccount,
   isAdminRole,
   isOperationsRole,
@@ -48,7 +49,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     if (user) {
       setUserName(`${user.firstName} ${user.lastName}`);
       setUserEmail(user.email);
-      setUserRole(getRoleLabel(currentAccount?.role));
+      setUserRole(getRoleLabel(currentAccount?.role, currentAccount?.account_type));
     }
   }, [user, currentAccount]);
 
@@ -57,6 +58,18 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
   const menuItems = useMemo(() => {
     const items: NavItem[] = [];
     const preferOperationsSidebar = FORCE_OPERATIONS_DASHBOARD && isBusinessAccount(accountType);
+
+    // Milk farmer / supplier / customer: never MCC admin UI (UserAccount.role may still be "owner" on their tenant).
+    if (isExternalSupplier(accountType) || isExternalCustomer(accountType)) {
+      if (isExternalSupplier(accountType)) {
+        EXTERNAL_SUPPLIER_NAV_ITEMS.forEach((item) => items.push(item));
+      } else if ((accountType || '').toLowerCase() === 'farmer') {
+        EXTERNAL_FARMER_NAV_ITEMS.forEach((item) => items.push(item));
+      } else {
+        EXTERNAL_CUSTOMER_NAV_ITEMS.forEach((item) => items.push(item));
+      }
+      return items;
+    }
 
     const showAdminDashboard = canViewDashboard() || isAdmin();
     const showAdminUsers = canManageUsers() || isAdmin();
@@ -104,18 +117,6 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
         if (item.requiresPermission && !hasPermission(item.requiresPermission)) return;
         items.push(item);
       });
-      return items;
-    }
-
-    // External: supplier account
-    if (isExternalSupplier(accountType)) {
-      EXTERNAL_SUPPLIER_NAV_ITEMS.forEach((item) => items.push(item));
-      return items;
-    }
-
-    // External: customer / farmer
-    if (isExternalCustomer(accountType)) {
-      EXTERNAL_CUSTOMER_NAV_ITEMS.forEach((item) => items.push(item));
       return items;
     }
 
