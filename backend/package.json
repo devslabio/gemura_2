@@ -4,10 +4,10 @@
   "description": "Gemura Backend API - NestJS with PostgreSQL",
   "main": "dist/main.js",
   "scripts": {
-    "build": "nest build",
+    "build": "rm -f tsconfig.build.tsbuildinfo && prisma generate && nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/main.js",
     "test": "jest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -33,7 +33,9 @@
     "seed:members-from-suppliers": "tsx prisma/seed-members-from-suppliers.ts",
     "migrate": "ts-node src/migration/migrate.ts",
     "migrate:selective": "ts-node src/migration/migrate-selective.ts",
-    "migrate:fix-default-accounts": "ts-node src/migration/fix-default-accounts.ts"
+    "migrate:fix-default-accounts": "ts-node src/migration/fix-default-accounts.ts",
+    "seed:regional-supervisors": "tsx prisma/run-seed-regional-supervisor-demos.ts",
+    "assign:supervisors-milk-sale-accounts": "tsx prisma/assign-supervisors-milk-sale-accounts.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

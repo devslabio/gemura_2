@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { RequireAnyPermission } from '../../common/decorators/permission.decorator';
@@ -23,6 +23,7 @@ export class MccManagerController {
     description:
       'Returns gate volumes split direct vs Umucunda, manifest compliance rows, rejected test results for traceability, and active gate-role staff for the selected calendar day (UTC).',
   })
+  @ApiResponse({ status: 200, description: 'MCC manager overview retrieved successfully.' })
   @ApiQuery({ name: 'account_id', required: true })
   @ApiQuery({ name: 'date', required: false, description: 'YYYY-MM-DD (UTC day). Defaults to today UTC.' })
   async overview(
@@ -43,6 +44,8 @@ export class MccManagerController {
     summary: 'Update traceability resolution on a rejected gate test',
     description: 'Sets source_resolution_status for an MccMilkTestResult linked to this MCC account.',
   })
+  @ApiParam({ name: 'testResultId', description: 'Milk test result ID.' })
+  @ApiResponse({ status: 200, description: 'Traceability resolution updated successfully.' })
   async approveResolution(
     @CurrentUser() user: User,
     @Param('testResultId') testResultId: string,

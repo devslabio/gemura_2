@@ -10,16 +10,26 @@ import Icon, {
   faChevronRight,
   faBars,
   faUsers,
+  faUser,
   faUserShield,
   faLock,
   faWarehouse,
   faBuilding,
   faChartLine,
   faClipboardList,
-  faReceipt,
+  faWallet,
   faHandHoldingDollar,
-  faChartBar,
+  faBriefcase,
+  faShoppingCart,
+  faFileAlt,
+  faTriangleExclamation,
+  faReceipt,
+  faList,
+  faUserFriends,
+  faTruck,
+  faMapPin,
 } from './Icon';
+import { getRoleLabel } from '@/lib/utils/role';
 import { adminApi } from '@/lib/api/admin';
 import { PermissionService } from '@/lib/services/permission.service';
 import type { CSSProperties } from 'react';
@@ -50,7 +60,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     if (!user) return;
     setUserName(`${user.firstName} ${user.lastName}`.trim() || 'User');
     setUserEmail(user.email || '');
-    setUserRole(currentAccount?.role || 'User');
+    setUserRole(getRoleLabel(currentAccount?.role));
   }, [user, currentAccount]);
 
   useEffect(() => {
@@ -78,30 +88,91 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     const entries: NavEntry[] = [];
 
     if (canViewDashboard() || isAdmin()) {
-      entries.push({ kind: 'section', label: 'Dashboards' });
       entries.push({
         kind: 'link',
-        href: '/admin/dashboard/overview',
-        label: 'Overview',
+        href: '/admin/dashboard',
+        label: 'Dashboard',
         icon: faChartLine,
       });
+      entries.push({ kind: 'section', label: 'Operations' });
       entries.push({
         kind: 'link',
-        href: '/admin/dashboard/milk',
-        label: 'Milk & collections',
-        icon: faReceipt,
+        href: '/admin/operations/gate-deliveries',
+        label: 'Gate deliveries',
+        icon: faTruck,
       });
       entries.push({
         kind: 'link',
-        href: '/admin/dashboard/finance',
-        label: 'Finance',
+        href: '/admin/operations/milk-manifests',
+        label: 'Milk manifests',
+        icon: faClipboardList,
+      });
+      entries.push({ kind: 'section', label: 'Reports & lists' });
+      entries.push({
+        kind: 'link',
+        href: '/admin/milk/collections',
+        label: 'Milk collections',
+        icon: faClipboardList,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/milk/rejections',
+        label: 'Milk rejections',
+        icon: faTriangleExclamation,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/finance/active-loans',
+        label: 'Active loans',
+        icon: faWallet,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/finance/loan-disbursements',
+        label: 'Loan disbursements',
         icon: faHandHoldingDollar,
       });
       entries.push({
         kind: 'link',
-        href: '/admin/dashboard/usage',
-        label: 'Usage',
-        icon: faChartBar,
+        href: '/admin/finance/loan-repayments',
+        label: 'Loan repayments',
+        icon: faHandHoldingDollar,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/finance/payroll-runs',
+        label: 'Payroll runs',
+        icon: faBriefcase,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/finance/inventory-sales',
+        label: 'Inventory sales',
+        icon: faShoppingCart,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/finance/charges',
+        label: 'Supplier charges',
+        icon: faReceipt,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/finance/accounting-transactions',
+        label: 'Accounting journals',
+        icon: faList,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/directory/supplier-links',
+        label: 'Supplier–customer links',
+        icon: faUserFriends,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/audit-log',
+        label: 'Audit log',
+        icon: faFileAlt,
       });
     }
 
@@ -117,6 +188,12 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
       });
       entries.push({ kind: 'link', href: '/admin/roles', label: 'Roles', icon: faUserShield });
       entries.push({ kind: 'link', href: '/admin/permissions', label: 'Permissions', icon: faLock });
+      entries.push({
+        kind: 'link',
+        href: '/admin/regional-supervision',
+        label: 'Regional supervision',
+        icon: faMapPin,
+      });
     }
 
     entries.push({ kind: 'section', label: 'Platform' });
@@ -129,22 +206,11 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
 
   const linkIsActive = (href: string) => {
     if (!href) return false;
-    if (href.startsWith('/admin/dashboard/')) {
-      const segment = href.replace('/admin/dashboard/', '');
-      if (!segment) return false;
-      return pathname === href || pathname.startsWith(`${href}/`);
+    if (href === '/admin/dashboard') {
+      return pathname === '/admin/dashboard' || pathname.startsWith('/admin/dashboard/');
     }
     return pathname === href || pathname.startsWith(`${href}/`);
   };
-
-  const userInitials = useMemo(() => {
-    const f = user?.firstName?.trim()?.charAt(0);
-    const l = user?.lastName?.trim()?.charAt(0);
-    if (f && l) return `${f}${l}`.toUpperCase();
-    if (f) return f.toUpperCase();
-    if (userEmail) return userEmail.charAt(0).toUpperCase();
-    return '?';
-  }, [user?.firstName, user?.lastName, userEmail]);
 
   const handleCollapseToggle = useCallback(() => {
     onCollapsedChange(!collapsed);
@@ -190,7 +256,11 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
         {/* Logo */}
         <div className="p-4 sm:p-5 border-b border-[#031a3a] flex-shrink-0 mb-2 sm:mb-4">
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
-            <Link href="/admin/dashboard/overview" className={`flex items-center gap-3 min-h-[44px] ${collapsed ? 'justify-center w-full' : 'w-auto'}`} onClick={handleLinkClick}>
+            <Link
+              href="/admin/dashboard"
+              className={`flex items-center gap-3 min-h-11 ${collapsed ? 'flex-1 justify-center' : 'flex-1'}`}
+              onClick={handleLinkClick}
+            >
               <div className="relative flex-shrink-0 bg-transparent flex items-center justify-center overflow-hidden rounded-full">
                 <Image src="/logo.png" alt="Gemura" width={collapsed ? 32 : 40} height={collapsed ? 32 : 40} className="object-contain" priority />
               </div>
@@ -207,8 +277,9 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
                 <button
                   type="button"
                   onClick={handleCollapseToggle}
-                  className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-[#031a3a] rounded-sm transition-colors text-gray-300 hover:text-white"
+                  className="p-2 min-w-11 min-h-11 flex items-center justify-center hover:bg-[#031a3a] rounded-sm transition-colors text-gray-300 hover:text-white"
                   aria-label="Expand sidebar"
+                  title="Expand sidebar"
                 >
                   <Icon icon={faChevronRight} size="sm" />
                 </button>
@@ -216,14 +287,43 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
                 <button
                   type="button"
                   onClick={handleCollapseToggle}
-                  className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center hover:bg-[#031a3a] rounded-sm transition-colors text-gray-300 hover:text-white"
+                  className="p-2 min-w-11 min-h-11 flex items-center justify-center hover:bg-[#031a3a] rounded-sm transition-colors text-gray-300 hover:text-white"
                   aria-label="Collapse sidebar"
+                  title="Collapse sidebar"
                 >
                   <Icon icon={faBars} size="sm" />
                 </button>
               )}
             </span>
           </div>
+        </div>
+
+        {/* User block — aligned with main Gemura app sidebar */}
+        <div
+          className={`shrink-0 flex flex-col items-center gap-3 sm:gap-4 mb-2 sm:mb-4 p-4 sm:p-6 ${collapsed ? 'lg:px-3' : ''}`}
+        >
+          <div
+            className={`
+              rounded-full flex items-center justify-center text-white
+              bg-black/20 border-2 border-white/30
+              transition-all duration-300 ease-in-out
+              hover:bg-black/30 hover:border-white/50 active:scale-105
+              w-14 h-14 sm:w-20 sm:h-20
+              ${collapsed ? 'lg:w-12 lg:h-12' : 'lg:w-24 lg:h-24'}
+            `}
+            aria-hidden
+          >
+            <Icon icon={faUser} className="text-white" size={collapsed ? 'sm' : '2x'} />
+          </div>
+          {!collapsed && (
+            <div className="text-center w-full min-w-0">
+              <div className="text-sm font-semibold text-white mb-0.5 truncate">{userName}</div>
+              {userEmail ? (
+                <div className="text-xs text-gray-300 truncate max-w-[12.5rem] mx-auto">{userEmail}</div>
+              ) : null}
+              <div className="text-xs text-white/80 font-medium uppercase tracking-wide mt-0.5">{userRole}</div>
+            </div>
+          )}
         </div>
 
         {/* Navigation */}
@@ -246,7 +346,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
                 ${collapsed ? 'justify-center px-3' : ''}
                 ${
                   active
-                    ? 'bg-[#031a3a] text-white border-l-4 border-[var(--primary)]'
+                    ? 'bg-[#031a3a] text-white border-l-4 border-white/30'
                     : 'text-gray-300 hover:bg-[#031a3a] hover:text-white active:bg-[#031a3a]'
                 }
               `;
@@ -272,24 +372,6 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
             })}
           </ul>
         </nav>
-
-        <div className={`flex-shrink-0 border-t border-[#031a3a] p-4 ${collapsed ? 'flex justify-center' : ''}`}>
-          <div className={`flex items-center gap-3 ${collapsed ? 'justify-center' : ''}`}>
-            <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black/25 text-xs font-semibold text-white ring-1 ring-white/20"
-              title={userName}
-            >
-              <span className={collapsed ? 'text-[11px]' : 'text-xs'}>{userInitials}</span>
-            </div>
-            {!collapsed && (
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold text-white">{userName}</div>
-                <div className="truncate text-xs text-white/60">{userRole}</div>
-                {userEmail && <div className="truncate text-[11px] text-white/45">{userEmail}</div>}
-              </div>
-            )}
-          </div>
-        </div>
       </aside>
     </>
   );

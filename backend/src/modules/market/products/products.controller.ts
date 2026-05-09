@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Put, Delete, Body, UseGuards, Param, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiParam, ApiQuery, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiNotFoundResponse } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
 import { TokenGuard } from '../../../common/guards/token.guard';
@@ -15,6 +15,7 @@ export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 
   @Post()
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Create product',
     description: 'Create a new product listing in the market. Products can be dairy products, feed, equipment, or other agricultural items.',
@@ -42,8 +43,8 @@ export class ProductsController {
       },
     },
   })
-  @ApiBadRequestResponse({ description: 'Invalid request data' })
-  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiBadRequestResponse({ description: 'Invalid request data.' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized.' })
   async createProduct(@CurrentUser() user: User, @Body() createDto: CreateProductDto) {
     return this.productsService.createProduct(user, createDto);
   }
@@ -72,7 +73,7 @@ export class ProductsController {
       },
     },
   })
-  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized.' })
   async getProducts(@CurrentUser() user: User, @Query('status') status?: string) {
     return this.productsService.getProducts(user, { status });
   }
@@ -91,8 +92,8 @@ export class ProductsController {
     status: 200,
     description: 'Product fetched successfully',
   })
-  @ApiNotFoundResponse({ description: 'Product not found' })
-  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiNotFoundResponse({ description: 'Product not found.' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized.' })
   async getProduct(@CurrentUser() user: User, @Param('id') id: string) {
     return this.productsService.getProduct(user, id);
   }
@@ -112,8 +113,8 @@ export class ProductsController {
     status: 200,
     description: 'Product updated successfully',
   })
-  @ApiNotFoundResponse({ description: 'Product not found' })
-  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiNotFoundResponse({ description: 'Product not found.' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized.' })
   async updateProduct(@CurrentUser() user: User, @Param('id') id: string, @Body() updateDto: UpdateProductDto) {
     return this.productsService.updateProduct(user, id, updateDto);
   }
@@ -132,8 +133,8 @@ export class ProductsController {
     status: 200,
     description: 'Product deleted successfully',
   })
-  @ApiNotFoundResponse({ description: 'Product not found' })
-  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiNotFoundResponse({ description: 'Product not found.' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized.' })
   async deleteProduct(@CurrentUser() user: User, @Param('id') id: string) {
     return this.productsService.deleteProduct(user, id);
   }
@@ -153,8 +154,8 @@ export class ProductsController {
     status: 200,
     description: 'Products searched successfully',
   })
-  @ApiBadRequestResponse({ description: 'Search query is required' })
-  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiBadRequestResponse({ description: 'Search query is required.' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized.' })
   async searchProducts(@CurrentUser() user: User, @Query('q') query: string) {
     return this.productsService.searchProducts(user, query);
   }
@@ -168,7 +169,7 @@ export class ProductsController {
     status: 200,
     description: 'Featured products fetched successfully',
   })
-  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized.' })
   async getFeaturedProducts(@CurrentUser() user: User) {
     return this.productsService.getFeaturedProducts(user);
   }
@@ -182,7 +183,7 @@ export class ProductsController {
     status: 200,
     description: 'Recent products fetched successfully',
   })
-  @ApiUnauthorizedResponse({ description: 'Unauthorized' })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized.' })
   async getRecentProducts(@CurrentUser() user: User) {
     return this.productsService.getRecentProducts(user);
   }

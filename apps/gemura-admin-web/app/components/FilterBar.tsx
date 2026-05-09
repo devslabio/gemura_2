@@ -51,7 +51,7 @@ export function FilterBarSearch({
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
           placeholder={placeholder}
-          className="input w-full !pl-11 h-9 text-sm placeholder:text-gray-500"
+          className="input w-full box-border min-h-[2.75rem] h-auto !py-2 !pr-3 !pl-11 text-sm leading-snug placeholder:text-gray-500"
         />
       </div>
     </div>
@@ -65,7 +65,7 @@ export function FilterBarActions({ onClear }: { onClear: () => void }) {
       <button
         type="button"
         onClick={onClear}
-        className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-medium text-gray-700 bg-gray-100 border-0 rounded hover:bg-gray-200 transition-colors"
+        className="inline-flex items-center justify-center gap-1.5 min-h-[2.75rem] h-auto px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border-0 rounded hover:bg-gray-200 transition-colors"
       >
         <Icon icon={faTimes} size="sm" />
         Clear
@@ -81,7 +81,7 @@ export function FilterBarApply({ onApply }: { onApply: () => void }) {
       <button
         type="button"
         onClick={onApply}
-        className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-medium bg-[var(--primary)] text-white border-0 rounded hover:opacity-90 transition-colors"
+        className="inline-flex items-center justify-center gap-1.5 min-h-[2.75rem] h-auto px-4 py-2 text-sm font-medium bg-[var(--primary)] text-white border-0 rounded hover:opacity-90 transition-colors"
       >
         <Icon icon={faCheck} size="sm" />
         Apply
@@ -108,7 +108,7 @@ export function FilterBarExport<T extends object>({
         type="button"
         onClick={() => exportToCsv(data, exportColumns, exportFilename)}
         disabled={disabled || data.length === 0}
-        className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        className="inline-flex items-center justify-center gap-1.5 min-h-[2.75rem] h-auto px-4 py-2 text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       >
         <Icon icon={faDownload} size="sm" />
         Export CSV

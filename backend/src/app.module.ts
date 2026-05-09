@@ -46,6 +46,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { PublicAnalyticsModule } from './modules/public-analytics/public-analytics.module';
 import { TransfersModule } from './modules/transfers/transfers.module';
+import { SupervisorModule } from './modules/supervisor/supervisor.module';
 import { AppController } from './app.controller';
 
 @Module({
@@ -103,6 +104,7 @@ import { AppController } from './app.controller';
     MilkProductionModule,
     ImmisModule,
     AdminModule,
+    SupervisorModule,
     PublicAnalyticsModule,
     TransfersModule,
   ],

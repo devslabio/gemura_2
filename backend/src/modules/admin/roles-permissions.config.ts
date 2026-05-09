@@ -13,6 +13,7 @@ export const ROLES = [
   'casual_laborer',
   'leadership',
   'regulator',
+  'regional_supervisor',
   'umucunda_a',
   'umucunda_b',
   'accountant',
@@ -53,6 +54,13 @@ export interface PermissionDef {
 export const PERMISSIONS: PermissionDef[] = [
   { code: 'dashboard.view', name: 'View dashboard', description: 'Access admin/overview dashboard', category: 'Admin' },
   { code: 'manage_users', name: 'Manage users', description: 'Create, edit, and manage users and roles', category: 'Admin' },
+  {
+    code: 'view_regional_accounts',
+    name: 'View regional platform accounts',
+    description:
+      'List and open platform tenant/branch accounts whose operational district is in the regional supervisor scope (assigned by admins).',
+    category: 'Admin',
+  },
   { code: 'view_sales', name: 'View sales', description: 'View sales list and details', category: 'Sales' },
   { code: 'create_sales', name: 'Create sales', description: 'Create new sales', category: 'Sales' },
   { code: 'update_sales', name: 'Update sales', description: 'Edit and update sales', category: 'Sales' },
@@ -195,6 +203,15 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
     'view_inventory',
     'view_analytics',
   ],
+  regional_supervisor: [
+    'dashboard.view',
+    'view_sales',
+    'view_collections',
+    'mcc_view_operations',
+    'view_inventory',
+    'view_analytics',
+    'view_regional_accounts',
+  ],
   umucunda_a: [
     'dashboard.view',
     'view_collections',
@@ -269,6 +286,7 @@ export const ROLE_LABELS: Record<RoleCode, string> = {
   casual_laborer: 'Casual laborer',
   leadership: 'MCC leadership',
   regulator: 'Regulator',
+  regional_supervisor: 'Regional supervisor',
   umucunda_a: 'Umucunda Type A',
   umucunda_b: 'Umucunda Type B',
   accountant: 'Accountant',
@@ -288,6 +306,8 @@ export const ROLE_DESCRIPTIONS: Record<RoleCode, string> = {
     'Floor tasks at intake: gate deliveries, manifest drafts, own shift, supplier picker at gate, inventory read for tank monitoring — no full collections UI, traceability tests, or roster screens',
   leadership: 'Governance view with aggregate analytics and operational monitoring',
   regulator: 'Read-only compliance and traceability oversight access',
+  regional_supervisor:
+    'Regional oversight: aggregate dashboard and operational visibility aligned with assigned districts (admin-managed)',
   umucunda_a:
     'Umucunda route operator: own gate deliveries & manifests (linked supplier), sales/collections; no site-wide MCC roster or inventory',
   umucunda_b:

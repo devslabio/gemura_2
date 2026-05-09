@@ -6,7 +6,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { MccOnboardingReviewStatus, Prisma, User } from '@prisma/client';
+import { AccountType, LocationType, MccOnboardingReviewStatus, Prisma, User } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ImmisService } from '../immis/immis.service';
@@ -35,6 +35,16 @@ import { RbacService } from '../rbac/rbac.service';
 import { CreatePlatformRoleDto } from './dto/create-platform-role.dto';
 import { UpdatePlatformRoleDto } from './dto/update-platform-role.dto';
 import { AssignUserAccountMembershipDto } from './dto/assign-user-account-membership.dto';
+import { UpdateOnboardingOperationalConfigDto } from './dto/update-onboarding-operational-config.dto';
+import { UpdateAccountOperationalLocationDto } from './dto/update-account-operational-location.dto';
+import { SetRegionalSupervisorScopeDto } from './dto/set-regional-supervisor-scope.dto';
+import { UpdateAccountRegionalSupervisorDto } from './dto/update-account-regional-supervisor.dto';
+import {
+  CoolingTankRowDto,
+  FacilitySnapshotPatchDto,
+  TenantOperationalProfilePatchDto,
+  UpdateTenantAccountOperationalMetricsDto,
+} from './dto/update-tenant-account-operational-metrics.dto';
 
 export type UserActivityMetric =
   | 'suppliers'
@@ -122,6 +132,266 @@ export class AdminService {
     return row._count?._all ?? 0;
   }
 
+  /** Business volumes keyed by account id (tenant/MCC operational context). */
+  private async getBusinessMetricsByAccountId(accountIds: string[]): Promise<
+    Record<
+      string,
+      {
+        members: number;
+        suppliers: number;
+        customers: number;
+        sales: number;
+        collections: number;
+        farms: number;
+      }
+    >
+  > {
+    const ids = [...new Set(accountIds.filter(Boolean))];
+    const emptyStat = () => ({
+      members: 0,
+      suppliers: 0,
+      customers: 0,
+      sales: 0,
+      collections: 0,
+      farms: 0,
+    });
+    const out: Record<string, ReturnType<typeof emptyStat>> = {};
+    for (const id of ids) out[id] = emptyStat();
+    if (ids.length === 0) return out;
+
+    const [
+      membersByAccount,
+      suppliersByCustomerAccount,
+      customersBySupplierAccount,
+      salesBySupplierAccount,
+      collectionsByCustomerAccount,
+      farmsByAccount,
+    ] = await Promise.all([
+      this.prisma.userAccount.groupBy({
+        by: ['account_id'],
+        where: { account_id: { in: ids }, status: 'active' },
+        _count: true,
+      }),
+      this.prisma.supplierCustomer.groupBy({
+        by: ['customer_account_id'],
+        where: { customer_account_id: { in: ids }, relationship_status: 'active' },
+        _count: true,
+      }),
+      this.prisma.supplierCustomer.groupBy({
+        by: ['supplier_account_id'],
+        where: { supplier_account_id: { in: ids }, relationship_status: 'active' },
+        _count: true,
+      }),
+      this.prisma.milkSale.groupBy({
+        by: ['supplier_account_id'],
+        where: { supplier_account_id: { in: ids }, status: { not: 'deleted' } },
+        _count: true,
+      }),
+      this.prisma.milkSale.groupBy({
+        by: ['customer_account_id'],
+        where: { customer_account_id: { in: ids }, status: { not: 'deleted' } },
+        _count: true,
+      }),
+      this.prisma.farm.groupBy({
+        by: ['account_id'],
+        where: { account_id: { in: ids } },
+        _count: true,
+      }),
+    ]);
+
+    const membersByAccountId = new Map(membersByAccount.map((row) => [row.account_id, this.normalizeGroupCount(row)]));
+    const suppliersByAccountId = new Map(
+      suppliersByCustomerAccount.map((row) => [row.customer_account_id, this.normalizeGroupCount(row)]),
+    );
+    const customersByAccountId = new Map(
+      customersBySupplierAccount.map((row) => [row.supplier_account_id, this.normalizeGroupCount(row)]),
+    );
+    const salesByAccountId = new Map(
+      salesBySupplierAccount.map((row) => [row.supplier_account_id, this.normalizeGroupCount(row)]),
+    );
+    const collectionsByAccountId = new Map(
+      collectionsByCustomerAccount.map((row) => [row.customer_account_id, this.normalizeGroupCount(row)]),
+    );
+    const farmsByAccountId = new Map(farmsByAccount.map((row) => [row.account_id, this.normalizeGroupCount(row)]));
+
+    for (const id of ids) {
+      out[id] = {
+        members: membersByAccountId.get(id) ?? 0,
+        suppliers: suppliersByAccountId.get(id) ?? 0,
+        customers: customersByAccountId.get(id) ?? 0,
+        sales: salesByAccountId.get(id) ?? 0,
+        collections: collectionsByAccountId.get(id) ?? 0,
+        farms: farmsByAccountId.get(id) ?? 0,
+      };
+    }
+    return out;
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  }
+
+  private asString(value: unknown): string | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+
+  private asInt(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return Math.round(value);
+    if (typeof value !== 'string') return null;
+    const cleaned = value.replace(/,/g, '').trim();
+    if (!cleaned) return null;
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? Math.round(parsed) : null;
+  }
+
+  private asDecimal(value: unknown): Prisma.Decimal | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return new Prisma.Decimal(value);
+    }
+    if (typeof value !== 'string') return null;
+    const cleaned = value.replace(/,/g, '').trim();
+    if (!cleaned) return null;
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? new Prisma.Decimal(parsed) : null;
+  }
+
+  private asStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => this.asString(item))
+      .filter((item): item is string => Boolean(item));
+  }
+
+  private async syncMccOperationalDataFromOnboarding(
+    tx: Prisma.TransactionClient,
+    accountId: string,
+    submission: { id: string; submission_code: string; section_payload: Prisma.JsonValue },
+  ): Promise<void> {
+    const payload = this.asRecord(submission.section_payload);
+    const section2 = this.asRecord(payload.section2);
+    const section3 = this.asRecord(payload.section3);
+    const section6 = this.asRecord(payload.section6);
+    const pick = (source: Record<string, unknown>, keys: string[]): unknown => {
+      for (const key of keys) {
+        if (source[key] != null) return source[key];
+      }
+      return null;
+    };
+
+    const tankRowsRaw = Array.isArray(section2.coolingTanks)
+      ? section2.coolingTanks
+      : Array.isArray(section2.tankRows)
+        ? section2.tankRows
+        : [];
+    const tankRows = tankRowsRaw
+      .map((entry) => {
+        const row = this.asRecord(entry);
+        const tankNumber = this.asString(pick(row, ['tankNumber', 'tankNo']));
+        const capacityLitres = this.asDecimal(pick(row, ['capacityLitres', 'capacity']));
+        const yearOrAge = this.asString(pick(row, ['yearOrAge', 'year']));
+        const condition = this.asString(row.condition);
+        if (!tankNumber && !capacityLitres && !yearOrAge && !condition) return null;
+        return {
+          tank_number: tankNumber,
+          capacity_litres: capacityLitres,
+          year_or_age: yearOrAge,
+          condition,
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+    const powerSupplySources = this.asStringArray(
+      pick(section2, ['powerSupplySelections', 'powerSupplyOptions']),
+    );
+    const hasGrid = powerSupplySources.some((source) => /grid|electricity/i.test(source));
+    const hasGenerator = powerSupplySources.some((source) => /generator/i.test(source));
+    const hasSolar = powerSupplySources.some((source) => /solar/i.test(source));
+
+    const expectedDailyDeliveries =
+      this.asInt(section3.expectedDailyDeliveries) ??
+      this.asInt(section3.expectedDeliveriesPerDay) ??
+      this.asInt(section3.expectedDeliveries);
+
+    const profileData = {
+      expected_daily_deliveries: expectedDailyDeliveries,
+      daily_milk_volume_litres: this.asDecimal(pick(section2, ['dailyMilkVolume'])),
+      max_milk_one_day_litres: this.asDecimal(pick(section2, ['maxMilkInOneDay', 'maxMilkOneDay'])),
+      tank_capacity_sufficiency: this.asString(section2.tankCapacitySufficiency),
+      insufficient_capacity_plan: this.asString(section2.insufficientPlan),
+      power_supply_sources: powerSupplySources as Prisma.InputJsonValue,
+      generator_capacity_kva: this.asDecimal(
+        pick(section2, ['generatorCapacityKva', 'generatorCapacity']),
+      ),
+      mobile_connectivity: this.asString(section2.mobileConnectivity),
+      total_farmers_supplying: this.asInt(section3.totalFarmersSupplying),
+      new_farmers_last_3_months: this.asInt(section3.newFarmersLast3Months),
+      milk_transporters_count: this.asInt(section3.milkTransportersCount),
+      average_distance_km: this.asDecimal(pick(section3, ['averageDistanceKm', 'averageDistance'])),
+      furthest_farm_km: this.asDecimal(pick(section3, ['furthestFarmKm', 'furthestFarmDistanceKm'])),
+      evening_milk_pattern: this.asString(section3.eveningMilkPattern),
+      own_milk_transport_type: this.asString(
+        pick(section3, ['ownMilkTransportType', 'ownTransportType']),
+      ),
+      record_system: this.asString(section6.recordSystem),
+      avg_days_delivery_to_payment: this.asInt(section6.avgDaysDeliveryToPayment),
+      average_annual_revenue_rwf: this.asDecimal(
+        pick(section6, ['averageAnnualRevenueRwf', 'averageAnnualRevenue']),
+      ),
+      main_buyer_name: this.asString(section6.mainBuyerName),
+      formal_supply_agreement_details: this.asString(
+        pick(section6, ['formalSupplyAgreementDetails', 'formalSupplyAgreement']),
+      ),
+      source_submission_id: submission.id,
+      source_submission_code: submission.submission_code,
+    };
+
+    await tx.mccOperationalProfile.upsert({
+      where: { account_id: accountId },
+      create: {
+        account_id: accountId,
+        ...profileData,
+      },
+      update: {
+        ...profileData,
+        captured_at: new Date(),
+      },
+    });
+
+    await tx.mccCoolingTankProfile.deleteMany({ where: { account_id: accountId } });
+    if (tankRows.length) {
+      await tx.mccCoolingTankProfile.createMany({
+        data: tankRows.map((row) => ({
+          account_id: accountId,
+          tank_number: row.tank_number,
+          capacity_litres: row.capacity_litres,
+          year_or_age: row.year_or_age,
+          condition: row.condition,
+        })),
+      });
+    }
+
+    await tx.mccFacilitySnapshot.upsert({
+      where: { account_id: accountId },
+      create: {
+        account_id: accountId,
+        power_status: hasGrid ? 'grid' : hasSolar ? 'solar' : hasGenerator ? 'generator' : null,
+        generator_status: hasGenerator ? 'available' : null,
+        observed_at: new Date(),
+        source: 'onboarding',
+      },
+      update: {
+        power_status: hasGrid ? 'grid' : hasSolar ? 'solar' : hasGenerator ? 'generator' : null,
+        generator_status: hasGenerator ? 'available' : null,
+        observed_at: new Date(),
+        source: 'onboarding',
+      },
+    });
+  }
+
   private async getUserOperationalStats(userIds: string[]) {
     const uniqueUserIds = [...new Set(userIds.filter(Boolean))];
     const empty = Object.fromEntries(
@@ -159,81 +429,7 @@ export class AdminService {
       return empty;
     }
 
-    const [
-      membersByAccount,
-      suppliersByCustomerAccount,
-      customersBySupplierAccount,
-      salesBySupplierAccount,
-      collectionsByCustomerAccount,
-      farmsByAccount,
-    ] = await Promise.all([
-      this.prisma.userAccount.groupBy({
-        by: ['account_id'],
-        where: {
-          account_id: { in: accountIds },
-          status: 'active',
-        },
-        _count: true,
-      }),
-      this.prisma.supplierCustomer.groupBy({
-        by: ['customer_account_id'],
-        where: {
-          customer_account_id: { in: accountIds },
-          relationship_status: 'active',
-        },
-        _count: true,
-      }),
-      this.prisma.supplierCustomer.groupBy({
-        by: ['supplier_account_id'],
-        where: {
-          supplier_account_id: { in: accountIds },
-          relationship_status: 'active',
-        },
-        _count: true,
-      }),
-      this.prisma.milkSale.groupBy({
-        by: ['supplier_account_id'],
-        where: {
-          supplier_account_id: { in: accountIds },
-          status: { not: 'deleted' },
-        },
-        _count: true,
-      }),
-      this.prisma.milkSale.groupBy({
-        by: ['customer_account_id'],
-        where: {
-          customer_account_id: { in: accountIds },
-          status: { not: 'deleted' },
-        },
-        _count: true,
-      }),
-      this.prisma.farm.groupBy({
-        by: ['account_id'],
-        where: {
-          account_id: { in: accountIds },
-        },
-        _count: true,
-      }),
-    ]);
-
-    const suppliersByAccountId = new Map(
-      suppliersByCustomerAccount.map((row) => [row.customer_account_id, this.normalizeGroupCount(row)]),
-    );
-    const membersByAccountId = new Map(
-      membersByAccount.map((row) => [row.account_id, this.normalizeGroupCount(row)]),
-    );
-    const customersByAccountId = new Map(
-      customersBySupplierAccount.map((row) => [row.supplier_account_id, this.normalizeGroupCount(row)]),
-    );
-    const salesByAccountId = new Map(
-      salesBySupplierAccount.map((row) => [row.supplier_account_id, this.normalizeGroupCount(row)]),
-    );
-    const collectionsByAccountId = new Map(
-      collectionsByCustomerAccount.map((row) => [row.customer_account_id, this.normalizeGroupCount(row)]),
-    );
-    const farmsByAccountId = new Map(
-      farmsByAccount.map((row) => [row.account_id, this.normalizeGroupCount(row)]),
-    );
+    const metricsByAccount = await this.getBusinessMetricsByAccountId(accountIds);
 
     const accountIdsByUserId = new Map<string, Set<string>>();
     for (const row of userAccounts) {
@@ -247,12 +443,14 @@ export class AdminService {
       empty[userId].accounts = accountSet.size;
 
       for (const linkedAccountId of accountSet) {
-        empty[userId].members += membersByAccountId.get(linkedAccountId) ?? 0;
-        empty[userId].suppliers += suppliersByAccountId.get(linkedAccountId) ?? 0;
-        empty[userId].customers += customersByAccountId.get(linkedAccountId) ?? 0;
-        empty[userId].sales += salesByAccountId.get(linkedAccountId) ?? 0;
-        empty[userId].collections += collectionsByAccountId.get(linkedAccountId) ?? 0;
-        empty[userId].farms += farmsByAccountId.get(linkedAccountId) ?? 0;
+        const m = metricsByAccount[linkedAccountId];
+        if (!m) continue;
+        empty[userId].members += m.members;
+        empty[userId].suppliers += m.suppliers;
+        empty[userId].customers += m.customers;
+        empty[userId].sales += m.sales;
+        empty[userId].collections += m.collections;
+        empty[userId].farms += m.farms;
       }
     }
 
@@ -394,6 +592,44 @@ export class AdminService {
     }
   }
 
+  /**
+   * List/detail of platform tenant accounts: `manage_users` (full) or `view_regional_accounts` (district-scoped).
+   */
+  private async assertPlatformAccountDirectoryAccess(
+    user: User,
+    accountId: string,
+  ): Promise<{ canManageUsers: boolean; scopeDistrictIds: string[] | null }> {
+    const ua = await this.prisma.userAccount.findFirst({
+      where: { user_id: user.id, account_id: accountId, status: 'active' },
+    });
+    if (!ua) {
+      throw new ForbiddenException({
+        code: 403,
+        status: 'error',
+        message: 'No active account access found.',
+      });
+    }
+    const rbacCtx = { role: ua.role, platform_role_id: ua.platform_role_id, permissions: ua.permissions };
+    const canManageUsers = await this.rbac.assertGuardPermission(rbacCtx, 'manage_users');
+    const canViewRegional = await this.rbac.assertGuardPermission(rbacCtx, 'view_regional_accounts');
+    if (!canManageUsers && !canViewRegional) {
+      throw new ForbiddenException({
+        code: 403,
+        status: 'error',
+        message: 'Insufficient permissions for platform accounts directory.',
+      });
+    }
+    if (canManageUsers) {
+      return { canManageUsers: true, scopeDistrictIds: null };
+    }
+    const rows = await this.prisma.regionalSupervisorDistrict.findMany({
+      where: { user_id: user.id },
+      select: { district_location_id: true },
+    });
+    const ids = [...new Set(rows.map((r) => r.district_location_id).filter(Boolean))] as string[];
+    return { canManageUsers: false, scopeDistrictIds: ids };
+  }
+
   private static readonly USERS_SORT_FIELDS: Record<string, string> = {
     name: 'name',
     email: 'email',
@@ -499,6 +735,7 @@ export class AdminService {
               status: 'active',
             },
             select: {
+              role: true,
               permissions: true,
               status: true,
             },
@@ -508,12 +745,6 @@ export class AdminService {
       this.prisma.user.count({ where }),
     ]);
 
-    const statsByUserId = await this.getUserOperationalStats(users.map((u) => u.id));
-    const roleByUserId = await this.legacyMembershipRolesByUserIds(
-      accountId,
-      users.map((u) => u.id),
-    );
-
     return {
       code: 200,
       status: 'success',
@@ -521,9 +752,8 @@ export class AdminService {
       data: {
         users: users.map((u) => ({
           ...u,
-          role: roleByUserId.get(u.id) ?? null,
+          role: u.user_accounts[0]?.role || null,
           permissions: u.user_accounts[0]?.permissions || null,
-          stats: statsByUserId[u.id],
         })),
         pagination: {
           page,
@@ -1152,6 +1382,8 @@ export class AdminService {
       date_to?: string;
       supplier_name?: string;
       customer_account_code?: string;
+      /** Full-text-ish match on user name, email, phone (members resource only). */
+      search?: string;
     },
   ) {
     await this.checkAdminPermission(user, adminAccountId);
@@ -1232,10 +1464,27 @@ export class AdminService {
     }
 
     if (resource === 'members') {
+      const userWhere: Prisma.UserWhereInput = {};
+      if (filters.search?.trim()) {
+        const q = filters.search.trim();
+        userWhere.OR = [
+          { name: { contains: q, mode: 'insensitive' } },
+          { email: { contains: q, mode: 'insensitive' } },
+          { phone: { contains: q, mode: 'insensitive' } },
+        ];
+      }
+      if (filters.status?.trim()) {
+        const st = filters.status.trim().toLowerCase();
+        if (st === 'active' || st === 'inactive') {
+          userWhere.status = st;
+        }
+      }
+
       const rows = await this.prisma.userAccount.findMany({
         where: {
           account_id: opAccountId,
           status: 'active',
+          ...(Object.keys(userWhere).length > 0 ? { user: userWhere } : {}),
         },
         include: {
           user: {
@@ -2013,9 +2262,7 @@ export class AdminService {
       },
     });
 
-    const statsByUserId = await this.getUserOperationalStats(users.map((u) => u.id));
-
-    const headers = ['Name', 'Email', 'Phone', 'Account Type', 'Role', 'Members', 'Suppliers', 'Customers', 'Sales', 'Collections', 'Farms', 'Status', 'Created At'];
+    const headers = ['Name', 'Email', 'Phone', 'Account Type', 'Role', 'Status', 'Created At'];
 
     const escape = (v: unknown): string => {
       if (v === null || v === undefined) return '';
@@ -2029,19 +2276,12 @@ export class AdminService {
     const csvRows = [
       headers.join(','),
       ...users.map((u) => {
-        const stats = statsByUserId[u.id] ?? { members: 0, suppliers: 0, customers: 0, sales: 0, collections: 0, farms: 0 };
         return [
           escape(u.name),
           escape(u.email),
           escape(u.phone),
           escape(u.account_type),
           escape(u.user_accounts[0]?.role ?? ''),
-          escape(stats.members),
-          escape(stats.suppliers),
-          escape(stats.customers),
-          escape(stats.sales),
-          escape(stats.collections),
-          escape(stats.farms),
           escape(u.status),
           escape(u.created_at.toISOString()),
         ].join(',');
@@ -2643,6 +2883,8 @@ export class AdminService {
       todayRows,
       salesByStatus,
       recentSales,
+      rejectedMilkCount,
+      rejectedMilkLitersAgg,
       overview,
     ] = await Promise.all([
       this.prisma.supplierCustomer.findMany({
@@ -2700,6 +2942,19 @@ export class AdminService {
             select: { name: true },
           },
         },
+      }),
+      this.prisma.milkSale.count({
+        where: {
+          status: 'rejected',
+          sale_at: { gte: saleBounds.gte, lte: saleBounds.lte },
+        },
+      }),
+      this.prisma.milkSale.aggregate({
+        where: {
+          status: 'rejected',
+          sale_at: { gte: saleBounds.gte, lte: saleBounds.lte },
+        },
+        _sum: { quantity: true },
       }),
       overviewDataPromise,
     ]);
@@ -2768,6 +3023,10 @@ export class AdminService {
         },
         collections: {
           total: salesInRange,
+        },
+        rejections: {
+          transactions: rejectedMilkCount,
+          liters: Number(rejectedMilkLitersAgg._sum.quantity ?? 0),
         },
         suppliers: {
           total: totalSuppliers,
@@ -3172,6 +3431,1744 @@ export class AdminService {
         breakdown,
       },
     };
+  }
+
+  /** Paginated milk sales for Gemura Admin drill-down (matches dashboard period semantics). */
+  async listPlatformMilkSales(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      scope: 'collections' | 'rejections';
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.MilkSaleWhereInput =
+      opts.scope === 'rejections'
+        ? {
+            status: 'rejected',
+            sale_at: { gte: bounds.gte, lte: bounds.lte },
+          }
+        : {
+            status: { not: 'deleted' },
+            sale_at: { gte: bounds.gte, lte: bounds.lte },
+          };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.milkSale.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { sale_at: 'desc' },
+        select: {
+          id: true,
+          quantity: true,
+          unit_price: true,
+          status: true,
+          sale_at: true,
+          amount_paid: true,
+          supplier_account: { select: { id: true, name: true, code: true } },
+          customer_account: { select: { id: true, name: true, code: true } },
+        },
+      }),
+      this.prisma.milkSale.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Milk transactions retrieved successfully.',
+      data: {
+        scope: opts.scope,
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          quantity: Number(r.quantity),
+          unit_price: Number(r.unit_price),
+          amount_paid: Number(r.amount_paid),
+          status: r.status,
+          sale_at: r.sale_at.toISOString(),
+          supplier_name: r.supplier_account?.name ?? null,
+          supplier_code: r.supplier_account?.code ?? null,
+          customer_name: r.customer_account?.name ?? null,
+          customer_code: r.customer_account?.code ?? null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  /** Active loans (portfolio) or loans disbursed in the dashboard period. */
+  async listPlatformLoans(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      mode: 'active_portfolio' | 'disbursed_in_period';
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.LoanWhereInput =
+      opts.mode === 'active_portfolio'
+        ? { status: 'active' }
+        : (() => {
+            const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+            return { disbursement_date: { gte: bounds.gte, lte: bounds.lte } };
+          })();
+
+    const [rows, total] = await Promise.all([
+      this.prisma.loan.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { disbursement_date: 'desc' },
+        select: {
+          id: true,
+          principal: true,
+          amount_repaid: true,
+          status: true,
+          disbursement_date: true,
+          borrower_name: true,
+          borrower_account: { select: { name: true, code: true } },
+          lender_account: { select: { name: true, code: true } },
+        },
+      }),
+      this.prisma.loan.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Loans retrieved successfully.',
+      data: {
+        mode: opts.mode,
+        rows: rows.map((r) => ({
+          id: r.id,
+          principal: Number(r.principal),
+          amount_repaid: Number(r.amount_repaid),
+          status: r.status,
+          disbursement_date: r.disbursement_date.toISOString(),
+          borrower_label: r.borrower_account?.name ?? r.borrower_name ?? 'Borrower',
+          borrower_code: r.borrower_account?.code ?? null,
+          lender_name: r.lender_account?.name ?? null,
+          lender_code: r.lender_account?.code ?? null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  async listPlatformLoanRepayments(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where = { repayment_date: { gte: bounds.gte, lte: bounds.lte } };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.loanRepayment.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { repayment_date: 'desc' },
+        select: {
+          id: true,
+          amount: true,
+          repayment_date: true,
+          source: true,
+          loan: {
+            select: {
+              id: true,
+              borrower_name: true,
+              borrower_account: { select: { name: true, code: true } },
+              lender_account: { select: { name: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.loanRepayment.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Loan repayments retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          amount: Number(r.amount),
+          repayment_date: r.repayment_date.toISOString(),
+          source: r.source,
+          loan_id: r.loan.id,
+          borrower_label: r.loan.borrower_account?.name ?? r.loan.borrower_name ?? 'Borrower',
+          lender_name: r.loan.lender_account?.name ?? null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  async listPlatformPayrollRuns(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where = {
+      run_date: { gte: bounds.gte, lte: bounds.lte },
+      status: 'completed',
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.payrollRun.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { run_date: 'desc' },
+        select: {
+          id: true,
+          run_name: true,
+          run_date: true,
+          total_amount: true,
+          status: true,
+          account: { select: { name: true, code: true } },
+        },
+      }),
+      this.prisma.payrollRun.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Payroll runs retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          run_name: r.run_name ?? 'Payroll run',
+          run_date: r.run_date.toISOString(),
+          total_amount: Number(r.total_amount),
+          status: r.status,
+          account_name: r.account?.name ?? null,
+          account_code: r.account?.code ?? null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  async listPlatformInventorySales(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where = { sale_date: { gte: bounds.gte, lte: bounds.lte } };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.inventorySale.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { sale_date: 'desc' },
+        select: {
+          id: true,
+          quantity: true,
+          unit_price: true,
+          total_amount: true,
+          sale_date: true,
+          buyer_name: true,
+          payment_status: true,
+          product: { select: { name: true } },
+          buyer_account: { select: { name: true, code: true } },
+        },
+      }),
+      this.prisma.inventorySale.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Inventory sales retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          quantity: Number(r.quantity),
+          unit_price: Number(r.unit_price),
+          total_amount: Number(r.total_amount),
+          sale_date: r.sale_date.toISOString(),
+          buyer_label: r.buyer_account?.name ?? r.buyer_name ?? 'Buyer',
+          buyer_code: r.buyer_account?.code ?? null,
+          product_name: r.product?.name ?? 'Product',
+          payment_status: r.payment_status,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  async listPlatformAuditLogs(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where = { created_at: { gte: bounds.gte, lte: bounds.lte } };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { created_at: 'desc' },
+        select: {
+          id: true,
+          entity_type: true,
+          entity_id: true,
+          action: true,
+          user_id: true,
+          created_at: true,
+          ip_address: true,
+        },
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+
+    const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))] as string[];
+    const users =
+      userIds.length > 0
+        ? await this.prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, email: true, first_name: true, last_name: true },
+          })
+        : [];
+    const userLabel = new Map(
+      users.map((u) => [
+        u.id,
+        [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || u.email || u.id,
+      ]),
+    );
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Audit events retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          entity_type: r.entity_type,
+          entity_id: r.entity_id,
+          action: r.action,
+          user_id: r.user_id,
+          user_label: r.user_id ? userLabel.get(r.user_id) ?? null : null,
+          created_at: r.created_at.toISOString(),
+          ip_address: r.ip_address,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  /** Supplier charge definitions created or updated in the dashboard period (platform-wide). */
+  async listPlatformCharges(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.ChargeWhereInput = {
+      OR: [
+        { created_at: { gte: bounds.gte, lte: bounds.lte } },
+        { updated_at: { gte: bounds.gte, lte: bounds.lte } },
+      ],
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.charge.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { updated_at: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          kind: true,
+          amount_type: true,
+          amount: true,
+          recurrence: true,
+          is_active: true,
+          apply_to_all_suppliers: true,
+          effective_from: true,
+          effective_to: true,
+          created_at: true,
+          updated_at: true,
+          customer_account: { select: { name: true, code: true } },
+        },
+      }),
+      this.prisma.charge.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Charges retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          kind: r.kind,
+          amount_type: r.amount_type,
+          amount: Number(r.amount),
+          recurrence: r.recurrence,
+          is_active: r.is_active,
+          apply_to_all_suppliers: r.apply_to_all_suppliers,
+          effective_from: r.effective_from?.toISOString() ?? null,
+          effective_to: r.effective_to?.toISOString() ?? null,
+          created_at: r.created_at.toISOString(),
+          updated_at: r.updated_at.toISOString(),
+          mcc_name: r.customer_account?.name ?? null,
+          mcc_code: r.customer_account?.code ?? null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  /** New supplier–customer links created in the dashboard period. */
+  async listPlatformSupplierCustomerLinks(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.SupplierCustomerWhereInput = {
+      created_at: { gte: bounds.gte, lte: bounds.lte },
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.supplierCustomer.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { created_at: 'desc' },
+        select: {
+          id: true,
+          price_per_liter: true,
+          relationship_status: true,
+          created_at: true,
+          supplier_account: { select: { name: true, code: true } },
+          customer_account: { select: { name: true, code: true } },
+        },
+      }),
+      this.prisma.supplierCustomer.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Supplier–customer links retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          price_per_liter: Number(r.price_per_liter),
+          relationship_status: r.relationship_status,
+          created_at: r.created_at.toISOString(),
+          supplier_name: r.supplier_account?.name ?? null,
+          supplier_code: r.supplier_account?.code ?? null,
+          customer_name: r.customer_account?.name ?? null,
+          customer_code: r.customer_account?.code ?? null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  /** Chart-of-accounts journal batches dated in the dashboard period. */
+  async listPlatformAccountingTransactions(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.AccountingTransactionWhereInput = {
+      transaction_date: { gte: bounds.gte, lte: bounds.lte },
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.accountingTransaction.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { transaction_date: 'desc' },
+        select: {
+          id: true,
+          transaction_date: true,
+          reference_number: true,
+          description: true,
+          total_amount: true,
+          farm_id: true,
+          created_at: true,
+          _count: { select: { entries: true } },
+        },
+      }),
+      this.prisma.accountingTransaction.count({ where }),
+    ]);
+
+    const farmIds = [...new Set(rows.map((r) => r.farm_id).filter(Boolean))] as string[];
+    const farms =
+      farmIds.length > 0
+        ? await this.prisma.farm.findMany({
+            where: { id: { in: farmIds } },
+            select: { id: true, name: true, code: true },
+          })
+        : [];
+    const farmLabel = new Map(farms.map((f) => [f.id, f.name || f.code || f.id]));
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Accounting transactions retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          transaction_date: r.transaction_date.toISOString(),
+          reference_number: r.reference_number,
+          description: r.description,
+          total_amount: Number(r.total_amount),
+          farm_id: r.farm_id,
+          farm_name: r.farm_id ? farmLabel.get(r.farm_id) ?? null : null,
+          entry_lines: r._count.entries,
+          created_at: r.created_at.toISOString(),
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  /** MCC gate deliveries by arrival time in the dashboard period. */
+  async listPlatformGateDeliveries(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.MccGateDeliveryWhereInput = {
+      arrived_at: { gte: bounds.gte, lte: bounds.lte },
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.mccGateDelivery.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { arrived_at: 'desc' },
+        select: {
+          id: true,
+          source_type: true,
+          gate_volume_litres: true,
+          arrived_at: true,
+          notes: true,
+          mcc_account: { select: { name: true, code: true } },
+          source_account: { select: { name: true, code: true } },
+          recorded_by: { select: { first_name: true, last_name: true, email: true } },
+        },
+      }),
+      this.prisma.mccGateDelivery.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Gate deliveries retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          source_type: r.source_type,
+          gate_volume_litres: Number(r.gate_volume_litres),
+          arrived_at: r.arrived_at.toISOString(),
+          notes: r.notes,
+          mcc_name: r.mcc_account?.name ?? null,
+          mcc_code: r.mcc_account?.code ?? null,
+          source_name: r.source_account?.name ?? null,
+          source_code: r.source_account?.code ?? null,
+          recorded_by_label:
+            [r.recorded_by.first_name, r.recorded_by.last_name].filter(Boolean).join(' ').trim() ||
+            r.recorded_by.email ||
+            null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  /** Umucunda milk manifests created in the dashboard period. */
+  async listPlatformMilkManifests(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      dateFrom?: string;
+      dateTo?: string;
+      tzOffsetMinutes?: number;
+    },
+  ) {
+    await this.checkAdminPermission(user, accountId, 'dashboard.view');
+    const bounds = this.resolveAdminDashboardPeriodBounds(opts.dateFrom, opts.dateTo, opts.tzOffsetMinutes);
+    const skip = (opts.page - 1) * opts.limit;
+    const where: Prisma.MccMilkManifestWhereInput = {
+      created_at: { gte: bounds.gte, lte: bounds.lte },
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.mccMilkManifest.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { created_at: 'desc' },
+        select: {
+          id: true,
+          manifest_ref: true,
+          status: true,
+          created_at: true,
+          submitted_at: true,
+          accepted_at: true,
+          rejected_at: true,
+          mcc_account: { select: { name: true, code: true } },
+          umucunda_supplier: { select: { name: true, code: true } },
+          gate_delivery: {
+            select: { arrived_at: true, gate_volume_litres: true },
+          },
+          _count: { select: { lines: true } },
+        },
+      }),
+      this.prisma.mccMilkManifest.count({ where }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Milk manifests retrieved successfully.',
+      data: {
+        period: { start: bounds.gte.toISOString(), end: bounds.lte.toISOString() },
+        rows: rows.map((r) => ({
+          id: r.id,
+          manifest_ref: r.manifest_ref,
+          status: r.status,
+          created_at: r.created_at.toISOString(),
+          submitted_at: r.submitted_at?.toISOString() ?? null,
+          accepted_at: r.accepted_at?.toISOString() ?? null,
+          rejected_at: r.rejected_at?.toISOString() ?? null,
+          line_count: r._count.lines,
+          mcc_name: r.mcc_account?.name ?? null,
+          mcc_code: r.mcc_account?.code ?? null,
+          umucunda_name: r.umucunda_supplier?.name ?? null,
+          umucunda_code: r.umucunda_supplier?.code ?? null,
+          gate_arrived_at: r.gate_delivery?.arrived_at.toISOString() ?? null,
+          gate_volume_litres: r.gate_delivery ? Number(r.gate_delivery.gate_volume_litres) : null,
+        })),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  private locationPathLabel(path: { name: string }[]): string {
+    return path.map((p) => p.name).join(' → ');
+  }
+
+  private async resolveDistrictIdFromOperationalLocation(operationalLocationId: string | null): Promise<string | null> {
+    if (!operationalLocationId) return null;
+    const path = await this.locationsService.getPath(operationalLocationId);
+    const d = path.find((p) => p.location_type === 'DISTRICT');
+    return d?.id ?? null;
+  }
+
+  /** List platform accounts with optional district / supervisor filters (operational_district_id). Scoped for regional supervisors. */
+  async listTenantAccountsForAdmin(
+    user: User,
+    accountId: string,
+    opts: {
+      page: number;
+      limit: number;
+      search?: string;
+      account_type?: 'tenant' | 'branch' | 'admin' | 'all';
+      district_location_id?: string;
+      /** UUID of assigned supervisor, or the literal `unassigned`. */
+      regional_supervisor_user_id?: string;
+    },
+  ) {
+    const { canManageUsers, scopeDistrictIds } = await this.assertPlatformAccountDirectoryAccess(user, accountId);
+    const skip = (opts.page - 1) * opts.limit;
+    const typeFilter = opts.account_type;
+    const types: AccountType[] =
+      !typeFilter || typeFilter === 'all'
+        ? [AccountType.tenant, AccountType.branch, AccountType.admin]
+        : [typeFilter as AccountType];
+
+    const districtRequested = opts.district_location_id?.trim() || undefined;
+    let operationalDistrictWhere: Prisma.AccountWhereInput['operational_district_id'];
+
+    if (canManageUsers) {
+      operationalDistrictWhere = districtRequested ?? undefined;
+    } else {
+      const scoped = scopeDistrictIds ?? [];
+      if (scoped.length === 0) {
+        return {
+          code: 200,
+          status: 'success',
+          message: 'Accounts retrieved.',
+          data: {
+            rows: [],
+            pagination: {
+              page: opts.page,
+              limit: opts.limit,
+              total: 0,
+              totalPages: 1,
+            },
+          },
+        };
+      }
+      if (districtRequested) {
+        if (!scoped.includes(districtRequested)) {
+          return {
+            code: 200,
+            status: 'success',
+            message: 'Accounts retrieved.',
+            data: {
+              rows: [],
+              pagination: {
+                page: opts.page,
+                limit: opts.limit,
+                total: 0,
+                totalPages: 1,
+              },
+            },
+          };
+        }
+        operationalDistrictWhere = districtRequested;
+      } else {
+        operationalDistrictWhere = { in: scoped };
+      }
+    }
+
+    const rsRaw = opts.regional_supervisor_user_id?.trim();
+    const supervisorFilter =
+      rsRaw === 'unassigned'
+        ? ({ regional_supervisor_user_id: null } as const)
+        : rsRaw && AdminService.LOCATION_UUID_RE.test(rsRaw)
+          ? ({ regional_supervisor_user_id: rsRaw } as const)
+          : null;
+
+    const where: Prisma.AccountWhereInput = {
+      type: types.length === 1 ? types[0] : { in: types },
+      ...(opts.search?.trim()
+        ? {
+            OR: [
+              { name: { contains: opts.search.trim(), mode: 'insensitive' } },
+              { code: { contains: opts.search.trim(), mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+      ...(operationalDistrictWhere !== undefined && operationalDistrictWhere !== null
+        ? { operational_district_id: operationalDistrictWhere }
+        : {}),
+      ...(supervisorFilter ? supervisorFilter : {}),
+    };
+
+    const [rows, total] = await Promise.all([
+      this.prisma.account.findMany({
+        where,
+        skip,
+        take: opts.limit,
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          type: true,
+          status: true,
+          operational_location_id: true,
+          operational_district_id: true,
+          regional_supervisor_user_id: true,
+          regional_supervisor: {
+            select: { id: true, name: true, email: true, phone: true },
+          },
+        },
+      }),
+      this.prisma.account.count({ where }),
+    ]);
+
+    const uniqueOpIds = [...new Set(rows.map((r) => r.operational_location_id).filter(Boolean))] as string[];
+    const uniqueDistrictIds = [...new Set(rows.map((r) => r.operational_district_id).filter(Boolean))] as string[];
+    const districtNameById = new Map(
+      uniqueDistrictIds.length
+        ? (
+            await this.prisma.location.findMany({
+              where: { id: { in: uniqueDistrictIds } },
+              select: { id: true, name: true },
+            })
+          ).map((loc) => [loc.id, loc.name] as const)
+        : [],
+    );
+
+    const pathLabelByOpId = new Map<string, string>();
+    const districtNameByOperationalLocationId = new Map<string, string>();
+    await Promise.all(
+      uniqueOpIds.map(async (id) => {
+        const path = await this.locationsService.getPath(id);
+        pathLabelByOpId.set(id, this.locationPathLabel(path));
+        const dist = path.find((p) => p.location_type === 'DISTRICT');
+        if (dist?.name) districtNameByOperationalLocationId.set(id, dist.name);
+      }),
+    );
+
+    const metricsByAccountId = await this.getBusinessMetricsByAccountId(rows.map((r) => r.id));
+    const zeroStats = {
+      members: 0,
+      suppliers: 0,
+      customers: 0,
+      sales: 0,
+      collections: 0,
+      farms: 0,
+    };
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Accounts retrieved.',
+      data: {
+        rows: rows.map((r) => {
+          const districtLabel =
+            (r.operational_district_id ? districtNameById.get(r.operational_district_id) : undefined) ??
+            (r.operational_location_id ? districtNameByOperationalLocationId.get(r.operational_location_id) : undefined) ??
+            null;
+          return {
+            id: r.id,
+            code: r.code,
+            name: r.name,
+            type: r.type,
+            status: r.status,
+            operational_location_id: r.operational_location_id,
+            operational_district_id: r.operational_district_id,
+            regional_supervisor_user_id: r.regional_supervisor_user_id,
+            regional_supervisor: r.regional_supervisor
+              ? {
+                  id: r.regional_supervisor.id,
+                  name: r.regional_supervisor.name,
+                  email: r.regional_supervisor.email,
+                  phone: r.regional_supervisor.phone,
+                }
+              : null,
+            operational_location_label: r.operational_location_id
+              ? pathLabelByOpId.get(r.operational_location_id) ?? null
+              : null,
+            operational_district_label: districtLabel,
+            stats: metricsByAccountId[r.id] ?? zeroStats,
+          };
+        }),
+        pagination: {
+          page: opts.page,
+          limit: opts.limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / opts.limit)),
+        },
+      },
+    };
+  }
+
+  async getTenantAccountForAdmin(user: User, adminAccountId: string, targetAccountId: string) {
+    const { canManageUsers, scopeDistrictIds } = await this.assertPlatformAccountDirectoryAccess(user, adminAccountId);
+    const row = await this.prisma.account.findFirst({
+      where: { id: targetAccountId },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        type: true,
+        status: true,
+        operational_location_id: true,
+        operational_district_id: true,
+        regional_supervisor_user_id: true,
+        regional_supervisor: {
+          select: { id: true, name: true, email: true, phone: true },
+        },
+      },
+    });
+    if (!row) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'Account not found.', data: null });
+    }
+    if (!canManageUsers) {
+      const scoped = scopeDistrictIds ?? [];
+      if (scoped.length === 0 || !row.operational_district_id || !scoped.includes(row.operational_district_id)) {
+        throw new NotFoundException({ code: 404, status: 'error', message: 'Account not found.', data: null });
+      }
+    }
+    let operational_location_label: string | null = null;
+    if (row.operational_location_id) {
+      const path = await this.locationsService.getPath(row.operational_location_id);
+      operational_location_label = this.locationPathLabel(path);
+    }
+
+    const decNOrNull = (v: { toString(): string } | null | undefined): number | null => {
+      if (v == null) return null;
+      const n = Number(v.toString());
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const [operationalProfile, coolingTankProfiles, facilitySnapshot] = await Promise.all([
+      this.prisma.mccOperationalProfile.findUnique({ where: { account_id: targetAccountId } }),
+      this.prisma.mccCoolingTankProfile.findMany({
+        where: { account_id: targetAccountId },
+        orderBy: { created_at: 'asc' },
+      }),
+      this.prisma.mccFacilitySnapshot.findUnique({ where: { account_id: targetAccountId } }),
+    ]);
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Account retrieved.',
+      data: {
+        ...row,
+        regional_supervisor: row.regional_supervisor
+          ? {
+              id: row.regional_supervisor.id,
+              name: row.regional_supervisor.name,
+              email: row.regional_supervisor.email,
+              phone: row.regional_supervisor.phone,
+            }
+          : null,
+        operational_location_label,
+        operational_profile: operationalProfile
+          ? {
+              ...operationalProfile,
+              daily_milk_volume_litres: decNOrNull(operationalProfile.daily_milk_volume_litres),
+              max_milk_one_day_litres: decNOrNull(operationalProfile.max_milk_one_day_litres),
+              generator_capacity_kva: decNOrNull(operationalProfile.generator_capacity_kva),
+              average_distance_km: decNOrNull(operationalProfile.average_distance_km),
+              furthest_farm_km: decNOrNull(operationalProfile.furthest_farm_km),
+              average_annual_revenue_rwf: decNOrNull(operationalProfile.average_annual_revenue_rwf),
+              captured_at: operationalProfile.captured_at.toISOString(),
+              updated_at: operationalProfile.updated_at.toISOString(),
+            }
+          : null,
+        cooling_tank_profiles: coolingTankProfiles.map((t) => ({
+          ...t,
+          capacity_litres: decNOrNull(t.capacity_litres),
+          created_at: t.created_at.toISOString(),
+          updated_at: t.updated_at.toISOString(),
+        })),
+        facility_snapshot: facilitySnapshot
+          ? {
+              ...facilitySnapshot,
+              tank_used_litres: decNOrNull(facilitySnapshot.tank_used_litres),
+              tank_used_pct: decNOrNull(facilitySnapshot.tank_used_pct),
+              cooling_temperature_c: decNOrNull(facilitySnapshot.cooling_temperature_c),
+              generator_fuel_pct: decNOrNull(facilitySnapshot.generator_fuel_pct),
+              observed_at: facilitySnapshot.observed_at?.toISOString() ?? null,
+              updated_at: facilitySnapshot.updated_at.toISOString(),
+            }
+          : null,
+      },
+    };
+  }
+
+  async updateTenantAccountOperationalMetricsForAdmin(
+    user: User,
+    adminAccountId: string,
+    targetAccountId: string,
+    dto: UpdateTenantAccountOperationalMetricsDto,
+  ) {
+    await this.checkAdminPermission(user, adminAccountId);
+    const exists = await this.prisma.account.findFirst({ where: { id: targetAccountId }, select: { id: true } });
+    if (!exists) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'Account not found.', data: null });
+    }
+
+    const hasProfile = Object.prototype.hasOwnProperty.call(dto, 'profile') && dto.profile != null;
+    const hasSnapshot = Object.prototype.hasOwnProperty.call(dto, 'facility_snapshot') && dto.facility_snapshot != null;
+    const hasTanks = Object.prototype.hasOwnProperty.call(dto, 'cooling_tanks');
+
+    if (!hasProfile && !hasSnapshot && !hasTanks) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Provide at least one of profile, facility_snapshot, or cooling_tanks.',
+      });
+    }
+
+    if (hasProfile) await this.applyTenantOperationalProfilePatch(targetAccountId, dto.profile!);
+    if (hasSnapshot) await this.applyTenantFacilitySnapshotPatch(targetAccountId, dto.facility_snapshot!);
+    if (hasTanks) await this.replaceTenantCoolingTanks(targetAccountId, dto.cooling_tanks ?? []);
+
+    return this.getTenantAccountForAdmin(user, adminAccountId, targetAccountId);
+  }
+
+  private normalizeProfileStringField(label: string, value: unknown, maxLen: number): string | null {
+    if (value === undefined || value === null || value === '') return null;
+    const s = String(value);
+    if (s.length > maxLen) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: `${label} must be at most ${maxLen} characters.`,
+      });
+    }
+    return s;
+  }
+
+  private async applyTenantOperationalProfilePatch(accountId: string, dto: TenantOperationalProfilePatchDto): Promise<void> {
+    const hasKey = (key: keyof TenantOperationalProfilePatchDto) =>
+      Object.prototype.hasOwnProperty.call(dto, key);
+
+    const ensureRange = (label: string, value: number | null, min: number, max: number) => {
+      if (value == null) return;
+      if (value < min || value > max) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `${label} must be between ${min} and ${max}.`,
+        });
+      }
+    };
+
+    const updateData: Prisma.MccOperationalProfileUpdateInput = {};
+    const createData: Prisma.MccOperationalProfileCreateInput = {
+      account: { connect: { id: accountId } },
+    };
+
+    if (hasKey('expected_daily_deliveries')) {
+      const v =
+        dto.expected_daily_deliveries == null || dto.expected_daily_deliveries === ''
+          ? null
+          : this.asInt(dto.expected_daily_deliveries);
+      if (dto.expected_daily_deliveries != null && dto.expected_daily_deliveries !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'expected_daily_deliveries must be numeric.' });
+      }
+      ensureRange('expected_daily_deliveries', v, 0, 1000);
+      updateData.expected_daily_deliveries = v;
+      createData.expected_daily_deliveries = v;
+    }
+    if (hasKey('daily_milk_volume_litres')) {
+      const dec =
+        dto.daily_milk_volume_litres == null || dto.daily_milk_volume_litres === ''
+          ? null
+          : this.asDecimal(dto.daily_milk_volume_litres);
+      if (dto.daily_milk_volume_litres != null && dto.daily_milk_volume_litres !== '' && dec == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'daily_milk_volume_litres must be numeric.' });
+      }
+      ensureRange('daily_milk_volume_litres', dec != null ? Number(dec.toString()) : null, 0, 500_000);
+      updateData.daily_milk_volume_litres = dec;
+      createData.daily_milk_volume_litres = dec;
+    }
+    if (hasKey('max_milk_one_day_litres')) {
+      const dec =
+        dto.max_milk_one_day_litres == null || dto.max_milk_one_day_litres === ''
+          ? null
+          : this.asDecimal(dto.max_milk_one_day_litres);
+      if (dto.max_milk_one_day_litres != null && dto.max_milk_one_day_litres !== '' && dec == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'max_milk_one_day_litres must be numeric.' });
+      }
+      ensureRange('max_milk_one_day_litres', dec != null ? Number(dec.toString()) : null, 0, 500_000);
+      updateData.max_milk_one_day_litres = dec;
+      createData.max_milk_one_day_litres = dec;
+    }
+    if (hasKey('tank_capacity_sufficiency')) {
+      const v = this.normalizeProfileStringField('tank_capacity_sufficiency', dto.tank_capacity_sufficiency, 120);
+      updateData.tank_capacity_sufficiency = v;
+      createData.tank_capacity_sufficiency = v;
+    }
+    if (hasKey('insufficient_capacity_plan')) {
+      const v =
+        dto.insufficient_capacity_plan === undefined
+          ? undefined
+          : dto.insufficient_capacity_plan === null || dto.insufficient_capacity_plan === ''
+            ? null
+            : String(dto.insufficient_capacity_plan);
+      if (typeof v === 'string' && v.length > 20000) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'insufficient_capacity_plan is too long.' });
+      }
+      if (v !== undefined) {
+        updateData.insufficient_capacity_plan = v;
+        createData.insufficient_capacity_plan = v;
+      }
+    }
+    if (hasKey('power_supply_sources')) {
+      if (dto.power_supply_sources === null) {
+        updateData.power_supply_sources = Prisma.JsonNull;
+        createData.power_supply_sources = Prisma.JsonNull;
+      } else if (dto.power_supply_sources === undefined) {
+        /* skip */
+      } else if (typeof dto.power_supply_sources === 'object' && !Array.isArray(dto.power_supply_sources)) {
+        updateData.power_supply_sources = dto.power_supply_sources as Prisma.InputJsonValue;
+        createData.power_supply_sources = dto.power_supply_sources as Prisma.InputJsonValue;
+      } else {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'power_supply_sources must be a JSON object or null.' });
+      }
+    }
+    if (hasKey('generator_capacity_kva')) {
+      const dec =
+        dto.generator_capacity_kva == null || dto.generator_capacity_kva === ''
+          ? null
+          : this.asDecimal(dto.generator_capacity_kva);
+      if (dto.generator_capacity_kva != null && dto.generator_capacity_kva !== '' && dec == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'generator_capacity_kva must be numeric.' });
+      }
+      ensureRange('generator_capacity_kva', dec != null ? Number(dec.toString()) : null, 0, 50_000);
+      updateData.generator_capacity_kva = dec;
+      createData.generator_capacity_kva = dec;
+    }
+    if (hasKey('mobile_connectivity')) {
+      const v = this.normalizeProfileStringField('mobile_connectivity', dto.mobile_connectivity, 120);
+      updateData.mobile_connectivity = v;
+      createData.mobile_connectivity = v;
+    }
+    if (hasKey('total_farmers_supplying')) {
+      const v =
+        dto.total_farmers_supplying == null || dto.total_farmers_supplying === ''
+          ? null
+          : this.asInt(dto.total_farmers_supplying);
+      if (dto.total_farmers_supplying != null && dto.total_farmers_supplying !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'total_farmers_supplying must be numeric.' });
+      }
+      ensureRange('total_farmers_supplying', v, 0, 500_000);
+      updateData.total_farmers_supplying = v;
+      createData.total_farmers_supplying = v;
+    }
+    if (hasKey('new_farmers_last_3_months')) {
+      const v =
+        dto.new_farmers_last_3_months == null || dto.new_farmers_last_3_months === ''
+          ? null
+          : this.asInt(dto.new_farmers_last_3_months);
+      if (dto.new_farmers_last_3_months != null && dto.new_farmers_last_3_months !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'new_farmers_last_3_months must be numeric.' });
+      }
+      ensureRange('new_farmers_last_3_months', v, 0, 100_000);
+      updateData.new_farmers_last_3_months = v;
+      createData.new_farmers_last_3_months = v;
+    }
+    if (hasKey('milk_transporters_count')) {
+      const v =
+        dto.milk_transporters_count == null || dto.milk_transporters_count === ''
+          ? null
+          : this.asInt(dto.milk_transporters_count);
+      if (dto.milk_transporters_count != null && dto.milk_transporters_count !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'milk_transporters_count must be numeric.' });
+      }
+      ensureRange('milk_transporters_count', v, 0, 50_000);
+      updateData.milk_transporters_count = v;
+      createData.milk_transporters_count = v;
+    }
+    if (hasKey('average_distance_km')) {
+      const dec =
+        dto.average_distance_km == null || dto.average_distance_km === ''
+          ? null
+          : this.asDecimal(dto.average_distance_km);
+      if (dto.average_distance_km != null && dto.average_distance_km !== '' && dec == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'average_distance_km must be numeric.' });
+      }
+      ensureRange('average_distance_km', dec != null ? Number(dec.toString()) : null, 0, 10_000);
+      updateData.average_distance_km = dec;
+      createData.average_distance_km = dec;
+    }
+    if (hasKey('furthest_farm_km')) {
+      const dec =
+        dto.furthest_farm_km == null || dto.furthest_farm_km === '' ? null : this.asDecimal(dto.furthest_farm_km);
+      if (dto.furthest_farm_km != null && dto.furthest_farm_km !== '' && dec == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'furthest_farm_km must be numeric.' });
+      }
+      ensureRange('furthest_farm_km', dec != null ? Number(dec.toString()) : null, 0, 10_000);
+      updateData.furthest_farm_km = dec;
+      createData.furthest_farm_km = dec;
+    }
+    if (hasKey('evening_milk_pattern')) {
+      const v = this.normalizeProfileStringField('evening_milk_pattern', dto.evening_milk_pattern, 120);
+      updateData.evening_milk_pattern = v;
+      createData.evening_milk_pattern = v;
+    }
+    if (hasKey('own_milk_transport_type')) {
+      const v = this.normalizeProfileStringField('own_milk_transport_type', dto.own_milk_transport_type, 160);
+      updateData.own_milk_transport_type = v;
+      createData.own_milk_transport_type = v;
+    }
+    if (hasKey('record_system')) {
+      const v = this.normalizeProfileStringField('record_system', dto.record_system, 160);
+      updateData.record_system = v;
+      createData.record_system = v;
+    }
+    if (hasKey('avg_days_delivery_to_payment')) {
+      const v =
+        dto.avg_days_delivery_to_payment == null || dto.avg_days_delivery_to_payment === ''
+          ? null
+          : this.asInt(dto.avg_days_delivery_to_payment);
+      if (dto.avg_days_delivery_to_payment != null && dto.avg_days_delivery_to_payment !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'avg_days_delivery_to_payment must be numeric.' });
+      }
+      ensureRange('avg_days_delivery_to_payment', v, 0, 3650);
+      updateData.avg_days_delivery_to_payment = v;
+      createData.avg_days_delivery_to_payment = v;
+    }
+    if (hasKey('average_annual_revenue_rwf')) {
+      const dec =
+        dto.average_annual_revenue_rwf == null || dto.average_annual_revenue_rwf === ''
+          ? null
+          : this.asDecimal(dto.average_annual_revenue_rwf);
+      if (dto.average_annual_revenue_rwf != null && dto.average_annual_revenue_rwf !== '' && dec == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'average_annual_revenue_rwf must be numeric.' });
+      }
+      ensureRange('average_annual_revenue_rwf', dec != null ? Number(dec.toString()) : null, 0, 1e15);
+      updateData.average_annual_revenue_rwf = dec;
+      createData.average_annual_revenue_rwf = dec;
+    }
+    if (hasKey('main_buyer_name')) {
+      const v = this.normalizeProfileStringField('main_buyer_name', dto.main_buyer_name, 255);
+      updateData.main_buyer_name = v;
+      createData.main_buyer_name = v;
+    }
+    if (hasKey('formal_supply_agreement_details')) {
+      const v =
+        dto.formal_supply_agreement_details === undefined
+          ? undefined
+          : dto.formal_supply_agreement_details === null || dto.formal_supply_agreement_details === ''
+            ? null
+            : String(dto.formal_supply_agreement_details);
+      if (typeof v === 'string' && v.length > 20000) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'formal_supply_agreement_details is too long.' });
+      }
+      if (v !== undefined) {
+        updateData.formal_supply_agreement_details = v;
+        createData.formal_supply_agreement_details = v;
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) return;
+
+    await this.prisma.mccOperationalProfile.upsert({
+      where: { account_id: accountId },
+      create: createData,
+      update: updateData,
+    });
+  }
+
+  private async applyTenantFacilitySnapshotPatch(accountId: string, dto: FacilitySnapshotPatchDto): Promise<void> {
+    const hasKey = (key: keyof FacilitySnapshotPatchDto) => Object.prototype.hasOwnProperty.call(dto, key);
+    const asFiniteNumber = (v: Prisma.Decimal | null): number | null => {
+      if (v == null) return null;
+      const n = Number(v.toString());
+      return Number.isFinite(n) ? n : null;
+    };
+    const ensureRange = (label: string, value: number | null, min: number, max: number) => {
+      if (value == null) return;
+      if (value < min || value > max) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `${label} must be between ${min} and ${max}.`,
+        });
+      }
+    };
+
+    const POWER = new Set(['grid', 'generator', 'solar', 'outage', 'unknown']);
+    const GEN = new Set(['available', 'running', 'fault', 'offline', 'unknown']);
+
+    const updateData: Prisma.MccFacilitySnapshotUpdateInput = { source: 'admin_manual' };
+    const createData: Prisma.MccFacilitySnapshotCreateInput = {
+      account: { connect: { id: accountId } },
+      source: 'admin_manual',
+    };
+
+    if (hasKey('tank_used_litres')) {
+      const v = dto.tank_used_litres == null || dto.tank_used_litres === '' ? null : this.asDecimal(dto.tank_used_litres);
+      if (dto.tank_used_litres != null && dto.tank_used_litres !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'tank_used_litres must be numeric.' });
+      }
+      ensureRange('tank_used_litres', asFiniteNumber(v), 0, 200_000);
+      updateData.tank_used_litres = v;
+      createData.tank_used_litres = v;
+    }
+    if (hasKey('tank_used_pct')) {
+      const v = dto.tank_used_pct == null || dto.tank_used_pct === '' ? null : this.asDecimal(dto.tank_used_pct);
+      if (dto.tank_used_pct != null && dto.tank_used_pct !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'tank_used_pct must be numeric.' });
+      }
+      ensureRange('tank_used_pct', asFiniteNumber(v), 0, 100);
+      updateData.tank_used_pct = v;
+      createData.tank_used_pct = v;
+    }
+    if (hasKey('cooling_temperature_c')) {
+      const v =
+        dto.cooling_temperature_c == null || dto.cooling_temperature_c === ''
+          ? null
+          : this.asDecimal(dto.cooling_temperature_c);
+      if (dto.cooling_temperature_c != null && dto.cooling_temperature_c !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'cooling_temperature_c must be numeric.' });
+      }
+      ensureRange('cooling_temperature_c', asFiniteNumber(v), -10, 25);
+      updateData.cooling_temperature_c = v;
+      createData.cooling_temperature_c = v;
+    }
+    if (hasKey('power_status')) {
+      const raw = dto.power_status == null || dto.power_status === '' ? null : String(dto.power_status).toLowerCase();
+      if (raw != null && !POWER.has(raw)) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `power_status must be one of: ${[...POWER].join(', ')}.`,
+        });
+      }
+      updateData.power_status = raw;
+      createData.power_status = raw;
+    }
+    if (hasKey('generator_status')) {
+      const raw = dto.generator_status == null || dto.generator_status === '' ? null : String(dto.generator_status).toLowerCase();
+      if (raw != null && !GEN.has(raw)) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `generator_status must be one of: ${[...GEN].join(', ')}.`,
+        });
+      }
+      updateData.generator_status = raw;
+      createData.generator_status = raw;
+    }
+    if (hasKey('generator_fuel_pct')) {
+      const v =
+        dto.generator_fuel_pct == null || dto.generator_fuel_pct === '' ? null : this.asDecimal(dto.generator_fuel_pct);
+      if (dto.generator_fuel_pct != null && dto.generator_fuel_pct !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'generator_fuel_pct must be numeric.' });
+      }
+      ensureRange('generator_fuel_pct', asFiniteNumber(v), 0, 100);
+      updateData.generator_fuel_pct = v;
+      createData.generator_fuel_pct = v;
+    }
+
+    const snapshotKeys: Array<keyof FacilitySnapshotPatchDto> = [
+      'tank_used_litres',
+      'tank_used_pct',
+      'cooling_temperature_c',
+      'power_status',
+      'generator_status',
+      'generator_fuel_pct',
+    ];
+    const anyMetric = snapshotKeys.some((key) => hasKey(key));
+
+    if (hasKey('observed_at')) {
+      if (dto.observed_at == null || dto.observed_at === '') {
+        updateData.observed_at = null;
+        createData.observed_at = null;
+      } else {
+        const observedAt = new Date(dto.observed_at);
+        if (Number.isNaN(observedAt.getTime())) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'observed_at must be a valid ISO date.',
+          });
+        }
+        updateData.observed_at = observedAt;
+        createData.observed_at = observedAt;
+      }
+    } else if (anyMetric) {
+      const now = new Date();
+      updateData.observed_at = now;
+      createData.observed_at = now;
+    }
+
+    await this.prisma.mccFacilitySnapshot.upsert({
+      where: { account_id: accountId },
+      create: createData,
+      update: updateData,
+    });
+  }
+
+  private async replaceTenantCoolingTanks(accountId: string, rows: CoolingTankRowDto[]): Promise<void> {
+    const normalized = rows.filter((row) => {
+      const cap =
+        row.capacity_litres == null || row.capacity_litres === ''
+          ? null
+          : this.asDecimal(row.capacity_litres);
+      if (row.capacity_litres != null && row.capacity_litres !== '' && cap == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'cooling_tanks[].capacity_litres must be numeric.' });
+      }
+      const tn = row.tank_number != null && row.tank_number !== '' ? String(row.tank_number).slice(0, 120) : '';
+      const ya = row.year_or_age != null && row.year_or_age !== '' ? String(row.year_or_age).slice(0, 120) : '';
+      const cond = row.condition != null && row.condition !== '' ? String(row.condition).slice(0, 60) : '';
+      return Boolean(cap != null || tn || ya || cond);
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.mccCoolingTankProfile.deleteMany({ where: { account_id: accountId } });
+      if (normalized.length === 0) return;
+      await tx.mccCoolingTankProfile.createMany({
+        data: normalized.map((row) => {
+          const capacity_litres =
+            row.capacity_litres == null || row.capacity_litres === ''
+              ? null
+              : this.asDecimal(row.capacity_litres);
+          return {
+            account_id: accountId,
+            tank_number:
+              row.tank_number != null && row.tank_number !== '' ? String(row.tank_number).slice(0, 120) : null,
+            capacity_litres,
+            year_or_age:
+              row.year_or_age != null && row.year_or_age !== '' ? String(row.year_or_age).slice(0, 120) : null,
+            condition:
+              row.condition != null && row.condition !== '' ? String(row.condition).slice(0, 60) : null,
+          };
+        }),
+      });
+    });
+  }
+
+  async updateAccountOperationalLocationForAdmin(
+    user: User,
+    adminAccountId: string,
+    targetAccountId: string,
+    dto: UpdateAccountOperationalLocationDto,
+  ) {
+    await this.checkAdminPermission(user, adminAccountId);
+    const exists = await this.prisma.account.findFirst({ where: { id: targetAccountId }, select: { id: true } });
+    if (!exists) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'Account not found.', data: null });
+    }
+
+    let operational_location_id: string | null = dto.operational_location_id ?? null;
+    if (operational_location_id === '') operational_location_id = null;
+
+    if (operational_location_id) {
+      const loc = await this.prisma.location.findUnique({
+        where: { id: operational_location_id },
+        select: { id: true, location_type: true },
+      });
+      if (!loc) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'Location not found.', data: null });
+      }
+      if (loc.location_type !== LocationType.VILLAGE) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Operational location must be a village (select province through village).',
+          data: null,
+        });
+      }
+    }
+
+    const operational_district_id = operational_location_id
+      ? await this.resolveDistrictIdFromOperationalLocation(operational_location_id)
+      : null;
+
+    await this.prisma.account.update({
+      where: { id: targetAccountId },
+      data: {
+        operational_location_id,
+        operational_district_id,
+      },
+    });
+
+    const path = operational_location_id ? await this.locationsService.getPath(operational_location_id) : [];
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Account geography updated.',
+      data: {
+        id: targetAccountId,
+        operational_location_id,
+        operational_district_id,
+        operational_location_label: operational_location_id ? this.locationPathLabel(path) : null,
+      },
+    };
+  }
+
+  private async assertUserIsRegionalSupervisorOnPlatform(supervisorUserId: string, platformAccountId: string): Promise<void> {
+    const ua = await this.prisma.userAccount.findFirst({
+      where: {
+        user_id: supervisorUserId,
+        account_id: platformAccountId,
+        status: 'active',
+        role: 'regional_supervisor',
+      },
+      select: { id: true },
+    });
+    if (!ua) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'User must have the regional_supervisor role on this platform account.',
+        data: null,
+      });
+    }
+  }
+
+  async setTenantAccountRegionalSupervisorForAdmin(
+    user: User,
+    adminAccountId: string,
+    targetAccountId: string,
+    dto: UpdateAccountRegionalSupervisorDto,
+  ) {
+    await this.checkAdminPermission(user, adminAccountId);
+    if (!Object.prototype.hasOwnProperty.call(dto, 'regional_supervisor_user_id')) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'regional_supervisor_user_id is required (use null to clear).',
+        data: null,
+      });
+    }
+
+    const raw = dto.regional_supervisor_user_id;
+    let nextSupervisorId: string | null;
+    if (raw === null || raw === '') {
+      nextSupervisorId = null;
+    } else if (!AdminService.LOCATION_UUID_RE.test(raw)) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Invalid regional_supervisor_user_id.',
+        data: null,
+      });
+    } else {
+      nextSupervisorId = raw;
+    }
+
+    const account = await this.prisma.account.findFirst({
+      where: { id: targetAccountId },
+      select: { id: true, operational_district_id: true },
+    });
+    if (!account) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'Account not found.', data: null });
+    }
+
+    if (nextSupervisorId) {
+      await this.assertUserIsRegionalSupervisorOnPlatform(nextSupervisorId, adminAccountId);
+      const districtId = account.operational_district_id;
+      if (districtId) {
+        const existing = await this.prisma.regionalSupervisorDistrict.findFirst({
+          where: { user_id: nextSupervisorId, district_location_id: districtId },
+          select: { id: true },
+        });
+        if (!existing) {
+          await this.prisma.regionalSupervisorDistrict.create({
+            data: { user_id: nextSupervisorId, district_location_id: districtId },
+          });
+        }
+      }
+    }
+
+    await this.prisma.account.update({
+      where: { id: targetAccountId },
+      data: { regional_supervisor_user_id: nextSupervisorId },
+    });
+
+    return this.getTenantAccountForAdmin(user, adminAccountId, targetAccountId);
+  }
+
+  async getRegionalSupervisorScope(user: User, adminAccountId: string, targetUserId: string) {
+    await this.checkAdminPermission(user, adminAccountId);
+    const target = await this.prisma.user.findFirst({ where: { id: targetUserId }, select: { id: true } });
+    if (!target) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'User not found.', data: null });
+    }
+    const rows = await this.prisma.regionalSupervisorDistrict.findMany({
+      where: { user_id: targetUserId },
+      include: { district: { select: { id: true, code: true, name: true, location_type: true } } },
+      orderBy: { created_at: 'asc' },
+    });
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Regional supervisor scope retrieved.',
+      data: {
+        user_id: targetUserId,
+        districts: rows.map((r) => ({
+          id: r.district.id,
+          code: r.district.code,
+          name: r.district.name,
+        })),
+      },
+    };
+  }
+
+  async setRegionalSupervisorScope(
+    user: User,
+    adminAccountId: string,
+    targetUserId: string,
+    dto: SetRegionalSupervisorScopeDto,
+  ) {
+    await this.checkAdminPermission(user, adminAccountId);
+    const target = await this.prisma.user.findFirst({ where: { id: targetUserId }, select: { id: true } });
+    if (!target) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'User not found.', data: null });
+    }
+
+    const ids = [...new Set(dto.district_location_ids ?? [])];
+    for (const did of ids) {
+      const loc = await this.prisma.location.findUnique({
+        where: { id: did },
+        select: { id: true, location_type: true },
+      });
+      if (!loc || loc.location_type !== LocationType.DISTRICT) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `Invalid district location id: ${did}`,
+          data: null,
+        });
+      }
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.regionalSupervisorDistrict.deleteMany({ where: { user_id: targetUserId } }),
+      ...(ids.length
+        ? [
+            this.prisma.regionalSupervisorDistrict.createMany({
+              data: ids.map((district_location_id) => ({
+                user_id: targetUserId,
+                district_location_id,
+              })),
+            }),
+          ]
+        : []),
+    ]);
+
+    return this.getRegionalSupervisorScope(user, adminAccountId, targetUserId);
   }
 
   /**
@@ -3740,6 +5737,311 @@ export class AdminService {
     };
   }
 
+  async getOnboardingOperationalConfig(user: User, accountId: string, submissionId: string) {
+    await this.checkAdminPermission(user, accountId);
+
+    const submission = await this.prisma.mccOnboardingSubmission.findUnique({
+      where: { id: submissionId },
+      select: { id: true, linked_account_id: true },
+    });
+    if (!submission) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Onboarding submission not found.',
+      });
+    }
+    if (!submission.linked_account_id) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Submission is not linked to an account yet.',
+      });
+    }
+
+    const account = await this.prisma.account.findUnique({
+      where: { id: submission.linked_account_id },
+      select: { id: true, code: true, name: true },
+    });
+    if (!account) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Linked account not found.',
+      });
+    }
+
+    const [profile, snapshot] = await Promise.all([
+      this.prisma.mccOperationalProfile.findUnique({
+        where: { account_id: account.id },
+        select: { expected_daily_deliveries: true },
+      }),
+      this.prisma.mccFacilitySnapshot.findUnique({
+        where: { account_id: account.id },
+        select: {
+          tank_used_litres: true,
+          tank_used_pct: true,
+          cooling_temperature_c: true,
+          power_status: true,
+          generator_status: true,
+          generator_fuel_pct: true,
+          observed_at: true,
+        },
+      }),
+    ]);
+
+    const decNOrNull = (v: { toString(): string } | null | undefined): number | null => {
+      if (v == null) return null;
+      const n = Number(v.toString());
+      return Number.isFinite(n) ? n : null;
+    };
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Operational config retrieved successfully.',
+      data: {
+        submission_id: submission.id,
+        account,
+        profile: {
+          expected_daily_deliveries: profile?.expected_daily_deliveries ?? null,
+        },
+        facility_snapshot: {
+          tank_used_litres: decNOrNull(snapshot?.tank_used_litres),
+          tank_used_pct: decNOrNull(snapshot?.tank_used_pct),
+          cooling_temperature_c: decNOrNull(snapshot?.cooling_temperature_c),
+          power_status: snapshot?.power_status ?? null,
+          generator_status: snapshot?.generator_status ?? null,
+          generator_fuel_pct: decNOrNull(snapshot?.generator_fuel_pct),
+          observed_at: snapshot?.observed_at?.toISOString() ?? null,
+        },
+      },
+    };
+  }
+
+  async updateOnboardingOperationalConfig(
+    user: User,
+    accountId: string,
+    submissionId: string,
+    dto: UpdateOnboardingOperationalConfigDto,
+  ) {
+    await this.checkAdminPermission(user, accountId);
+
+    const submission = await this.prisma.mccOnboardingSubmission.findUnique({
+      where: { id: submissionId },
+      select: { id: true, linked_account_id: true },
+    });
+    if (!submission) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Onboarding submission not found.',
+      });
+    }
+    if (!submission.linked_account_id) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Submission is not linked to an account yet.',
+      });
+    }
+
+    const linkedAccountId = submission.linked_account_id;
+    const hasKey = (key: keyof UpdateOnboardingOperationalConfigDto) =>
+      Object.prototype.hasOwnProperty.call(dto, key);
+    const asFiniteNumber = (v: Prisma.Decimal | null): number | null => {
+      if (v == null) return null;
+      const n = Number(v.toString());
+      return Number.isFinite(n) ? n : null;
+    };
+    const ensureRange = (label: string, value: number | null, min: number, max: number) => {
+      if (value == null) return;
+      if (value < min || value > max) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `${label} must be between ${min} and ${max}.`,
+        });
+      }
+    };
+
+    const expectedProvided = hasKey('expected_daily_deliveries');
+    if (expectedProvided) {
+      const expectedValue =
+        dto.expected_daily_deliveries == null || dto.expected_daily_deliveries === ''
+          ? null
+          : this.asInt(dto.expected_daily_deliveries);
+      if (dto.expected_daily_deliveries != null && dto.expected_daily_deliveries !== '' && expectedValue == null) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'expected_daily_deliveries must be numeric.',
+        });
+      }
+      ensureRange('expected_daily_deliveries', expectedValue, 0, 1000);
+
+      await this.prisma.mccOperationalProfile.upsert({
+        where: { account_id: linkedAccountId },
+        create: {
+          account_id: linkedAccountId,
+          expected_daily_deliveries: expectedValue,
+        },
+        update: {
+          expected_daily_deliveries: expectedValue,
+        },
+      });
+    }
+
+    const snapshotKeys: Array<keyof UpdateOnboardingOperationalConfigDto> = [
+      'tank_used_litres',
+      'tank_used_pct',
+      'cooling_temperature_c',
+      'power_status',
+      'generator_status',
+      'generator_fuel_pct',
+      'observed_at',
+    ];
+    const snapshotProvided = snapshotKeys.some((key) => hasKey(key));
+
+    if (snapshotProvided) {
+      const updateData: Prisma.MccFacilitySnapshotUpdateInput = {
+        source: 'admin_manual',
+      };
+      const createData: Prisma.MccFacilitySnapshotCreateInput = {
+        account: { connect: { id: linkedAccountId } },
+        source: 'admin_manual',
+      };
+
+      if (hasKey('tank_used_litres')) {
+        const v = dto.tank_used_litres == null || dto.tank_used_litres === '' ? null : this.asDecimal(dto.tank_used_litres);
+        if (dto.tank_used_litres != null && dto.tank_used_litres !== '' && v == null) {
+          throw new BadRequestException({ code: 400, status: 'error', message: 'tank_used_litres must be numeric.' });
+        }
+        ensureRange('tank_used_litres', asFiniteNumber(v), 0, 200000);
+        updateData.tank_used_litres = v;
+        createData.tank_used_litres = v;
+      }
+      if (hasKey('tank_used_pct')) {
+        const v = dto.tank_used_pct == null || dto.tank_used_pct === '' ? null : this.asDecimal(dto.tank_used_pct);
+        if (dto.tank_used_pct != null && dto.tank_used_pct !== '' && v == null) {
+          throw new BadRequestException({ code: 400, status: 'error', message: 'tank_used_pct must be numeric.' });
+        }
+        ensureRange('tank_used_pct', asFiniteNumber(v), 0, 100);
+        updateData.tank_used_pct = v;
+        createData.tank_used_pct = v;
+      }
+      if (hasKey('cooling_temperature_c')) {
+        const v =
+          dto.cooling_temperature_c == null || dto.cooling_temperature_c === ''
+            ? null
+            : this.asDecimal(dto.cooling_temperature_c);
+        if (dto.cooling_temperature_c != null && dto.cooling_temperature_c !== '' && v == null) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'cooling_temperature_c must be numeric.',
+          });
+        }
+        ensureRange('cooling_temperature_c', asFiniteNumber(v), -10, 25);
+        updateData.cooling_temperature_c = v;
+        createData.cooling_temperature_c = v;
+      }
+      if (hasKey('power_status')) {
+        const v = this.asString(dto.power_status)?.toLowerCase() ?? null;
+        updateData.power_status = v;
+        createData.power_status = v;
+      }
+      if (hasKey('generator_status')) {
+        const v = this.asString(dto.generator_status)?.toLowerCase() ?? null;
+        updateData.generator_status = v;
+        createData.generator_status = v;
+      }
+      if (hasKey('generator_fuel_pct')) {
+        const v =
+          dto.generator_fuel_pct == null || dto.generator_fuel_pct === ''
+            ? null
+            : this.asDecimal(dto.generator_fuel_pct);
+        if (dto.generator_fuel_pct != null && dto.generator_fuel_pct !== '' && v == null) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'generator_fuel_pct must be numeric.',
+          });
+        }
+        ensureRange('generator_fuel_pct', asFiniteNumber(v), 0, 100);
+        updateData.generator_fuel_pct = v;
+        createData.generator_fuel_pct = v;
+      }
+      if (hasKey('observed_at')) {
+        if (dto.observed_at == null || dto.observed_at === '') {
+          updateData.observed_at = null;
+          createData.observed_at = null;
+        } else {
+          const observedAt = new Date(dto.observed_at);
+          if (Number.isNaN(observedAt.getTime())) {
+            throw new BadRequestException({
+              code: 400,
+              status: 'error',
+              message: 'observed_at must be a valid ISO date.',
+            });
+          }
+          updateData.observed_at = observedAt;
+          createData.observed_at = observedAt;
+        }
+      } else {
+        const now = new Date();
+        updateData.observed_at = now;
+        createData.observed_at = now;
+      }
+
+      await this.prisma.mccFacilitySnapshot.upsert({
+        where: { account_id: linkedAccountId },
+        create: createData,
+        update: updateData,
+      });
+    }
+
+    return this.getOnboardingOperationalConfig(user, accountId, submissionId);
+  }
+
+  async syncOnboardingOperationalConfigFromDefaults(user: User, accountId: string, submissionId: string) {
+    await this.checkAdminPermission(user, accountId);
+
+    const submission = await this.prisma.mccOnboardingSubmission.findUnique({
+      where: { id: submissionId },
+      select: {
+        id: true,
+        submission_code: true,
+        linked_account_id: true,
+        section_payload: true,
+      },
+    });
+    if (!submission) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Onboarding submission not found.',
+      });
+    }
+    if (!submission.linked_account_id) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Submission is not linked to an account yet.',
+      });
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await this.syncMccOperationalDataFromOnboarding(tx, submission.linked_account_id!, {
+        id: submission.id,
+        submission_code: submission.submission_code,
+        section_payload: submission.section_payload,
+      });
+    });
+
+    return this.getOnboardingOperationalConfig(user, accountId, submissionId);
+  }
+
   async linkMccOnboardingSubmission(
     user: User,
     accountId: string,
@@ -4242,6 +6544,7 @@ export class AdminService {
             linked_account_id: membership.account.id,
           },
         });
+        await this.syncMccOperationalDataFromOnboarding(tx, membership.account.id, submission);
 
         return {
           flow: 'kyc_existing' as const,
@@ -4323,6 +6626,7 @@ export class AdminService {
               linked_account_id: existingMembership.account.id,
             },
           });
+          await this.syncMccOperationalDataFromOnboarding(tx, existingMembership.account.id, submission);
 
           return {
             flow: 'kyc_existing' as const,
@@ -4411,6 +6715,7 @@ export class AdminService {
           linked_account_id: newAccount.id,
         },
       });
+      await this.syncMccOperationalDataFromOnboarding(tx, newAccount.id, submission);
 
       return {
         flow: 'create_tenant' as const,

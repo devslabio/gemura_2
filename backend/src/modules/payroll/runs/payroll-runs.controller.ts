@@ -18,6 +18,7 @@ export class PayrollRunsController {
   constructor(private readonly payrollRunsService: PayrollRunsService) {}
 
   @Post()
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Create payroll run',
     description: 'Create a new payroll run for processing supplier payments. The run will be associated with the user\'s default account.',
@@ -68,9 +69,9 @@ export class PayrollRunsController {
     description: 'Creates a payroll run and processes it immediately: selects suppliers by account codes, period_start/period_end, optional payment_terms_days and run_name. Returns run_id and payslips summary.',
   })
   @ApiBody({ type: GeneratePayrollDto })
-  @ApiResponse({ status: 200, description: 'Payroll generated successfully' })
-  @ApiBadRequestResponse({ description: 'Invalid input or no default account' })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing token' })
+  @ApiResponse({ status: 200, description: 'Payroll generated successfully.' })
+  @ApiBadRequestResponse({ description: 'Invalid input or no default account.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing token.' })
   async generatePayroll(@CurrentUser() user: User, @Body() generateDto: GeneratePayrollDto) {
     return this.payrollRunsService.generatePayroll(user, generateDto);
   }
@@ -80,11 +81,11 @@ export class PayrollRunsController {
     summary: 'Get payroll runs',
     description: 'List payroll runs for the given account (or user default). Scoped so Kozamgi only sees Kozamgi runs. Optionally filter by period_id.',
   })
-  @ApiQuery({ name: 'period_id', required: false, description: 'Optional payroll period UUID to filter runs' })
+  @ApiQuery({ name: 'period_id', required: false, description: 'Optional payroll period UUID to filter runs.' })
   @ApiQuery({ name: 'account_id', required: false, description: 'Account UUID (default: user\'s default account)' })
-  @ApiResponse({ status: 200, description: 'Runs fetched successfully' })
-  @ApiBadRequestResponse({ description: 'No valid default account found' })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing token' })
+  @ApiResponse({ status: 200, description: 'Runs fetched successfully.' })
+  @ApiBadRequestResponse({ description: 'No valid default account found.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing token.' })
   async getRuns(@CurrentUser() user: User, @Query('period_id') periodId?: string, @Query('account_id') accountId?: string) {
     return this.payrollRunsService.getRuns(user, periodId, accountId);
   }
@@ -94,8 +95,8 @@ export class PayrollRunsController {
     summary: 'Get payslip detail',
     description: 'Returns a single payslip with full transparency: earnings (milk collections in the period with date, quantity, unit price, amount) and deductions (each with type, amount, and reason e.g. charge name, loan repayment, inventory debt). Used when clicking a person in the payroll list.',
   })
-  @ApiParam({ name: 'runId', description: 'Payroll run ID (UUID)' })
-  @ApiParam({ name: 'payslipId', description: 'Payslip ID (UUID)' })
+  @ApiParam({ name: 'runId', description: 'Payroll run ID (UUID).' })
+  @ApiParam({ name: 'payslipId', description: 'Payslip ID (UUID).' })
   @ApiQuery({ name: 'account_id', required: false, description: 'Account UUID (default: user\'s default account)' })
   @ApiResponse({
     status: 200,
@@ -122,9 +123,9 @@ export class PayrollRunsController {
       },
     },
   })
-  @ApiBadRequestResponse({ description: 'No valid default account found' })
-  @ApiNotFoundResponse({ description: 'Payroll run or payslip not found' })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing token' })
+  @ApiBadRequestResponse({ description: 'No valid default account found.' })
+  @ApiNotFoundResponse({ description: 'Payroll run or payslip not found.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing token.' })
   async getPayslipDetail(
     @CurrentUser() user: User,
     @Param('runId') runId: string,
@@ -139,12 +140,12 @@ export class PayrollRunsController {
     summary: 'Update payroll run',
     description: 'Update payroll run status or total amount. Only the run creator can update.',
   })
-  @ApiParam({ name: 'id', description: 'Payroll run ID (UUID)' })
+  @ApiParam({ name: 'id', description: 'Payroll run ID (UUID).' })
   @ApiBody({ type: UpdatePayrollRunDto })
-  @ApiResponse({ status: 200, description: 'Run updated successfully' })
-  @ApiNotFoundResponse({ description: 'Payroll run not found' })
-  @ApiBadRequestResponse({ description: 'No permission to update this run' })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing token' })
+  @ApiResponse({ status: 200, description: 'Run updated successfully.' })
+  @ApiNotFoundResponse({ description: 'Payroll run not found.' })
+  @ApiBadRequestResponse({ description: 'No permission to update this run.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing token.' })
   async updateRun(@CurrentUser() user: User, @Param('id') id: string, @Body() updateDto: UpdatePayrollRunDto) {
     return this.payrollRunsService.updateRun(user, id, updateDto);
   }
@@ -155,11 +156,11 @@ export class PayrollRunsController {
     summary: 'Process payroll',
     description: 'Process a draft payroll run: compute payslips from milk sales and applicable charges/loans/inventory deductions for the run period.',
   })
-  @ApiParam({ name: 'id', description: 'Payroll run ID (UUID)' })
-  @ApiResponse({ status: 200, description: 'Payroll processed successfully' })
-  @ApiNotFoundResponse({ description: 'Payroll run not found' })
-  @ApiBadRequestResponse({ description: 'No permission or no default account' })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing token' })
+  @ApiParam({ name: 'id', description: 'Payroll run ID (UUID).' })
+  @ApiResponse({ status: 200, description: 'Payroll processed successfully.' })
+  @ApiNotFoundResponse({ description: 'Payroll run not found.' })
+  @ApiBadRequestResponse({ description: 'No permission or no default account.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing token.' })
   async processPayroll(@CurrentUser() user: User, @Param('id') id: string) {
     return this.payrollRunsService.processPayroll(user, id);
   }
@@ -170,9 +171,9 @@ export class PayrollRunsController {
     summary: 'Mark payroll as paid',
     description: 'Marks payroll payslip(s) as paid and creates expense transaction in finance. If payslip_id is provided, marks only that payslip. Otherwise, marks all unpaid payslips in the run.'
   })
-  @ApiParam({ name: 'id', description: 'Payroll run ID' })
+  @ApiParam({ name: 'id', description: 'Payroll run ID.' })
   @ApiBody({ type: MarkPayrollPaidDto })
-  @ApiResponse({ status: 200, description: 'Payroll marked as paid successfully' })
+  @ApiResponse({ status: 200, description: 'Payroll marked as paid successfully.' })
   async markAsPaid(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -186,12 +187,12 @@ export class PayrollRunsController {
     summary: 'Export payroll to Excel or PDF',
     description: 'Exports payroll run to Excel (.xlsx) or PDF format. Response is a file download. Default format is Excel.',
   })
-  @ApiParam({ name: 'id', description: 'Payroll run ID (UUID)' })
-  @ApiQuery({ name: 'format', required: false, enum: ['excel', 'pdf'], description: 'Export format. Default: excel' })
+  @ApiParam({ name: 'id', description: 'Payroll run ID (UUID).' })
+  @ApiQuery({ name: 'format', required: false, enum: ['excel', 'pdf'], description: 'Export format. Default: excel.' })
   @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/pdf')
-  @ApiResponse({ status: 200, description: 'File download (Excel or PDF)' })
-  @ApiNotFoundResponse({ description: 'Payroll run not found or no access' })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing token' })
+  @ApiResponse({ status: 200, description: 'File download (Excel or PDF).' })
+  @ApiNotFoundResponse({ description: 'Payroll run not found or no access.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing token.' })
   async exportPayroll(
     @CurrentUser() user: User,
     @Param('id') id: string,

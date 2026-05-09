@@ -21,6 +21,11 @@ export interface DashboardStats {
   collections: {
     total: number;
   };
+  /** Milk sale rows with status `rejected` in the selected dashboard period (platform-wide). */
+  rejections?: {
+    transactions: number;
+    liters: number;
+  };
   suppliers: {
     total: number;
   };
@@ -166,6 +171,249 @@ export interface UsageDashboardData {
   }>;
 }
 
+export type AdminPlatformPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+export interface PlatformMilkSaleRow {
+  id: string;
+  quantity: number;
+  unit_price: number;
+  amount_paid: number;
+  status: string;
+  sale_at: string;
+  supplier_name: string | null;
+  supplier_code: string | null;
+  customer_name: string | null;
+  customer_code: string | null;
+}
+
+export interface PlatformLoanRow {
+  id: string;
+  principal: number;
+  amount_repaid: number;
+  status: string;
+  disbursement_date: string;
+  borrower_label: string;
+  borrower_code: string | null;
+  lender_name: string | null;
+  lender_code: string | null;
+}
+
+export interface PlatformLoanRepaymentRow {
+  id: string;
+  amount: number;
+  repayment_date: string;
+  source: string;
+  loan_id: string;
+  borrower_label: string;
+  lender_name: string | null;
+}
+
+export interface PlatformPayrollRunRow {
+  id: string;
+  run_name: string;
+  run_date: string;
+  total_amount: number;
+  status: string;
+  account_name: string | null;
+  account_code: string | null;
+}
+
+export interface PlatformInventorySaleRow {
+  id: string;
+  quantity: number;
+  unit_price: number;
+  total_amount: number;
+  sale_date: string;
+  buyer_label: string;
+  buyer_code: string | null;
+  product_name: string;
+  payment_status: string;
+}
+
+export interface PlatformAuditEventRow {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  user_id: string | null;
+  user_label: string | null;
+  created_at: string;
+  ip_address: string | null;
+}
+
+export interface PlatformChargeRow {
+  id: string;
+  name: string;
+  kind: string;
+  amount_type: string;
+  amount: number;
+  recurrence: string | null;
+  is_active: boolean;
+  apply_to_all_suppliers: boolean;
+  effective_from: string | null;
+  effective_to: string | null;
+  created_at: string;
+  updated_at: string;
+  mcc_name: string | null;
+  mcc_code: string | null;
+}
+
+export interface PlatformSupplierCustomerLinkRow {
+  id: string;
+  price_per_liter: number;
+  relationship_status: string;
+  created_at: string;
+  supplier_name: string | null;
+  supplier_code: string | null;
+  customer_name: string | null;
+  customer_code: string | null;
+}
+
+export interface PlatformAccountingTransactionRow {
+  id: string;
+  transaction_date: string;
+  reference_number: string | null;
+  description: string | null;
+  total_amount: number;
+  farm_id: string | null;
+  farm_name: string | null;
+  entry_lines: number;
+  created_at: string;
+}
+
+export interface PlatformGateDeliveryRow {
+  id: string;
+  source_type: string;
+  gate_volume_litres: number;
+  arrived_at: string;
+  notes: string | null;
+  mcc_name: string | null;
+  mcc_code: string | null;
+  source_name: string | null;
+  source_code: string | null;
+  recorded_by_label: string | null;
+}
+
+export interface PlatformMilkManifestRow {
+  id: string;
+  manifest_ref: string;
+  status: string;
+  created_at: string;
+  submitted_at: string | null;
+  accepted_at: string | null;
+  rejected_at: string | null;
+  line_count: number;
+  mcc_name: string | null;
+  mcc_code: string | null;
+  umucunda_name: string | null;
+  umucunda_code: string | null;
+  gate_arrived_at: string | null;
+  gate_volume_litres: number | null;
+}
+
+export interface RegionalSupervisorUserRef {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+}
+
+export interface TenantAccountRow {
+  id: string;
+  code: string | null;
+  name: string;
+  type: string;
+  status: string;
+  operational_location_id: string | null;
+  operational_district_id: string | null;
+  operational_location_label: string | null;
+  /** Administrative district name (Rwanda hierarchy); list/table display. */
+  operational_district_label: string | null;
+  regional_supervisor_user_id?: string | null;
+  regional_supervisor?: RegionalSupervisorUserRef | null;
+  /** Active members, relationships, milk rows, farms — same semantics as former user-list aggregates but per account. */
+  stats?: {
+    members: number;
+    suppliers: number;
+    customers: number;
+    sales: number;
+    collections: number;
+    farms: number;
+  };
+}
+
+/** Extended tenant account payload from GET /admin/tenant-accounts/:id */
+export interface TenantAccountOperationalProfileDTO {
+  id: string;
+  account_id: string;
+  expected_daily_deliveries: number | null;
+  daily_milk_volume_litres: number | null;
+  max_milk_one_day_litres: number | null;
+  tank_capacity_sufficiency: string | null;
+  insufficient_capacity_plan: string | null;
+  power_supply_sources: unknown | null;
+  generator_capacity_kva: number | null;
+  mobile_connectivity: string | null;
+  total_farmers_supplying: number | null;
+  new_farmers_last_3_months: number | null;
+  milk_transporters_count: number | null;
+  average_distance_km: number | null;
+  furthest_farm_km: number | null;
+  evening_milk_pattern: string | null;
+  own_milk_transport_type: string | null;
+  record_system: string | null;
+  avg_days_delivery_to_payment: number | null;
+  average_annual_revenue_rwf: number | null;
+  main_buyer_name: string | null;
+  formal_supply_agreement_details: string | null;
+  source_submission_id: string | null;
+  source_submission_code: string | null;
+  captured_at: string;
+  updated_at: string;
+}
+
+export interface TenantAccountCoolingTankProfileDTO {
+  id: string;
+  account_id: string;
+  tank_number: string | null;
+  capacity_litres: number | null;
+  year_or_age: string | null;
+  condition: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenantAccountFacilitySnapshotDTO {
+  id: string;
+  account_id: string;
+  tank_used_litres: number | null;
+  tank_used_pct: number | null;
+  cooling_temperature_c: number | null;
+  power_status: string | null;
+  generator_status: string | null;
+  generator_fuel_pct: number | null;
+  observed_at: string | null;
+  source: string | null;
+  updated_at: string;
+}
+
+export type TenantAccountAdminDetail = TenantAccountRow & {
+  operational_profile: TenantAccountOperationalProfileDTO | null;
+  cooling_tank_profiles: TenantAccountCoolingTankProfileDTO[];
+  facility_snapshot: TenantAccountFacilitySnapshotDTO | null;
+};
+
+export interface RegionalSupervisorDistrictRef {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export interface UserListItem {
   id: string;
   name: string;
@@ -270,6 +518,34 @@ export interface UpdatePlatformRolePayload {
 export type UserActivityMetric = 'suppliers' | 'customers' | 'sales' | 'collections' | 'farms' | 'accounts' | 'members';
 
 export type UserBusinessResource = 'collections' | 'sales' | 'suppliers' | 'customers' | 'farms' | 'accounts' | 'members';
+
+export interface OnboardingOperationalConfigData {
+  submission_id: string;
+  account: { id: string; code: string | null; name: string };
+  profile: {
+    expected_daily_deliveries: number | null;
+  };
+  facility_snapshot: {
+    tank_used_litres: number | null;
+    tank_used_pct: number | null;
+    cooling_temperature_c: number | null;
+    power_status: string | null;
+    generator_status: string | null;
+    generator_fuel_pct: number | null;
+    observed_at: string | null;
+  };
+}
+
+export interface UpdateOnboardingOperationalConfigPayload {
+  expected_daily_deliveries?: number | null;
+  tank_used_litres?: number | null;
+  tank_used_pct?: number | null;
+  cooling_temperature_c?: number | null;
+  power_status?: string | null;
+  generator_status?: string | null;
+  generator_fuel_pct?: number | null;
+  observed_at?: string | null;
+}
 
 export const adminApi = {
   getDashboardStats: async (
@@ -389,6 +665,7 @@ export const adminApi = {
       date_to?: string;
       supplier_name?: string;
       customer_account_code?: string;
+      search?: string;
     },
   ): Promise<{ code: number; status: string; message: string; data: unknown[] }> => {
     const params: Record<string, unknown> = { resource };
@@ -399,6 +676,7 @@ export const adminApi = {
     if (options?.date_to) params.date_to = options.date_to;
     if (options?.supplier_name) params.supplier_name = options.supplier_name;
     if (options?.customer_account_code) params.customer_account_code = options.customer_account_code;
+    if (options?.search) params.search = options.search;
     return apiClient.get(`/admin/users/${userId}/business-records`, { params });
   },
 
@@ -567,6 +845,31 @@ export const adminApi = {
     return apiClient.get(`/admin/onboarding-submissions/${submissionId}`, { params });
   },
 
+  getOnboardingOperationalConfig: async (
+    submissionId: string,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: OnboardingOperationalConfigData }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.get(`/admin/onboarding-submissions/${submissionId}/operational-config`, { params });
+  },
+
+  updateOnboardingOperationalConfig: async (
+    submissionId: string,
+    body: UpdateOnboardingOperationalConfigPayload,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: OnboardingOperationalConfigData }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.put(`/admin/onboarding-submissions/${submissionId}/operational-config`, body, { params });
+  },
+
+  syncOnboardingOperationalConfigDefaults: async (
+    submissionId: string,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: OnboardingOperationalConfigData }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.post(`/admin/onboarding-submissions/${submissionId}/operational-config/sync-defaults`, {}, { params });
+  },
+
   linkOnboardingSubmission: async (
     submissionId: string,
     body: { linkUserId: string; linkAccountId?: string },
@@ -607,5 +910,409 @@ export const adminApi = {
   ): Promise<{ code: number; status: string; message: string; data: unknown }> => {
     const params = accountId ? { account_id: accountId } : {};
     return apiClient.post(`/admin/onboarding-submissions/${submissionId}/needs-changes`, { notes }, { params });
+  },
+
+  listPlatformMilkSales: async (
+    accountId: string | undefined,
+    params: {
+      scope: 'collections' | 'rejections';
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: {
+      scope: string;
+      period: { start: string; end: string };
+      rows: PlatformMilkSaleRow[];
+      pagination: AdminPlatformPagination;
+    };
+  }> => {
+    const q: Record<string, unknown> = {
+      scope: params.scope,
+      page: params.page ?? 1,
+      limit: params.limit ?? 25,
+    };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/milk-sales', { params: q });
+  },
+
+  listPlatformLoans: async (
+    accountId: string | undefined,
+    params: {
+      mode: 'active_portfolio' | 'disbursed_in_period';
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { mode: string; rows: PlatformLoanRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = {
+      mode: params.mode,
+      page: params.page ?? 1,
+      limit: params.limit ?? 25,
+    };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/loans', { params: q });
+  },
+
+  listPlatformLoanRepayments: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformLoanRepaymentRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/loan-repayments', { params: q });
+  },
+
+  listPlatformPayrollRuns: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformPayrollRunRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/payroll-runs', { params: q });
+  },
+
+  listPlatformInventorySales: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformInventorySaleRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/inventory-sales', { params: q });
+  },
+
+  listPlatformAuditEvents: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformAuditEventRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/audit-events', { params: q });
+  },
+
+  listPlatformCharges: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformChargeRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/charges', { params: q });
+  },
+
+  listPlatformSupplierCustomerLinks: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: {
+      period: { start: string; end: string };
+      rows: PlatformSupplierCustomerLinkRow[];
+      pagination: AdminPlatformPagination;
+    };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/supplier-customer-links', { params: q });
+  },
+
+  listPlatformAccountingTransactions: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: {
+      period: { start: string; end: string };
+      rows: PlatformAccountingTransactionRow[];
+      pagination: AdminPlatformPagination;
+    };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/accounting-transactions', { params: q });
+  },
+
+  listPlatformGateDeliveries: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformGateDeliveryRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/gate-deliveries', { params: q });
+  },
+
+  listPlatformMilkManifests: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      date_from?: string;
+      date_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { period: { start: string; end: string }; rows: PlatformMilkManifestRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 25 };
+    if (accountId) q.account_id = accountId;
+    if (params.date_from) q.date_from = params.date_from;
+    if (params.date_to) q.date_to = params.date_to;
+    if (params.tz_offset_minutes !== undefined) q.tz_offset_minutes = params.tz_offset_minutes;
+    return apiClient.get('/admin/platform/milk-manifests', { params: q });
+  },
+
+  listTenantAccountsForAdmin: async (
+    accountId: string | undefined,
+    params: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      account_type?: 'tenant' | 'branch' | 'admin' | 'all';
+      district_location_id?: string;
+      /** User id or `unassigned` */
+      regional_supervisor_user_id?: string;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { rows: TenantAccountRow[]; pagination: AdminPlatformPagination };
+  }> => {
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 10 };
+    if (accountId) q.account_id = accountId;
+    if (params.search?.trim()) q.search = params.search.trim();
+    if (params.account_type) q.account_type = params.account_type;
+    if (params.district_location_id) q.district_location_id = params.district_location_id;
+    if (params.regional_supervisor_user_id) q.regional_supervisor_user_id = params.regional_supervisor_user_id;
+    return apiClient.get('/admin/tenant-accounts', { params: q });
+  },
+
+  updateTenantAccountRegionalSupervisor: async (
+    accountId: string | undefined,
+    targetAccountId: string,
+    body: { regional_supervisor_user_id: string | null },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: TenantAccountAdminDetail;
+  }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    return apiClient.put(`/admin/tenant-accounts/${targetAccountId}/regional-supervisor`, body, { params: q });
+  },
+
+  getTenantAccountForAdmin: async (
+    accountId: string | undefined,
+    targetAccountId: string,
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: TenantAccountAdminDetail;
+  }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    return apiClient.get(`/admin/tenant-accounts/${targetAccountId}`, { params: q });
+  },
+
+  updateTenantAccountOperationalMetrics: async (
+    accountId: string | undefined,
+    targetAccountId: string,
+    body: {
+      profile?: Record<string, unknown>;
+      facility_snapshot?: Record<string, unknown>;
+      cooling_tanks?: Array<{
+        tank_number?: string | null;
+        capacity_litres?: number | string | null;
+        year_or_age?: string | null;
+        condition?: string | null;
+      }>;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: TenantAccountAdminDetail;
+  }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    return apiClient.put(`/admin/tenant-accounts/${targetAccountId}/operational-metrics`, body, { params: q });
+  },
+
+  updateTenantAccountOperationalLocation: async (
+    accountId: string | undefined,
+    targetAccountId: string,
+    body: { operational_location_id?: string | null },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: {
+      id: string;
+      operational_location_id: string | null;
+      operational_district_id: string | null;
+      operational_location_label: string | null;
+    };
+  }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    return apiClient.put(`/admin/tenant-accounts/${targetAccountId}/operational-location`, body, { params: q });
+  },
+
+  getRegionalSupervisorScope: async (
+    accountId: string | undefined,
+    userId: string,
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { user_id: string; districts: RegionalSupervisorDistrictRef[] };
+  }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    return apiClient.get(`/admin/users/${userId}/regional-supervisor-scope`, { params: q });
+  },
+
+  setRegionalSupervisorScope: async (
+    accountId: string | undefined,
+    userId: string,
+    body: { district_location_ids: string[] },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { user_id: string; districts: RegionalSupervisorDistrictRef[] };
+  }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    return apiClient.put(`/admin/users/${userId}/regional-supervisor-scope`, body, { params: q });
   },
 };

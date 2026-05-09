@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Put, Delete, Body, UseGuards, Param, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiQuery, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiNotFoundResponse, ApiForbiddenResponse, ApiParam } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
 import { TokenGuard } from '../../common/guards/token.guard';
@@ -18,6 +18,7 @@ export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
 
   @Post()
+  @HttpCode(200)
   @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Create employee',
@@ -118,8 +119,8 @@ export class EmployeesController {
     summary: 'Get employees',
     description: 'Get all employees for the given account (or default). Optional status filter: active | inactive. Caller must be system_admin, admin, manager, or legacy owner on the account.',
   })
-  @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (default: user default account)' })
-  @ApiQuery({ name: 'status', required: false, description: 'Filter by status: active | inactive' })
+  @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (default: user default account).' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by status: active | inactive.' })
   @ApiResponse({
     status: 200,
     description: 'Employees fetched successfully',
@@ -208,8 +209,8 @@ export class EmployeesController {
     description:
       'Returns roles and default permissions for employee/supplier onboarding UI. Requires manage_users, or create/update suppliers on the account.',
   })
-  @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (default: user default account)' })
-  @ApiResponse({ status: 200, description: 'Roles config' })
+  @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (default: user default account).' })
+  @ApiResponse({ status: 200, description: 'Roles configuration retrieved successfully.' })
   async getRoles(@CurrentUser() user: User, @Query('account_id') accountId?: string) {
     return this.employeesService.getRoles(user, accountId || null);
   }
@@ -220,8 +221,8 @@ export class EmployeesController {
     summary: 'Get permissions config',
     description: 'Returns permissions list for use in employee management UI. Requires system_admin, admin, manager, or legacy owner on the account.',
   })
-  @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (default: user default account)' })
-  @ApiResponse({ status: 200, description: 'Permissions config' })
+  @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (default: user default account).' })
+  @ApiResponse({ status: 200, description: 'Permissions configuration retrieved successfully.' })
   async getPermissions(@CurrentUser() user: User, @Query('account_id') accountId?: string) {
     return this.employeesService.getPermissions(user, accountId || null);
   }

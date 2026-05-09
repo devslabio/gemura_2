@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Body, Controller, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiBadRequestResponse, ApiUnauthorizedResponse } from '@nestjs/swagger';
 import { KycService } from './kyc.service';
 import { TokenGuard } from '../../common/guards/token.guard';
@@ -14,6 +14,7 @@ export class KycController {
   constructor(private readonly kycService: KycService) {}
 
   @Post('upload-photo')
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Upload KYC photo',
     description: 'Upload a KYC verification photo (ID front, ID back, or selfie). Uploading any photo sets KYC status to pending.',

@@ -89,12 +89,28 @@ else
   echo "📤 Source: DATABASE_URL from backend/.env"
 fi
 
-SSH_OPTS="-o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o ConnectTimeout=30"
+# pg_dump/psql URI parser rejects Prisma-only query params (e.g. ?schema=public).
+LOCAL_DUMP_URL="$(LOCAL_URL="$LOCAL_URL" python3 - <<'PY'
+import os
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+
+raw = os.environ["LOCAL_URL"]
+u = urlparse(raw)
+q = [(k, v) for k, v in parse_qsl(u.query, keep_blank_values=True) if k.lower() != "schema"]
+print(urlunparse((u.scheme, u.netloc, u.path, u.params, urlencode(q), u.fragment)))
+PY
+)" || {
+  echo "❌ Could not sanitize DATABASE_URL for pg_dump (need python3)."
+  exit 1
+}
+
+# Use an array so OpenSSH always receives distinct -o flags (avoids macOS word-splitting quirks).
+SSH_OPTS=( -o StrictHostKeyChecking=no -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o ConnectTimeout=30 )
 
 echo ""
 echo "🛑 Stopping Gemura UAT app containers (releases DB connections)…"
 if [ "${SKIP_STOP_UAT:-}" != "1" ]; then
-  sshpass -p "$SERVER_PASS" ssh $SSH_OPTS "$SERVER_USER@$SERVER_IP" bash -s << REMOTE
+  sshpass -p "$SERVER_PASS" ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_IP" bash -s << REMOTE
 set -e
 if [ -f "$DEPLOY_UAT_PATH/.env.uat" ]; then
   cd "$DEPLOY_UAT_PATH"
@@ -109,34 +125,48 @@ fi
 
 echo ""
 echo "🗄️  Recreating ${REMOTE_DB_NAME} on server…"
-sshpass -p "$SERVER_PASS" ssh $SSH_OPTS "$SERVER_USER@$SERVER_IP" bash -s << REMOTE
+sshpass -p "$SERVER_PASS" ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_IP" bash -s << REMOTE
 set -e
 if ! docker ps --format '{{.Names}}' | grep -q "^${REMOTE_PG_CONTAINER}\$"; then
   echo "❌ Container ${REMOTE_PG_CONTAINER} is not running."
   exit 1
 fi
-docker exec "${REMOTE_PG_CONTAINER}" psql -U "${REMOTE_PG_USER}" -d postgres -v ON_ERROR_STOP=1 <<'EOSQL'
+docker exec "${REMOTE_PG_CONTAINER}" psql -U "${REMOTE_PG_USER}" -d postgres -v ON_ERROR_STOP=1 <<EOSQL
 SELECT pg_terminate_backend(pid)
 FROM pg_stat_activity
-WHERE datname = 'gemura_uat_db'
+WHERE datname = '${REMOTE_DB_NAME}'
   AND pid <> pg_backend_pid();
-DROP DATABASE IF EXISTS gemura_uat_db;
-CREATE DATABASE gemura_uat_db OWNER kwezi;
+DROP DATABASE IF EXISTS ${REMOTE_DB_NAME};
+CREATE DATABASE ${REMOTE_DB_NAME} OWNER ${REMOTE_PG_USER} TEMPLATE template0;
 EOSQL
-echo "   ✅ Empty database ${REMOTE_DB_NAME} ready"
+docker exec "${REMOTE_PG_CONTAINER}" psql -U "${REMOTE_PG_USER}" -d "${REMOTE_DB_NAME}" -v ON_ERROR_STOP=1 <<EOSQL
+DROP SCHEMA public CASCADE;
+CREATE SCHEMA public;
+ALTER SCHEMA public OWNER TO ${REMOTE_PG_USER};
+GRANT ALL ON SCHEMA public TO public;
+EOSQL
+echo "   ✅ Empty database ${REMOTE_DB_NAME} ready (template0 + fresh public schema)"
 REMOTE
 
 echo ""
 echo "📥 pg_dump (local) → psql restore into ${REMOTE_DB_NAME} (this may take several minutes)…"
 # Single schema used by Prisma; avoids noise from other schemas if any.
+# Strip PG17+ session SETs if UAT Postgres is older (e.g. transaction_timeout).
 ERR_FILE="${TMPDIR:-/tmp}/gemura-uat-pgdump.$$"
-if ! pg_dump "$LOCAL_URL" \
+# --clean/--if-exists emits DROP … IF EXISTS before CREATE (fixes duplicate enum/type errors
+# on restore). Do not strip CREATE SCHEMA public — the clean section drops public, so the
+# following CREATE SCHEMA public from the dump is required.
+if ! pg_dump "$LOCAL_DUMP_URL" \
   --schema=public \
   --no-owner \
   --no-acl \
   --no-sync \
+  --clean \
+  --if-exists \
   2> "$ERR_FILE" \
-  | sshpass -p "$SERVER_PASS" ssh $SSH_OPTS "$SERVER_USER@$SERVER_IP" \
+  | sed -E '/^SET transaction_timeout/d' \
+  | sed -E '/^\\restrict /d;/^\\unrestrict /d' \
+  | sshpass -p "$SERVER_PASS" ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_IP" \
     "docker exec -i ${REMOTE_PG_CONTAINER} psql -U ${REMOTE_PG_USER} -v ON_ERROR_STOP=1 -d ${REMOTE_DB_NAME}"
 then
   echo "❌ pg_dump | restore failed. pg_dump stderr:"
@@ -148,7 +178,7 @@ rm -f "$ERR_FILE"
 
 echo ""
 echo "🚀 Starting Gemura UAT API + UI…"
-sshpass -p "$SERVER_PASS" ssh $SSH_OPTS "$SERVER_USER@$SERVER_IP" bash -s << REMOTE
+sshpass -p "$SERVER_PASS" ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_IP" bash -s << REMOTE
 set -e
 cd "$DEPLOY_UAT_PATH"
 if [ ! -f .env.uat ]; then

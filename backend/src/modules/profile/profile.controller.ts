@@ -1,5 +1,5 @@
 import { Controller, Get, Put, Post, Delete, Body, UseGuards, Param } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiBadRequestResponse, ApiUnauthorizedResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiParam } from '@nestjs/swagger';
 import { ProfileService } from './profile.service';
 import { TokenGuard } from '../../common/guards/token.guard';
 import { CurrentUser } from '../../common/decorators/user.decorator';
@@ -66,7 +66,8 @@ export class ProfileController {
     description:
       'Returns the onboarding wizard payload for a row where `linked_user_id` is the current user. Not available for arbitrary submission IDs.',
   })
-  @ApiResponse({ status: 200, description: 'Submission returned' })
+  @ApiParam({ name: 'submissionId', description: 'Onboarding submission ID.' })
+  @ApiResponse({ status: 200, description: 'Onboarding submission retrieved successfully.' })
   @ApiUnauthorizedResponse({
     description: 'Invalid or missing authentication token',
     example: { code: 403, status: 'error', message: 'Unauthorized. Invalid token.' },

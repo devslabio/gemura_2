@@ -35,7 +35,11 @@ export default function StatCard({
       <div className="flex items-start justify-between gap-2.5">
         <div className="min-w-0 flex-1">
           <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-500">{label}</div>
-          <div className="text-xl font-bold text-gray-900 sm:text-2xl">{value}</div>
+          <div className="min-w-0">
+            <div className="truncate whitespace-nowrap font-bold leading-none text-gray-900 text-[clamp(1rem,2.2vw,1.5rem)]">
+              {value}
+            </div>
+          </div>
           {subtitle && <div className="mt-1.5 text-xs text-gray-600">{subtitle}</div>}
         </div>
         <div

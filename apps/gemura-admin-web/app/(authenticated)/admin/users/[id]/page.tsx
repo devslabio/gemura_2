@@ -42,8 +42,6 @@ export default function UserDetailsPage() {
     accountLabel: string;
   } | null>(null);
 
-  const [listAccountId, setListAccountId] = useState<string | null>(null);
-
   useEffect(() => {
     if (!PermissionService.canManageUsers() && !PermissionService.isAdmin()) {
       router.push('/admin/users');
@@ -156,18 +154,6 @@ export default function UserDetailsPage() {
     [catalogRoles, user?.platform_role_id],
   );
 
-  const roleCodesFromAssignment = Array.isArray(user?.role_permission_codes)
-    ? (user.role_permission_codes as string[])
-    : [];
-
-  const hasLegacyOverrides =
-    !!user?.permissions &&
-    (typeof user.permissions === 'object'
-      ? Array.isArray(user.permissions)
-        ? user.permissions.length > 0
-        : Object.keys(user.permissions).length > 0
-      : false);
-
   const stats = user?.stats || {
     accounts: 0,
     members: 0,
@@ -279,15 +265,13 @@ export default function UserDetailsPage() {
     }
   };
 
-  useEffect(() => {
-    if (!user) return;
+  /** Account used for operational_account_id on Business Activity deep-links (session account if member, else first active membership). */
+  const scopedListAccountId = useMemo(() => {
+    if (!user) return null;
     const activeUa = userAccounts.filter((u: any) => u.status === 'active');
     const ids = activeUa.map((u: any) => u.account_id || u.account?.id).filter(Boolean) as string[];
-    const preferred =
-      currentAccount?.account_id && ids.includes(currentAccount.account_id)
-        ? currentAccount.account_id
-        : ids[0] ?? null;
-    setListAccountId(preferred);
+    if (currentAccount?.account_id && ids.includes(currentAccount.account_id)) return currentAccount.account_id;
+    return ids[0] ?? null;
   }, [user, userAccounts, currentAccount?.account_id]);
 
   const metricCards: Array<{ key: ActivityKey; label: string; value: number }> = [
@@ -304,13 +288,13 @@ export default function UserDetailsPage() {
     () => (metric: ActivityKey) => {
       if (metric === 'accounts') return `/admin/users/${userId}/records/accounts`;
       if (metric === 'members') {
-        const q = listAccountId ? `?operational_account_id=${encodeURIComponent(listAccountId)}` : '';
+        const q = scopedListAccountId ? `?operational_account_id=${encodeURIComponent(scopedListAccountId)}` : '';
         return `/admin/users/${userId}/records/members${q}`;
       }
-      const q = listAccountId ? `?operational_account_id=${encodeURIComponent(listAccountId)}` : '';
+      const q = scopedListAccountId ? `?operational_account_id=${encodeURIComponent(scopedListAccountId)}` : '';
       return `/admin/users/${userId}/records/${metric}${q}`;
     },
-    [userId, listAccountId],
+    [userId, scopedListAccountId],
   );
 
   const persistedPlatformRoleId = typeof user?.platform_role_id === 'string' ? user.platform_role_id : '';
@@ -610,36 +594,9 @@ export default function UserDetailsPage() {
             <div className="bg-white border border-gray-200 rounded-sm p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Business Activity</h2>
               <p className="text-sm text-gray-600 mb-3">
-                Open a full admin list (filters, export, pagination) scoped to an account this user belongs to — same fields as app.gemura.rw.
+                Open a full admin list (filters, export, pagination). Lists use your current admin account when this user is a member there;
+                otherwise the first active membership — same fields as app.gemura.rw.
               </p>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Lists scoped to account</label>
-                <select
-                  className="input text-sm max-w-lg text-gray-900"
-                  value={listAccountId ?? ''}
-                  onChange={(e) => setListAccountId(e.target.value || null)}
-                  disabled={!userAccounts.filter((u: any) => u.status === 'active').length}
-                >
-                  {userAccounts.filter((u: any) => u.status === 'active').length === 0 ? (
-                    <option value="">No active account memberships</option>
-                  ) : (
-                    userAccounts
-                      .filter((u: any) => u.status === 'active')
-                      .map((row: any) => {
-                        const id = row.account_id || row.account?.id;
-                        if (!id) return null;
-                        const label = row.account?.name
-                          ? `${row.account.name} (${row.account.code ?? id.slice(0, 8)}…)${row.role ? ` · ${row.role}` : ''}`
-                          : id;
-                        return (
-                          <option key={id} value={id}>
-                            {label}
-                          </option>
-                        );
-                      })
-                  )}
-                </select>
-              </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {metricCards.map((item) => (
                   <Link
@@ -656,32 +613,6 @@ export default function UserDetailsPage() {
                   </Link>
                 ))}
               </div>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-sm p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Permissions from assigned role</h2>
-              <p className="text-xs text-gray-500 mb-3">
-                These permission codes match the linked platform role. Per-user edits are managed only through the role catalogue.
-              </p>
-              {roleCodesFromAssignment.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {roleCodesFromAssignment.map((code: string) => (
-                    <span
-                      key={code}
-                      className="inline-flex px-3 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full"
-                    >
-                      {code.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-500">No permissions linked for this platform role.</p>
-              )}
-              {hasLegacyOverrides ? (
-                <p className="mt-4 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-sm px-3 py-2">
-                  Stored legacy per-user overrides are present in the database. Assigning a role from this screen clears those overrides when you save.
-                </p>
-              ) : null}
             </div>
           </div>
 

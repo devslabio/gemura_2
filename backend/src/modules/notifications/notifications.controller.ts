@@ -15,6 +15,7 @@ export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Post()
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Create notification',
     description: 'Create a new notification for the authenticated user. Notifications can be of different types (info, success, warning, error) and are associated with the user\'s account.',

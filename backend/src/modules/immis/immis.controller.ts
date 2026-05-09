@@ -1,5 +1,5 @@
 import { Controller, Get, Query, Param, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger';
 import { TokenGuard } from '../../common/guards/token.guard';
 import { ImmisService, ImmisApiResponse } from './immis.service';
 
@@ -36,6 +36,7 @@ export class ImmisController {
     summary: 'Get IMMIS member by ID',
     description: 'Retrieve a single IMMIS member by its IMMIS member_id.',
   })
+  @ApiParam({ name: 'id', description: 'IMMIS member ID', type: String })
   @ApiResponse({ status: 200, description: 'Member retrieved successfully from IMMIS.' })
   async getMember(@Param('id') id: string): Promise<ImmisApiResponse> {
     return this.immisService.getMember(id);

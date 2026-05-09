@@ -1,14 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -32,11 +22,12 @@ import { UpdateChargeDto } from './dto/update-charge.dto';
 @Controller('charges')
 @UseGuards(TokenGuard)
 @ApiBearerAuth()
-@ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token' })
+@ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token.' })
 export class ChargesController {
   constructor(private readonly chargesService: ChargesService) {}
 
   @Post('create')
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Create a charge',
     description:
@@ -112,7 +103,7 @@ export class ChargesController {
       example: { code: 400, status: 'error', message: 'Recurrence is required for recurring charges (monthly or per_payroll).' },
     },
   })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token.' })
   async create(
     @CurrentUser() user: User,
     @Body() dto: CreateChargeDto,
@@ -123,6 +114,7 @@ export class ChargesController {
   }
 
   @Post('get')
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Get all charges',
     description:
@@ -170,7 +162,7 @@ export class ChargesController {
     description: 'No valid default account found',
     schema: { example: { code: 400, status: 'error', message: 'No valid default account found. Please set a default account.' } },
   })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token.' })
   async getMany(
     @CurrentUser() user: User,
     @Body('account_id') accountId?: string,
@@ -184,8 +176,8 @@ export class ChargesController {
     summary: 'Get charge by ID',
     description: 'Returns a single charge by ID. Charge must belong to the user\'s default account (or the account specified by query account_id).',
   })
-  @ApiParam({ name: 'id', description: 'Charge UUID', example: '550e8400-e29b-41d4-a716-446655440000' })
-  @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (uses default if omitted)', schema: { type: 'string', format: 'uuid' } })
+  @ApiParam({ name: 'id', description: 'Charge UUID.', example: '550e8400-e29b-41d4-a716-446655440000' })
+  @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (uses default if omitted).', schema: { type: 'string', format: 'uuid' } })
   @ApiResponse({
     status: 200,
     description: 'Charge details including selected_suppliers.',
@@ -213,12 +205,12 @@ export class ChargesController {
       },
     },
   })
-  @ApiBadRequestResponse({ description: 'No valid default account found' })
+  @ApiBadRequestResponse({ description: 'No valid default account found.' })
   @ApiNotFoundResponse({
     description: 'Charge not found or not accessible',
     schema: { example: { code: 404, status: 'error', message: 'Charge not found.' } },
   })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token.' })
   async getById(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -233,7 +225,7 @@ export class ChargesController {
     description:
       'Update an existing charge. All fields are optional (partial update). When changing apply_to_all_suppliers to false, pass supplier_account_ids; when changing to true, selected suppliers are cleared.',
   })
-  @ApiParam({ name: 'id', description: 'Charge UUID', example: '550e8400-e29b-41d4-a716-446655440000' })
+  @ApiParam({ name: 'id', description: 'Charge UUID.', example: '550e8400-e29b-41d4-a716-446655440000' })
   @ApiBody({
     type: UpdateChargeDto,
     description: 'Fields to update (all optional)',
@@ -260,7 +252,7 @@ export class ChargesController {
     description: 'Charge not found or not accessible',
     schema: { example: { code: 404, status: 'error', message: 'Charge not found.' } },
   })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token.' })
   async update(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -276,8 +268,8 @@ export class ChargesController {
     summary: 'Delete a charge',
     description: 'Permanently deletes a charge. Does not affect payroll runs or deductions already generated. Charge must belong to the user\'s account.',
   })
-  @ApiParam({ name: 'id', description: 'Charge UUID', example: '550e8400-e29b-41d4-a716-446655440000' })
-  @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (uses default if omitted)', schema: { type: 'string', format: 'uuid' } })
+  @ApiParam({ name: 'id', description: 'Charge UUID.', example: '550e8400-e29b-41d4-a716-446655440000' })
+  @ApiQuery({ name: 'account_id', required: false, description: 'Account ID (uses default if omitted).', schema: { type: 'string', format: 'uuid' } })
   @ApiResponse({
     status: 200,
     description: 'Charge deleted.',
@@ -287,7 +279,7 @@ export class ChargesController {
     description: 'Charge not found or not accessible',
     schema: { example: { code: 404, status: 'error', message: 'Charge not found.' } },
   })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token.' })
   async delete(
     @CurrentUser() user: User,
     @Param('id') id: string,

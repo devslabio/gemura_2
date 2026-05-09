@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiParam } from '@nestjs/swagger';
 import { StoriesService } from './stories.service';
 import { CreateStoryDto } from './dto/create-story.dto';
 import { TokenGuard } from '../../../common/guards/token.guard';
@@ -37,6 +37,7 @@ export class StoriesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a story by ID' })
+  @ApiParam({ name: 'id', description: 'Story ID' })
   @ApiResponse({ status: 200, description: 'Story details' })
   @ApiResponse({ status: 404, description: 'Story not found' })
   findOne(@Param('id') id: string) {

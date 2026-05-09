@@ -1,15 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-  StreamableFile,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, StreamableFile, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -26,7 +15,7 @@ import {
 import { AdminService, UserActivityMetric, UserBusinessResource } from './admin.service';
 import { TokenGuard } from '../../common/guards/token.guard';
 import { PermissionGuard } from '../../common/guards/permission.guard';
-import { RequirePermission, RequireRole } from '../../common/decorators/permission.decorator';
+import { RequireAnyPermission, RequirePermission, RequireRole } from '../../common/decorators/permission.decorator';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { CurrentAccount } from '../../common/decorators/account.decorator';
 import { User } from '@prisma/client';
@@ -37,9 +26,14 @@ import { ApproveOnboardingDto } from './dto/approve-onboarding.dto';
 import { LinkOnboardingSubmissionDto } from './dto/link-onboarding-submission.dto';
 import { RejectOnboardingDto } from './dto/reject-onboarding.dto';
 import { NeedsChangesOnboardingDto } from './dto/needs-changes-onboarding.dto';
+import { UpdateOnboardingOperationalConfigDto } from './dto/update-onboarding-operational-config.dto';
 import { CreatePlatformRoleDto } from './dto/create-platform-role.dto';
 import { UpdatePlatformRoleDto } from './dto/update-platform-role.dto';
 import { AssignUserAccountMembershipDto } from './dto/assign-user-account-membership.dto';
+import { UpdateAccountOperationalLocationDto } from './dto/update-account-operational-location.dto';
+import { UpdateTenantAccountOperationalMetricsDto } from './dto/update-tenant-account-operational-metrics.dto';
+import { SetRegionalSupervisorScopeDto } from './dto/set-regional-supervisor-scope.dto';
+import { UpdateAccountRegionalSupervisorDto } from './dto/update-account-regional-supervisor.dto';
 
 @ApiTags('Admin')
 @Controller('admin')
@@ -66,6 +60,7 @@ export class AdminController {
         accounts: { total: 850 },
         sales: { total: 15000, liters: 658420 },
         collections: { total: 15000 },
+        rejections: { transactions: 120, liters: 980 },
         suppliers: { total: 18642 },
         customers: { total: 19420 },
         revenue: { total: 278500000, last30Days: 512000000, last7Days: 125000000, today: 20100000 },
@@ -212,14 +207,335 @@ export class AdminController {
     return this.adminService.getUsageDashboardStats(user, accountId, dateFrom, dateTo, tzOffsetMinutes);
   }
 
+  @Get('platform/milk-sales')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated platform milk transactions (admin drill-down)' })
+  @ApiQuery({ name: 'scope', required: false, description: '`collections` (default) or `rejections`' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'date_from', required: false })
+  @ApiQuery({ name: 'date_to', required: false })
+  @ApiQuery({ name: 'tz_offset_minutes', required: false })
+  async listPlatformMilkSales(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('scope') scopeRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    const scope = scopeRaw === 'rejections' ? 'rejections' : 'collections';
+    return this.adminService.listPlatformMilkSales(user, accountId, {
+      page,
+      limit,
+      scope,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/loans')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated platform loans (active portfolio or disbursed in period)' })
+  @ApiQuery({ name: 'mode', required: false, description: '`active_portfolio` (default) or `disbursed_in_period`' })
+  async listPlatformLoans(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('mode') modeRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    const mode = modeRaw === 'disbursed_in_period' ? 'disbursed_in_period' : 'active_portfolio';
+    return this.adminService.listPlatformLoans(user, accountId, {
+      page,
+      limit,
+      mode,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/loan-repayments')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated platform loan repayments in dashboard period' })
+  async listPlatformLoanRepayments(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformLoanRepayments(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/payroll-runs')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated completed payroll runs in dashboard period' })
+  async listPlatformPayrollRuns(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformPayrollRuns(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/inventory-sales')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated inventory sales in dashboard period' })
+  async listPlatformInventorySales(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformInventorySales(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/audit-events')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated audit log events in dashboard period' })
+  async listPlatformAuditLogs(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformAuditLogs(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/charges')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated supplier charges created or updated in dashboard period' })
+  async listPlatformCharges(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformCharges(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/supplier-customer-links')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated supplier–customer links created in dashboard period' })
+  async listPlatformSupplierCustomerLinks(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformSupplierCustomerLinks(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/accounting-transactions')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated accounting journal batches in dashboard period' })
+  async listPlatformAccountingTransactions(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformAccountingTransactions(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/gate-deliveries')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated MCC gate deliveries in dashboard period' })
+  async listPlatformGateDeliveries(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformGateDeliveries(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/milk-manifests')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated Umucunda milk manifests created in dashboard period' })
+  async listPlatformMilkManifests(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformMilkManifests(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
   @Get('roles')
   @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Get all platform roles with effective permissions',
     description: 'Returns roles and permission codes from the database (editable via PUT /admin/platform-roles/:roleId).',
   })
-  @ApiResponse({ status: 200, description: 'Roles retrieved successfully' })
-  @ApiForbiddenResponse({ description: 'Requires manage_users permission' })
+  @ApiResponse({ status: 200, description: 'Roles retrieved successfully.' })
+  @ApiForbiddenResponse({ description: 'Requires manage_users permission.' })
   async getRoles(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -233,8 +549,8 @@ export class AdminController {
     summary: 'Get all permissions with role assignments',
     description: 'Returns permissions and which roles currently have them (database-backed).',
   })
-  @ApiResponse({ status: 200, description: 'Permissions retrieved successfully' })
-  @ApiForbiddenResponse({ description: 'Requires manage_users permission' })
+  @ApiResponse({ status: 200, description: 'Permissions retrieved successfully.' })
+  @ApiForbiddenResponse({ description: 'Requires manage_users permission.' })
   async getPermissions(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -273,7 +589,8 @@ export class AdminController {
   @Put('platform-roles/:roleId')
   @RequirePermission('manage_users')
   @ApiOperation({ summary: 'Update a platform role and its permissions' })
-  @ApiParam({ name: 'roleId', description: 'PlatformRole id (UUID)' })
+  @ApiParam({ name: 'roleId', description: 'PlatformRole id (UUID).' })
+  @ApiResponse({ status: 200, description: 'Platform role updated successfully.' })
   async updatePlatformRole(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -286,7 +603,8 @@ export class AdminController {
   @Delete('platform-roles/:roleId')
   @RequirePermission('manage_users')
   @ApiOperation({ summary: 'Delete a non-system platform role (must have no users)' })
-  @ApiParam({ name: 'roleId', description: 'PlatformRole id (UUID)' })
+  @ApiParam({ name: 'roleId', description: 'PlatformRole id (UUID).' })
+  @ApiResponse({ status: 200, description: 'Platform role deleted successfully.' })
   async deletePlatformRole(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -307,11 +625,11 @@ export class AdminController {
   @ApiOperation({ summary: 'List MCC onboarding submissions (public wizard)' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'review_status', required: false, description: 'pending | approved | rejected | needs_changes' })
-  @ApiQuery({ name: 'search', required: false, description: 'Search by business, manager name/phone, submission code, or account code/name' })
-  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound' })
-  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound' })
-  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset()' })
+  @ApiQuery({ name: 'review_status', required: false, description: 'Pending | approved | rejected | needs_changes.' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by business, manager name/phone, submission code, or account code/name.' })
+  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound.' })
+  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound.' })
+  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset().' })
   async listOnboardingSubmissions(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -343,11 +661,11 @@ export class AdminController {
     description:
       'Returns UTF-8 CSV: database fields, resolved location labels, and flattened section_payload (wizard_*) and google_sheet (gs_response_*). Column titles and cell values are human-readable (status labels, pass/fail, decisions, dates in UTC, pass counts as "n of 8", etc.). Respects the same review_status filter as the list. Max 5000 rows.',
   })
-  @ApiQuery({ name: 'review_status', required: false, description: 'pending | approved | rejected | needs_changes (omit for all)' })
-  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound' })
-  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound' })
-  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset()' })
-  @ApiResponse({ status: 200, description: 'text/csv attachment' })
+  @ApiQuery({ name: 'review_status', required: false, description: 'Pending | approved | rejected | needs_changes (omit for all).' })
+  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound.' })
+  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound.' })
+  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset().' })
+  @ApiResponse({ status: 200, description: 'CSV file returned.' })
   async exportOnboardingSubmissions(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -378,11 +696,11 @@ export class AdminController {
     description:
       'Returns an Excel workbook with one row per submission and one value per column, including resolved location labels and curated section fields for analysis.',
   })
-  @ApiQuery({ name: 'review_status', required: false, description: 'pending | approved | rejected | needs_changes (omit for all)' })
-  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound' })
-  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound' })
-  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset()' })
-  @ApiResponse({ status: 200, description: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet attachment' })
+  @ApiQuery({ name: 'review_status', required: false, description: 'Pending | approved | rejected | needs_changes (omit for all).' })
+  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound.' })
+  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound.' })
+  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset().' })
+  @ApiResponse({ status: 200, description: 'Excel file returned.' })
   async exportOnboardingSubmissionsXlsx(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -409,7 +727,8 @@ export class AdminController {
   @Get('onboarding-submissions/:submissionId')
   @RequirePermission('manage_users')
   @ApiOperation({ summary: 'Get one MCC onboarding submission including section_payload' })
-  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
+  @ApiResponse({ status: 200, description: 'Onboarding submission retrieved successfully.' })
   async getOnboardingSubmission(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -418,15 +737,71 @@ export class AdminController {
     return this.adminService.getMccOnboardingSubmissionById(user, accountId, submissionId);
   }
 
+  @Get('onboarding-submissions/:submissionId/operational-config')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Get linked account operational config for manager dashboard',
+    description:
+      'Resolves the submission linked account and returns expected deliveries plus latest facility snapshot fields used by the manager dashboard.',
+  })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
+  @ApiResponse({ status: 200, description: 'Operational config retrieved successfully.' })
+  async getOnboardingOperationalConfig(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('submissionId') submissionId: string,
+  ) {
+    return this.adminService.getOnboardingOperationalConfig(user, accountId, submissionId);
+  }
+
+  @Put('onboarding-submissions/:submissionId/operational-config')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Update linked account operational config for manager dashboard',
+    description:
+      'Updates expected deliveries and/or facility snapshot values for the submission linked account. Supports nullable fields.',
+  })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
+  @ApiBody({ type: UpdateOnboardingOperationalConfigDto })
+  @ApiResponse({ status: 200, description: 'Operational config updated successfully.' })
+  async updateOnboardingOperationalConfig(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('submissionId') submissionId: string,
+    @Body() dto: UpdateOnboardingOperationalConfigDto,
+  ) {
+    return this.adminService.updateOnboardingOperationalConfig(user, accountId, submissionId, dto);
+  }
+
+  @Post('onboarding-submissions/:submissionId/operational-config/sync-defaults')
+  @HttpCode(200)
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Re-sync operational config from onboarding payload defaults',
+    description:
+      'Rebuilds linked account operational profile and facility snapshot from this submission section_payload.',
+  })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
+  @ApiResponse({ status: 200, description: 'Operational config defaults synced successfully.' })
+  async syncOnboardingOperationalConfigDefaults(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('submissionId') submissionId: string,
+  ) {
+    return this.adminService.syncOnboardingOperationalConfigFromDefaults(user, accountId, submissionId);
+  }
+
   @Post('onboarding-submissions/:submissionId/link')
+  @HttpCode(200)
   @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Link onboarding submission to an existing Gemura user',
     description:
       'Sets linked_user_id (required). Optionally sets linked_account_id when linkAccountId is provided and the user is an active member of that tenant/branch; otherwise linked_account_id is cleared. Allowed for any review_status.',
   })
-  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
   @ApiBody({ type: LinkOnboardingSubmissionDto })
+  @ApiResponse({ status: 200, description: 'Onboarding submission linked successfully.' })
   async linkOnboardingSubmission(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -437,12 +812,14 @@ export class AdminController {
   }
 
   @Post('onboarding-submissions/:submissionId/approve')
+  @HttpCode(200)
   @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Approve onboarding: create tenant account, wallet, system_admin user link (or link existing user)',
   })
-  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
   @ApiBody({ type: ApproveOnboardingDto })
+  @ApiResponse({ status: 200, description: 'Onboarding submission approved successfully.' })
   async approveOnboardingSubmission(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -453,10 +830,12 @@ export class AdminController {
   }
 
   @Post('onboarding-submissions/:submissionId/reject')
+  @HttpCode(200)
   @RequirePermission('manage_users')
   @ApiOperation({ summary: 'Reject onboarding submission' })
-  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
   @ApiBody({ type: RejectOnboardingDto })
+  @ApiResponse({ status: 200, description: 'Onboarding submission rejected successfully.' })
   async rejectOnboardingSubmission(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -467,10 +846,12 @@ export class AdminController {
   }
 
   @Post('onboarding-submissions/:submissionId/needs-changes')
+  @HttpCode(200)
   @RequirePermission('manage_users')
   @ApiOperation({ summary: 'Mark onboarding submission as needs changes' })
-  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
   @ApiBody({ type: NeedsChangesOnboardingDto })
+  @ApiResponse({ status: 200, description: 'Onboarding submission marked as needs changes.' })
   async needsChangesOnboardingSubmission(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -478,6 +859,144 @@ export class AdminController {
     @Body() dto: NeedsChangesOnboardingDto,
   ) {
     return this.adminService.needsChangesMccOnboardingSubmission(user, accountId, submissionId, dto.notes);
+  }
+
+  @Get('tenant-accounts')
+  @RequireAnyPermission(['manage_users', 'view_regional_accounts'])
+  @ApiOperation({
+    summary: 'List all platform accounts (system-wide)',
+    description:
+      'Paginated list of tenant/branch/admin accounts with operational geography. Filter by district_location_id (Location UUID, type DISTRICT) using denormalized operational_district_id. Regional supervisors only see accounts in districts assigned to them.',
+  })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'account_type', required: false, enum: ['tenant', 'branch', 'admin', 'all'] })
+  @ApiQuery({ name: 'district_location_id', required: false, description: 'Filter accounts whose operational village lies in this district.' })
+  @ApiQuery({
+    name: 'regional_supervisor_user_id',
+    required: false,
+    description: 'Filter by assigned regional supervisor user UUID, or the literal `unassigned`.',
+  })
+  async listTenantAccountsForAdmin(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('search') search?: string,
+    @Query('account_type') accountType?: string,
+    @Query('district_location_id') districtLocationId?: string,
+    @Query('regional_supervisor_user_id') regionalSupervisorUserId?: string,
+  ) {
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '10', 10) || 10));
+    const at =
+      accountType === 'tenant' || accountType === 'branch' || accountType === 'admin' || accountType === 'all'
+        ? accountType
+        : 'all';
+    return this.adminService.listTenantAccountsForAdmin(user, accountId, {
+      page,
+      limit,
+      search,
+      account_type: at,
+      district_location_id: districtLocationId?.trim() || undefined,
+      regional_supervisor_user_id: regionalSupervisorUserId?.trim() || undefined,
+    });
+  }
+
+  @Get('tenant-accounts/:accountId')
+  @RequireAnyPermission(['manage_users', 'view_regional_accounts'])
+  @ApiOperation({ summary: 'Get one platform account by id (for admin geography editor)' })
+  @ApiParam({ name: 'accountId', description: 'Account UUID.' })
+  async getTenantAccountForAdmin(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('accountId') targetAccountId: string,
+  ) {
+    return this.adminService.getTenantAccountForAdmin(user, accountId, targetAccountId);
+  }
+
+  @Put('tenant-accounts/:accountId/operational-location')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Set account operational location (village)',
+    description:
+      'Stores the finest admin location (village) for the account and denormalizes the containing district for regional filters.',
+  })
+  @ApiParam({ name: 'accountId', description: 'Account UUID.' })
+  @ApiBody({ type: UpdateAccountOperationalLocationDto })
+  async updateTenantAccountOperationalLocation(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('accountId') targetAccountId: string,
+    @Body() dto: UpdateAccountOperationalLocationDto,
+  ) {
+    return this.adminService.updateAccountOperationalLocationForAdmin(user, accountId, targetAccountId, dto);
+  }
+
+  @Put('tenant-accounts/:accountId/regional-supervisor')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Assign or clear the regional supervisor for a platform account',
+    description:
+      'Sets `regional_supervisor_user_id` on the account. The user must have the regional_supervisor role on this admin account. If the account has an operational district, that district is added to the supervisor’s district scope when needed.',
+  })
+  @ApiParam({ name: 'accountId', description: 'Account UUID.' })
+  @ApiBody({ type: UpdateAccountRegionalSupervisorDto })
+  async updateTenantAccountRegionalSupervisor(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('accountId') targetAccountId: string,
+    @Body() dto: UpdateAccountRegionalSupervisorDto,
+  ) {
+    return this.adminService.setTenantAccountRegionalSupervisorForAdmin(user, accountId, targetAccountId, dto);
+  }
+
+  @Put('tenant-accounts/:accountId/operational-metrics')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Update MCC operational profile, facility snapshot, and/or cooling tanks',
+    description:
+      'Partial update for account-scoped metrics (omit sections you do not want to change). Sending cooling_tanks replaces all tank rows for the account.',
+  })
+  @ApiParam({ name: 'accountId', description: 'Account UUID.' })
+  @ApiBody({ type: UpdateTenantAccountOperationalMetricsDto })
+  async updateTenantAccountOperationalMetrics(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('accountId') targetAccountId: string,
+    @Body() dto: UpdateTenantAccountOperationalMetricsDto,
+  ) {
+    return this.adminService.updateTenantAccountOperationalMetricsForAdmin(user, accountId, targetAccountId, dto);
+  }
+
+  @Get('users/:userId/regional-supervisor-scope')
+  @RequirePermission('manage_users')
+  @ApiOperation({ summary: 'List district scope for a regional supervisor user' })
+  @ApiParam({ name: 'userId', description: 'User UUID.' })
+  async getRegionalSupervisorScope(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('userId') targetUserId: string,
+  ) {
+    return this.adminService.getRegionalSupervisorScope(user, accountId, targetUserId);
+  }
+
+  @Put('users/:userId/regional-supervisor-scope')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Replace district scope for a regional supervisor user',
+    description: 'Each id must be a Location row with type DISTRICT. Pass an empty array to clear.',
+  })
+  @ApiParam({ name: 'userId', description: 'User UUID.' })
+  @ApiBody({ type: SetRegionalSupervisorScopeDto })
+  async setRegionalSupervisorScope(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('userId') targetUserId: string,
+    @Body() dto: SetRegionalSupervisorScopeDto,
+  ) {
+    return this.adminService.setRegionalSupervisorScope(user, accountId, targetUserId, dto);
   }
 
   @Get('users/export-csv')
@@ -490,7 +1009,7 @@ export class AdminController {
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'role', required: false })
   @ApiQuery({ name: 'account_type', required: false })
-  @ApiResponse({ status: 200, description: 'text/csv attachment' })
+  @ApiResponse({ status: 200, description: 'CSV file returned.' })
   async exportUsers(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -706,6 +1225,7 @@ export class AdminController {
     description: 'Activity metric',
     enum: ['suppliers', 'customers', 'sales', 'collections', 'farms', 'accounts', 'members'],
   })
+  @ApiResponse({ status: 200, description: 'User activity retrieved successfully.' })
   async getUserActivity(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -722,18 +1242,20 @@ export class AdminController {
     description:
       'Returns the same shapes as gemura-web list APIs for collections, sales, suppliers, customers, and farms, scoped to an operational account the target user belongs to. Resource "accounts" returns all active memberships and ignores operational_account_id.',
   })
-  @ApiParam({ name: 'id', type: String, description: 'Target user UUID' })
+  @ApiParam({ name: 'id', type: String, description: 'Target user UUID.' })
   @ApiQuery({
     name: 'resource',
     required: true,
     enum: ['collections', 'sales', 'suppliers', 'customers', 'farms', 'accounts', 'members'],
   })
-  @ApiQuery({ name: 'operational_account_id', required: false, description: 'Required except for resource=accounts' })
+  @ApiQuery({ name: 'operational_account_id', required: false, description: 'Required except for resource=accounts.' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'date_from', required: false })
   @ApiQuery({ name: 'date_to', required: false })
   @ApiQuery({ name: 'supplier_name', required: false })
   @ApiQuery({ name: 'customer_account_code', required: false })
+  @ApiQuery({ name: 'search', required: false, description: 'Members: match name, email, or phone (case-insensitive).' })
+  @ApiResponse({ status: 200, description: 'User business records retrieved successfully.' })
   async getUserBusinessRecords(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -745,6 +1267,7 @@ export class AdminController {
     @Query('date_to') dateTo?: string,
     @Query('supplier_name') supplierName?: string,
     @Query('customer_account_code') customerAccountCode?: string,
+    @Query('search') search?: string,
   ) {
     return this.adminService.getUserBusinessRecords(user, accountId, userId, resource, operationalAccountId, {
       status,
@@ -752,18 +1275,21 @@ export class AdminController {
       date_to: dateTo,
       supplier_name: supplierName,
       customer_account_code: customerAccountCode,
+      search,
     });
   }
 
   @Post('users/:id/account-memberships')
+  @HttpCode(200)
   @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Grant target user access to an account',
     description:
       'Creates or reactivates a user_accounts row. Defaults to viewer role when platform_role_id is omitted.',
   })
-  @ApiParam({ name: 'id', description: 'Target user UUID' })
+  @ApiParam({ name: 'id', description: 'Target user UUID.' })
   @ApiBody({ type: AssignUserAccountMembershipDto })
+  @ApiResponse({ status: 200, description: 'User account membership added successfully.' })
   async addUserAccountMembership(
     @CurrentUser() admin: User,
     @CurrentAccount() accountId: string,
@@ -779,8 +1305,9 @@ export class AdminController {
     summary: 'Revoke target user access to an account',
     description: 'Marks the membership inactive. Cannot remove the user\'s only active account access.',
   })
-  @ApiParam({ name: 'id', description: 'Target user UUID' })
-  @ApiParam({ name: 'membershipAccountId', description: 'Account UUID to detach' })
+  @ApiParam({ name: 'id', description: 'Target user UUID.' })
+  @ApiParam({ name: 'membershipAccountId', description: 'Account UUID to detach.' })
+  @ApiResponse({ status: 200, description: 'User account membership removed successfully.' })
   async removeUserAccountMembership(
     @CurrentUser() admin: User,
     @CurrentAccount() accountId: string,
@@ -797,8 +1324,9 @@ export class AdminController {
     description:
       'Target user must belong to the current account. Body: { "immis_member_id": 10 } to link, { "immis_member_id": null } to unlink.',
   })
-  @ApiParam({ name: 'userId', description: 'Gemura user UUID' })
+  @ApiParam({ name: 'userId', description: 'Gemura user UUID.' })
   @ApiBody({ type: LinkUserImmisDto })
+  @ApiResponse({ status: 200, description: 'IMMIS member link updated successfully.' })
   async linkUserImmis(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,

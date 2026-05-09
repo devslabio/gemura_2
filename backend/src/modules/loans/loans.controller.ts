@@ -29,6 +29,7 @@ export class LoansController {
   constructor(private readonly loansService: LoansService) {}
 
   @Post('create')
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Create a loan',
     description: 'Create a new loan. Borrower type can be supplier, customer, or other. For "other", borrower_phone is required to find or create their account. Disbursement is recorded in accounting (DR Loans Receivable, CR Cash).',
@@ -66,7 +67,7 @@ export class LoansController {
     description: 'Invalid input, missing required fields, or accounting failure',
     example: { code: 400, status: 'error', message: 'Borrower phone is required when borrower type is "other".' },
   })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token.' })
   async create(@CurrentUser() user: User, @Body() dto: CreateLoanDto) {
     return this.loansService.create(user, dto);
   }
@@ -77,15 +78,15 @@ export class LoansController {
     summary: 'Get all loans with optional filters',
     description: 'Returns loans for the authenticated user\'s default account (or specified account_id). Filter by borrower type, status, date range, or search by borrower name/code.',
   })
-  @ApiQuery({ name: 'account_id', required: false, description: 'Filter by lender account ID (UUID)' })
-  @ApiQuery({ name: 'borrower_type', required: false, enum: ['supplier', 'customer', 'other'], description: 'Filter by borrower type' })
-  @ApiQuery({ name: 'status', required: false, enum: ['active', 'closed'], description: 'Filter by loan status' })
-  @ApiQuery({ name: 'search', required: false, description: 'Search borrower name or code' })
-  @ApiQuery({ name: 'date_from', required: false, description: 'Filter loans disbursed on or after (YYYY-MM-DD)' })
-  @ApiQuery({ name: 'date_to', required: false, description: 'Filter loans disbursed on or before (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'account_id', required: false, description: 'Filter by lender account ID (UUID).' })
+  @ApiQuery({ name: 'borrower_type', required: false, enum: ['supplier', 'customer', 'other'], description: 'Filter by borrower type.' })
+  @ApiQuery({ name: 'status', required: false, enum: ['active', 'closed'], description: 'Filter by loan status.' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search borrower name or code.' })
+  @ApiQuery({ name: 'date_from', required: false, description: 'Filter loans disbursed on or after (YYYY-MM-DD).' })
+  @ApiQuery({ name: 'date_to', required: false, description: 'Filter loans disbursed on or before (YYYY-MM-DD).' })
   @ApiResponse({ status: 200, description: 'Loans list.' })
-  @ApiBadRequestResponse({ description: 'No valid default account found' })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token' })
+  @ApiBadRequestResponse({ description: 'No valid default account found.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token.' })
   async getMany(
     @CurrentUser() user: User,
     @Query('account_id') accountId?: string,
@@ -129,6 +130,7 @@ export class LoansController {
   }
 
   @Post('bulk')
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Bulk create loans',
     description: 'Create multiple loans from an array. Each row must match CreateLoanDto shape. Returns count of success/failed and per-row errors.',
@@ -147,8 +149,8 @@ export class LoansController {
       data: { success: 2, failed: 0, errors: [] },
     },
   })
-  @ApiBadRequestResponse({ description: 'No valid default account found' })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token' })
+  @ApiBadRequestResponse({ description: 'No valid default account found.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token.' })
   async bulkCreate(@CurrentUser() user: User, @Body() body: BulkCreateLoansDto) {
     const result = await this.loansService.bulkCreate(user, body.rows);
     return {
@@ -164,11 +166,11 @@ export class LoansController {
     summary: 'Get loan by ID',
     description: 'Returns a single loan with repayments list (ordered by repayment_date desc). Loan must belong to user\'s default account.',
   })
-  @ApiParam({ name: 'id', description: 'Loan UUID' })
+  @ApiParam({ name: 'id', description: 'Loan UUID.' })
   @ApiResponse({ status: 200, description: 'Loan details including repayments array.' })
-  @ApiBadRequestResponse({ description: 'No valid default account found' })
-  @ApiNotFoundResponse({ description: 'Loan not found or not accessible' })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token' })
+  @ApiBadRequestResponse({ description: 'No valid default account found.' })
+  @ApiNotFoundResponse({ description: 'Loan not found or not accessible.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token.' })
   async getById(@CurrentUser() user: User, @Param('id') id: string) {
     return this.loansService.getById(user, id);
   }
@@ -178,25 +180,26 @@ export class LoansController {
     summary: 'Update a loan',
     description: 'Update loan status, due date, or notes only. Principal and borrower cannot be changed after creation.',
   })
-  @ApiParam({ name: 'id', description: 'Loan UUID' })
+  @ApiParam({ name: 'id', description: 'Loan UUID.' })
   @ApiBody({
     type: UpdateLoanDto,
     description: 'Fields to update (status, due_date, notes)',
   })
   @ApiResponse({ status: 200, description: 'Loan updated.' })
-  @ApiBadRequestResponse({ description: 'No valid default account found' })
-  @ApiNotFoundResponse({ description: 'Loan not found or not accessible' })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token' })
+  @ApiBadRequestResponse({ description: 'No valid default account found.' })
+  @ApiNotFoundResponse({ description: 'Loan not found or not accessible.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token.' })
   async update(@CurrentUser() user: User, @Param('id') id: string, @Body() dto: UpdateLoanDto) {
     return this.loansService.update(user, id, dto);
   }
 
   @Post(':id/repayment')
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Record a repayment for a loan',
     description: 'Record a direct repayment. Updates loan amount_repaid and creates a LoanRepayment record and accounting entry (DR Cash, CR Loans Receivable). Returns updated loan with repayments list.',
   })
-  @ApiParam({ name: 'id', description: 'Loan UUID' })
+  @ApiParam({ name: 'id', description: 'Loan UUID.' })
   @ApiBody({
     type: RecordRepaymentDto,
     description: 'Repayment amount and optional date/notes',
@@ -210,8 +213,8 @@ export class LoansController {
     description: 'Amount exceeds outstanding, or accounting failure',
     example: { code: 400, status: 'error', message: 'Repayment amount (50000) cannot exceed outstanding balance (30000).' },
   })
-  @ApiNotFoundResponse({ description: 'Loan not found or not accessible' })
-  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token' })
+  @ApiNotFoundResponse({ description: 'Loan not found or not accessible.' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or missing authentication token.' })
   async recordRepayment(
     @CurrentUser() user: User,
     @Param('id') id: string,

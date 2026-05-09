@@ -30,6 +30,7 @@ export class SuppliersController {
   constructor(private readonly suppliersService: SuppliersService) {}
 
   @Post('create')
+  @HttpCode(200)
   @RequireAnyPermission(['create_suppliers', 'update_suppliers'])
   @ApiOperation({
     summary: 'Create or update supplier',
@@ -244,6 +245,7 @@ export class SuppliersController {
   }
 
   @Post('bulk')
+  @HttpCode(200)
   @RequireAnyPermission(['create_suppliers', 'update_suppliers'])
   @ApiOperation({
     summary: 'Bulk create or update suppliers',
@@ -271,6 +273,7 @@ export class SuppliersController {
   }
 
   @Post('get')
+  @HttpCode(200)
   @RequireAnyPermission([
     'view_suppliers',
     'mcc_view_operations',
@@ -278,7 +281,6 @@ export class SuppliersController {
     'mcc_manage_own_operations',
     'mcc_floor_operations',
   ])
-  @HttpCode(200)
   @ApiOperation({
     summary: 'Get all suppliers',
     description: 'Retrieve all active supplier relationships for the authenticated user\'s default account. Returns supplier information including account details, pricing, and relationship status.',

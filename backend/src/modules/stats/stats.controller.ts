@@ -17,8 +17,8 @@ export class StatsController {
   constructor(private readonly statsService: StatsService) {}
 
   @Post('overview')
-  @RequirePermission('dashboard.view')
   @HttpCode(200)
+  @RequirePermission('dashboard.view')
   @ApiOperation({
     summary: 'Get overview statistics',
     description:
@@ -96,8 +96,8 @@ export class StatsController {
   }
 
   @Post()
-  @RequirePermission('dashboard.view')
   @HttpCode(200)
+  @RequirePermission('dashboard.view')
   @ApiOperation({
     summary: 'Get general statistics',
     description: 'Retrieve general statistics for the authenticated user\'s default account, including collections, sales, and relationship counts.',

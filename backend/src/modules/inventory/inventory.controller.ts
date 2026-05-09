@@ -336,12 +336,12 @@ export class InventoryController {
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
   @ApiQuery({ name: 'account_id', required: false, type: String, description: 'Account UUID (default: user\'s default account)' })
-  @ApiQuery({ name: 'product_id', required: false, type: String, description: 'Filter by product UUID' })
+  @ApiQuery({ name: 'product_id', required: false, type: String, description: 'Filter by product UUID.' })
   @ApiQuery({ name: 'movement_type', required: false, enum: ['sale_out', 'adjustment_in', 'adjustment_out', 'purchase_in', 'transfer_in', 'transfer_out'] })
-  @ApiQuery({ name: 'date_from', required: false, type: String, description: 'Filter from date (ISO)' })
-  @ApiQuery({ name: 'date_to', required: false, type: String, description: 'Filter to date (ISO)' })
+  @ApiQuery({ name: 'date_from', required: false, type: String, description: 'Filter from date (ISO).' })
+  @ApiQuery({ name: 'date_to', required: false, type: String, description: 'Filter to date (ISO).' })
   @ApiResponse({ status: 200, description: 'Movements retrieved successfully.' })
-  @ApiBadRequestResponse({ description: 'No valid default account' })
+  @ApiBadRequestResponse({ description: 'No valid default account.' })
   async getAllMovements(
     @CurrentUser() user: User,
     @Query('page') page?: string,
@@ -369,13 +369,13 @@ export class InventoryController {
     summary: 'Get inventory movements for a product',
     description: 'Returns paginated list of stock movements for the given product. Scoped to account_id (or user default).',
   })
-  @ApiParam({ name: 'id', description: 'Product ID (UUID)', type: String })
+  @ApiParam({ name: 'id', description: 'Product ID (UUID).', type: String })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 20 })
   @ApiQuery({ name: 'account_id', required: false, type: String, description: 'Account UUID (default: user\'s default account)' })
   @ApiQuery({ name: 'movement_type', required: false, enum: ['sale_out', 'adjustment_in', 'adjustment_out', 'purchase_in', 'transfer_in', 'transfer_out'] })
-  @ApiQuery({ name: 'date_from', required: false, type: String, description: 'Filter from date (ISO)' })
-  @ApiQuery({ name: 'date_to', required: false, type: String, description: 'Filter to date (ISO)' })
+  @ApiQuery({ name: 'date_from', required: false, type: String, description: 'Filter from date (ISO).' })
+  @ApiQuery({ name: 'date_to', required: false, type: String, description: 'Filter to date (ISO).' })
   @ApiResponse({
     status: 200,
     description: 'Movements retrieved successfully',
@@ -404,8 +404,8 @@ export class InventoryController {
       },
     },
   })
-  @ApiBadRequestResponse({ description: 'No valid default account' })
-  @ApiNotFoundResponse({ description: 'Inventory item not found' })
+  @ApiBadRequestResponse({ description: 'No valid default account.' })
+  @ApiNotFoundResponse({ description: 'Inventory item not found.' })
   async getMovements(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -490,8 +490,8 @@ export class InventoryController {
   }
 
   @Post()
-  @RequirePermission('manage_inventory')
   @HttpCode(200)
+  @RequirePermission('manage_inventory')
   @ApiOperation({
     summary: 'Create inventory item',
     description: 'Create a new inventory item (product) in the system. The item will be associated with the current user\'s default account. Requires name, unit, and initial quantity.',
@@ -579,6 +579,7 @@ export class InventoryController {
   }
 
   @Post('bulk')
+  @HttpCode(200)
   @RequirePermission('manage_inventory')
   @ApiOperation({
     summary: 'Bulk create inventory items',
@@ -780,8 +781,8 @@ export class InventoryController {
   }
 
   @Post(':id/toggle-listing')
-  @RequirePermission('manage_inventory')
   @HttpCode(200)
+  @RequirePermission('manage_inventory')
   @ApiOperation({
     summary: 'Toggle marketplace listing',
     description: 'Toggle whether an inventory item is listed on the marketplace. When listed, the item becomes visible to other users for purchase.',
@@ -913,8 +914,8 @@ export class InventoryController {
   }
 
   @Post(':id/sell')
-  @RequirePermission('manage_inventory')
   @HttpCode(200)
+  @RequirePermission('manage_inventory')
   @ApiOperation({
     summary: 'Sell inventory item',
     description: 'Record a sale of an inventory item to a customer. This will update stock levels, create a sales record, and update accounting transactions. The sale is scoped to the user\'s default account.',

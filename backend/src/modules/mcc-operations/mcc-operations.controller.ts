@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { RequireAnyPermission, RequirePermission } from '../../common/decorators/permission.decorator';
@@ -30,8 +30,8 @@ export class MccOperationsController {
   ])
   @ApiOperation({ summary: 'List gate deliveries for the MCC (date range, UTC).' })
   @ApiQuery({ name: 'account_id', required: true })
-  @ApiQuery({ name: 'from', required: false, description: 'YYYY-MM-DD' })
-  @ApiQuery({ name: 'to', required: false, description: 'YYYY-MM-DD' })
+  @ApiQuery({ name: 'from', required: false, description: 'YYYY-MM-DD.' })
+  @ApiQuery({ name: 'to', required: false, description: 'YYYY-MM-DD.' })
   listGate(
     @CurrentUser() user: User,
     @Query('account_id') accountId: string,
@@ -55,6 +55,7 @@ export class MccOperationsController {
     'view_collections',
     'mcc_floor_operations',
   ])
+  @ApiOperation({ summary: 'List manifests for an MCC account (date range).' })
   @ApiQuery({ name: 'account_id', required: true })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
@@ -76,6 +77,9 @@ export class MccOperationsController {
 
   @Patch('manifests/:manifestId/draft')
   @RequireAnyPermission(['mcc_manage_operations', 'mcc_manage_own_operations', 'mcc_floor_operations'])
+  @ApiOperation({ summary: 'Update a manifest draft before submission' })
+  @ApiParam({ name: 'manifestId', description: 'Manifest ID.' })
+  @ApiResponse({ status: 200, description: 'Manifest draft updated successfully.' })
   updateDraft(
     @CurrentUser() user: User,
     @Param('manifestId') manifestId: string,
@@ -86,18 +90,29 @@ export class MccOperationsController {
 
   @Patch('manifests/:manifestId/submit')
   @RequireAnyPermission(['mcc_manage_operations', 'mcc_manage_own_operations', 'mcc_floor_operations'])
+  @ApiOperation({ summary: 'Submit a manifest draft for review/approval' })
+  @ApiParam({ name: 'manifestId', description: 'Manifest ID.' })
+  @ApiQuery({ name: 'account_id', required: false, description: 'MCC account id override (optional).' })
+  @ApiResponse({ status: 200, description: 'Manifest submitted successfully.' })
   submit(@CurrentUser() user: User, @Param('manifestId') manifestId: string, @Query('account_id') accountId?: string) {
     return this.ops.submitManifest(user, manifestId, accountId);
   }
 
   @Patch('manifests/:manifestId/accept')
   @RequirePermission('mcc_accept_manifests')
+  @ApiOperation({ summary: 'Accept an already submitted manifest' })
+  @ApiParam({ name: 'manifestId', description: 'Manifest ID.' })
+  @ApiQuery({ name: 'account_id', required: false, description: 'MCC account id override (optional).' })
+  @ApiResponse({ status: 200, description: 'Manifest accepted successfully.' })
   accept(@CurrentUser() user: User, @Param('manifestId') manifestId: string, @Query('account_id') accountId?: string) {
     return this.ops.acceptManifest(user, manifestId, accountId);
   }
 
   @Patch('manifests/:manifestId/reject')
   @RequirePermission('mcc_accept_manifests')
+  @ApiOperation({ summary: 'Reject a submitted manifest with reason' })
+  @ApiParam({ name: 'manifestId', description: 'Manifest ID.' })
+  @ApiResponse({ status: 200, description: 'Manifest rejected successfully.' })
   reject(
     @CurrentUser() user: User,
     @Param('manifestId') manifestId: string,
@@ -108,6 +123,7 @@ export class MccOperationsController {
 
   @Get('test-results')
   @RequireAnyPermission(['view_collections', 'mcc_view_operations', 'mcc_view_own_operations'])
+  @ApiOperation({ summary: 'List gate test results for an MCC account (with filters)' })
   @ApiQuery({ name: 'account_id', required: true })
   @ApiQuery({ name: 'outcome', required: false })
   @ApiQuery({ name: 'from', required: false })
@@ -124,12 +140,16 @@ export class MccOperationsController {
 
   @Post('test-results')
   @RequireAnyPermission(['mcc_manage_operations'])
+  @ApiOperation({ summary: 'Record a new gate test result' })
   createTest(@CurrentUser() user: User, @Body() dto: CreateTestResultDto) {
     return this.ops.createTestResult(user, dto);
   }
 
   @Patch('test-results/:testResultId')
   @RequireAnyPermission(['mcc_manage_operations'])
+  @ApiOperation({ summary: 'Update an existing gate test result' })
+  @ApiParam({ name: 'testResultId', description: 'Milk test result ID.' })
+  @ApiResponse({ status: 200, description: 'Test result updated successfully.' })
   updateTest(
     @CurrentUser() user: User,
     @Param('testResultId') testResultId: string,
@@ -145,6 +165,7 @@ export class MccOperationsController {
     'view_collections',
     'mcc_floor_operations',
   ])
+  @ApiOperation({ summary: 'List MCC floor shifts (date range)' })
   @ApiQuery({ name: 'account_id', required: true })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
@@ -164,6 +185,7 @@ export class MccOperationsController {
     'view_collections',
     'mcc_floor_operations',
   ])
+  @ApiOperation({ summary: 'List active staff options for assigning shifts' })
   @ApiQuery({ name: 'account_id', required: true })
   staffOptions(@CurrentUser() user: User, @Query('account_id') accountId: string) {
     return this.ops.staffOptions(user, accountId);
@@ -171,12 +193,17 @@ export class MccOperationsController {
 
   @Post('shifts/start')
   @RequireAnyPermission(['mcc_manage_operations', 'mcc_manage_own_operations', 'mcc_floor_operations'])
+  @ApiOperation({ summary: 'Start a new MCC staff shift' })
   startShift(@CurrentUser() user: User, @Body() dto: StartShiftDto) {
     return this.ops.startShift(user, dto);
   }
 
   @Patch('shifts/:shiftId/end')
   @RequireAnyPermission(['mcc_manage_operations', 'mcc_manage_own_operations', 'mcc_floor_operations'])
+  @ApiOperation({ summary: 'End an active MCC staff shift' })
+  @ApiParam({ name: 'shiftId', description: 'Shift ID.' })
+  @ApiQuery({ name: 'account_id', required: false, description: 'MCC account id override (optional).' })
+  @ApiResponse({ status: 200, description: 'Shift ended successfully.' })
   endShift(
     @CurrentUser() user: User,
     @Param('shiftId') shiftId: string,

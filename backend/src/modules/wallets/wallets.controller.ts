@@ -73,6 +73,7 @@ export class WalletsController {
   }
 
   @Post('create')
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Create a new wallet',
     description: 'Create a new wallet for the user\'s default account. The first wallet created will automatically be set as default.',

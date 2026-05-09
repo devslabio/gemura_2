@@ -19,6 +19,12 @@ function decN(v: { toString(): string } | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function decNOrNull(v: { toString(): string } | null | undefined): number | null {
+  if (v == null) return null;
+  const n = Number(v.toString());
+  return Number.isFinite(n) ? n : null;
+}
+
 @Injectable()
 export class MccManagerService {
   constructor(
@@ -258,6 +264,163 @@ export class MccManagerService {
 
     const staff = scope.mode === 'scoped' ? [] : [...staffFromUa, ...extraRows];
 
+    const [wallet, profile, tankProfiles, facilitySnapshot, activeSupplierCount] = await Promise.all([
+      this.prisma.wallet.findFirst({
+        where: { account_id: accountId, status: 'active' },
+        select: { id: true, code: true, balance: true, currency: true, is_default: true },
+        orderBy: [{ is_default: 'desc' }, { created_at: 'asc' }],
+      }),
+      this.prisma.mccOperationalProfile.findUnique({
+        where: { account_id: accountId },
+        select: {
+          expected_daily_deliveries: true,
+          power_supply_sources: true,
+        },
+      }),
+      this.prisma.mccCoolingTankProfile.findMany({
+        where: { account_id: accountId },
+        select: { capacity_litres: true },
+      }),
+      this.prisma.mccFacilitySnapshot.findUnique({
+        where: { account_id: accountId },
+        select: {
+          tank_used_litres: true,
+          tank_used_pct: true,
+          cooling_temperature_c: true,
+          power_status: true,
+          generator_status: true,
+          generator_fuel_pct: true,
+          observed_at: true,
+        },
+      }),
+      this.prisma.supplierCustomer.count({
+        where: {
+          customer_account_id: accountId,
+          relationship_status: 'active',
+          ...(scope.mode === 'scoped' ? { supplier_account_id: scope.supplierAccountId } : {}),
+        },
+      }),
+    ]);
+
+    const tankCapacityTotal = tankProfiles.reduce((sum, tank) => sum + decN(tank.capacity_litres), 0);
+    const powerSources = Array.isArray(profile?.power_supply_sources)
+      ? profile.power_supply_sources.filter((v): v is string => typeof v === 'string')
+      : [];
+    const expectedDailyDeliveries = profile?.expected_daily_deliveries ?? (activeSupplierCount > 0 ? activeSupplierCount : null);
+    const pendingManifests = manifests.filter((m) => !m.submitted).length;
+    const alerts: Array<{
+      id: string;
+      priority: number;
+      title: string;
+      detail: string;
+      tone: 'critical' | 'warn' | 'info';
+    }> = [];
+
+    if (rejectionRows.length > 0) {
+      alerts.push({
+        id: 'reject_followup',
+        priority: 0,
+        title: 'Rejection follow-up',
+        detail: `${rejectionRows.length} rejected gate test(s) need traceability action.`,
+        tone: 'critical',
+      });
+    }
+
+    if (pendingManifests > 0) {
+      alerts.push({
+        id: 'manifest_pending',
+        priority: 1,
+        title: 'Manifest window',
+        detail: `${pendingManifests} manifest(s) pending submission/acceptance.`,
+        tone: 'warn',
+      });
+    } else {
+      alerts.push({
+        id: 'manifest_clear',
+        priority: 5,
+        title: 'Manifest window',
+        detail: 'No pending manifests for this day.',
+        tone: 'info',
+      });
+    }
+
+    if (expectedDailyDeliveries && deliveries.length < expectedDailyDeliveries) {
+      alerts.push({
+        id: 'delivery_target',
+        priority: 2,
+        title: 'Delivery target',
+        detail: `Logged ${deliveries.length}/${expectedDailyDeliveries} expected deliveries.`,
+        tone: deliveries.length === 0 ? 'warn' : 'info',
+      });
+    }
+
+    const tankUsedPct = decNOrNull(facilitySnapshot?.tank_used_pct);
+    if (tankUsedPct != null) {
+      if (tankUsedPct >= 85) {
+        alerts.push({
+          id: 'tank_high',
+          priority: 1,
+          title: 'Tank capacity high',
+          detail: `Tank usage at ${Math.round(tankUsedPct)}% exceeds safe threshold.`,
+          tone: 'critical',
+        });
+      } else if (tankUsedPct >= 70) {
+        alerts.push({
+          id: 'tank_watch',
+          priority: 3,
+          title: 'Tank capacity watch',
+          detail: `Tank usage at ${Math.round(tankUsedPct)}%; monitor intake closely.`,
+          tone: 'warn',
+        });
+      }
+    }
+
+    const generatorStatus = (facilitySnapshot?.generator_status ?? '').toLowerCase();
+    if (generatorStatus === 'fault' || generatorStatus === 'offline') {
+      alerts.push({
+        id: 'generator_status',
+        priority: 1,
+        title: 'Generator status',
+        detail: `Generator reported as ${generatorStatus}.`,
+        tone: 'critical',
+      });
+    }
+
+    if (wallet && decN(wallet.balance) <= 0) {
+      alerts.push({
+        id: 'wallet_low',
+        priority: 3,
+        title: 'Wallet balance',
+        detail: 'Available wallet balance is low or zero.',
+        tone: 'warn',
+      });
+    }
+
+    if (staff.length > 0) {
+      const onDuty = staff.filter((s) => s.on_duty).length;
+      if (onDuty === 0) {
+        alerts.push({
+          id: 'staff_shift',
+          priority: 4,
+          title: 'Staff on shift',
+          detail: 'No active shift detected for gate-facing staff.',
+          tone: 'warn',
+        });
+      }
+    }
+
+    if (alerts.length === 0) {
+      alerts.push({
+        id: 'ops_nominal',
+        priority: 9,
+        title: 'Operations status',
+        detail: 'No active alerts for this day.',
+        tone: 'info',
+      });
+    }
+
+    alerts.sort((a, b) => a.priority - b.priority);
+
     return {
       code: 200,
       status: 'success',
@@ -273,6 +436,46 @@ export class MccManagerService {
         manifests,
         rejections: rejectionRows,
         staff,
+        wallet: wallet
+          ? {
+              id: wallet.id,
+              code: wallet.code,
+              balance: decN(wallet.balance),
+              currency: wallet.currency,
+              is_default: wallet.is_default,
+            }
+          : null,
+        profile: profile
+          ? {
+              expected_daily_deliveries: expectedDailyDeliveries,
+              cooling_tank_total_capacity_litres: Math.round(tankCapacityTotal * 10) / 10,
+              power_supply_sources: powerSources,
+            }
+          : {
+              expected_daily_deliveries: expectedDailyDeliveries,
+              cooling_tank_total_capacity_litres: Math.round(tankCapacityTotal * 10) / 10,
+              power_supply_sources: powerSources,
+            },
+        facility_snapshot: facilitySnapshot
+          ? {
+              tank_used_litres: decNOrNull(facilitySnapshot.tank_used_litres),
+              tank_used_pct: decNOrNull(facilitySnapshot.tank_used_pct),
+              cooling_temperature_c: decNOrNull(facilitySnapshot.cooling_temperature_c),
+              power_status: facilitySnapshot.power_status,
+              generator_status: facilitySnapshot.generator_status,
+              generator_fuel_pct: decNOrNull(facilitySnapshot.generator_fuel_pct),
+              observed_at: facilitySnapshot.observed_at?.toISOString() ?? null,
+            }
+          : {
+              tank_used_litres: null,
+              tank_used_pct: null,
+              cooling_temperature_c: null,
+              power_status: null,
+              generator_status: null,
+              generator_fuel_pct: null,
+              observed_at: null,
+            },
+        alerts,
       },
     };
   }
