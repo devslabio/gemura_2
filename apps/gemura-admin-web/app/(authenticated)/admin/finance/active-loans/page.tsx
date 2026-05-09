@@ -33,7 +33,7 @@ function ActiveLoansReportInner() {
   const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
   const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
-  const { apiParams, filterInputs, setPageSize, setPage, clearFilters, backToOverviewHref } = useAdminReportNavigation();
+  const { apiParams, filterInputs, setPageSize, setPage, clearFilters } = useAdminReportNavigation();
 
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<PlatformLoanRow[]>([]);
@@ -108,7 +108,6 @@ function ActiveLoansReportInner() {
   return (
     <AdminReportListChrome
       title="Active loans"
-      backHref={backToOverviewHref}
       periodHint="Portfolio view: all loans with status active (date filters do not apply)."
       showDateFilters={false}
       pageSize={filterInputs.pageSize}
