@@ -27,7 +27,7 @@ export class AccountMembershipsController {
     summary: 'My cooperative memberships',
     description: 'All MCC/tenant accounts where the authenticated user has a membership record.',
   })
-  @ApiResponse({ status: 200, description: 'OK' })
+  @ApiResponse({ status: 200, description: 'Memberships retrieved successfully.' })
   @ApiUnauthorizedResponse()
   async listMine(@CurrentUser() user: User) {
     return this.accountMembershipsService.listMine(user.id);
@@ -58,7 +58,8 @@ export class AccountMembershipsController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update membership status / member_since' })
-  @ApiParam({ name: 'id', description: 'Account membership ID' })
+  @ApiParam({ name: 'id', description: 'Account membership ID.' })
+  @ApiResponse({ status: 200, description: 'Membership updated.' })
   @ApiUnauthorizedResponse()
   async update(
     @CurrentUser() user: User,

@@ -1,15 +1,4 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-  StreamableFile,
-} from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, StreamableFile, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -219,8 +208,8 @@ export class AdminController {
     summary: 'Get all platform roles with effective permissions',
     description: 'Returns roles and permission codes from the database (editable via PUT /admin/platform-roles/:roleId).',
   })
-  @ApiResponse({ status: 200, description: 'Roles retrieved successfully' })
-  @ApiForbiddenResponse({ description: 'Requires manage_users permission' })
+  @ApiResponse({ status: 200, description: 'Roles retrieved successfully.' })
+  @ApiForbiddenResponse({ description: 'Requires manage_users permission.' })
   async getRoles(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -234,8 +223,8 @@ export class AdminController {
     summary: 'Get all permissions with role assignments',
     description: 'Returns permissions and which roles currently have them (database-backed).',
   })
-  @ApiResponse({ status: 200, description: 'Permissions retrieved successfully' })
-  @ApiForbiddenResponse({ description: 'Requires manage_users permission' })
+  @ApiResponse({ status: 200, description: 'Permissions retrieved successfully.' })
+  @ApiForbiddenResponse({ description: 'Requires manage_users permission.' })
   async getPermissions(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -274,7 +263,8 @@ export class AdminController {
   @Put('platform-roles/:roleId')
   @RequirePermission('manage_users')
   @ApiOperation({ summary: 'Update a platform role and its permissions' })
-  @ApiParam({ name: 'roleId', description: 'PlatformRole id (UUID)' })
+  @ApiParam({ name: 'roleId', description: 'PlatformRole id (UUID).' })
+  @ApiResponse({ status: 200, description: 'Platform role updated successfully.' })
   async updatePlatformRole(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -287,7 +277,8 @@ export class AdminController {
   @Delete('platform-roles/:roleId')
   @RequirePermission('manage_users')
   @ApiOperation({ summary: 'Delete a non-system platform role (must have no users)' })
-  @ApiParam({ name: 'roleId', description: 'PlatformRole id (UUID)' })
+  @ApiParam({ name: 'roleId', description: 'PlatformRole id (UUID).' })
+  @ApiResponse({ status: 200, description: 'Platform role deleted successfully.' })
   async deletePlatformRole(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -308,11 +299,11 @@ export class AdminController {
   @ApiOperation({ summary: 'List MCC onboarding submissions (public wizard)' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
-  @ApiQuery({ name: 'review_status', required: false, description: 'pending | approved | rejected | needs_changes' })
-  @ApiQuery({ name: 'search', required: false, description: 'Search by business, manager name/phone, submission code, or account code/name' })
-  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound' })
-  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound' })
-  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset()' })
+  @ApiQuery({ name: 'review_status', required: false, description: 'Pending | approved | rejected | needs_changes.' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by business, manager name/phone, submission code, or account code/name.' })
+  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound.' })
+  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound.' })
+  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset().' })
   async listOnboardingSubmissions(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -344,11 +335,11 @@ export class AdminController {
     description:
       'Returns UTF-8 CSV: database fields, resolved location labels, and flattened section_payload (wizard_*) and google_sheet (gs_response_*). Column titles and cell values are human-readable (status labels, pass/fail, decisions, dates in UTC, pass counts as "n of 8", etc.). Respects the same review_status filter as the list. Max 5000 rows.',
   })
-  @ApiQuery({ name: 'review_status', required: false, description: 'pending | approved | rejected | needs_changes (omit for all)' })
-  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound' })
-  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound' })
-  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset()' })
-  @ApiResponse({ status: 200, description: 'text/csv attachment' })
+  @ApiQuery({ name: 'review_status', required: false, description: 'Pending | approved | rejected | needs_changes (omit for all).' })
+  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound.' })
+  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound.' })
+  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset().' })
+  @ApiResponse({ status: 200, description: 'CSV file returned.' })
   async exportOnboardingSubmissions(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -379,11 +370,11 @@ export class AdminController {
     description:
       'Returns an Excel workbook with one row per submission and one value per column, including resolved location labels and curated section fields for analysis.',
   })
-  @ApiQuery({ name: 'review_status', required: false, description: 'pending | approved | rejected | needs_changes (omit for all)' })
-  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound' })
-  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound' })
-  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset()' })
-  @ApiResponse({ status: 200, description: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet attachment' })
+  @ApiQuery({ name: 'review_status', required: false, description: 'Pending | approved | rejected | needs_changes (omit for all).' })
+  @ApiQuery({ name: 'onboarded_from', required: false, description: 'YYYY-MM-DD reviewed_at lower bound.' })
+  @ApiQuery({ name: 'onboarded_to', required: false, description: 'YYYY-MM-DD reviewed_at upper bound.' })
+  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client timezone offset from Date.getTimezoneOffset().' })
+  @ApiResponse({ status: 200, description: 'Excel file returned.' })
   async exportOnboardingSubmissionsXlsx(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -410,7 +401,8 @@ export class AdminController {
   @Get('onboarding-submissions/:submissionId')
   @RequirePermission('manage_users')
   @ApiOperation({ summary: 'Get one MCC onboarding submission including section_payload' })
-  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
+  @ApiResponse({ status: 200, description: 'Onboarding submission retrieved successfully.' })
   async getOnboardingSubmission(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -426,7 +418,8 @@ export class AdminController {
     description:
       'Resolves the submission linked account and returns expected deliveries plus latest facility snapshot fields used by the manager dashboard.',
   })
-  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
+  @ApiResponse({ status: 200, description: 'Operational config retrieved successfully.' })
   async getOnboardingOperationalConfig(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -442,8 +435,9 @@ export class AdminController {
     description:
       'Updates expected deliveries and/or facility snapshot values for the submission linked account. Supports nullable fields.',
   })
-  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
   @ApiBody({ type: UpdateOnboardingOperationalConfigDto })
+  @ApiResponse({ status: 200, description: 'Operational config updated successfully.' })
   async updateOnboardingOperationalConfig(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -454,13 +448,15 @@ export class AdminController {
   }
 
   @Post('onboarding-submissions/:submissionId/operational-config/sync-defaults')
+  @HttpCode(200)
   @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Re-sync operational config from onboarding payload defaults',
     description:
       'Rebuilds linked account operational profile and facility snapshot from this submission section_payload.',
   })
-  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
+  @ApiResponse({ status: 200, description: 'Operational config defaults synced successfully.' })
   async syncOnboardingOperationalConfigDefaults(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -470,14 +466,16 @@ export class AdminController {
   }
 
   @Post('onboarding-submissions/:submissionId/link')
+  @HttpCode(200)
   @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Link onboarding submission to an existing Gemura user',
     description:
       'Sets linked_user_id (required). Optionally sets linked_account_id when linkAccountId is provided and the user is an active member of that tenant/branch; otherwise linked_account_id is cleared. Allowed for any review_status.',
   })
-  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
   @ApiBody({ type: LinkOnboardingSubmissionDto })
+  @ApiResponse({ status: 200, description: 'Onboarding submission linked successfully.' })
   async linkOnboardingSubmission(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -488,12 +486,14 @@ export class AdminController {
   }
 
   @Post('onboarding-submissions/:submissionId/approve')
+  @HttpCode(200)
   @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Approve onboarding: create tenant account, wallet, system_admin user link (or link existing user)',
   })
-  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
   @ApiBody({ type: ApproveOnboardingDto })
+  @ApiResponse({ status: 200, description: 'Onboarding submission approved successfully.' })
   async approveOnboardingSubmission(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -504,10 +504,12 @@ export class AdminController {
   }
 
   @Post('onboarding-submissions/:submissionId/reject')
+  @HttpCode(200)
   @RequirePermission('manage_users')
   @ApiOperation({ summary: 'Reject onboarding submission' })
-  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
   @ApiBody({ type: RejectOnboardingDto })
+  @ApiResponse({ status: 200, description: 'Onboarding submission rejected successfully.' })
   async rejectOnboardingSubmission(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -518,10 +520,12 @@ export class AdminController {
   }
 
   @Post('onboarding-submissions/:submissionId/needs-changes')
+  @HttpCode(200)
   @RequirePermission('manage_users')
   @ApiOperation({ summary: 'Mark onboarding submission as needs changes' })
-  @ApiParam({ name: 'submissionId', description: 'Submission UUID' })
+  @ApiParam({ name: 'submissionId', description: 'Submission UUID.' })
   @ApiBody({ type: NeedsChangesOnboardingDto })
+  @ApiResponse({ status: 200, description: 'Onboarding submission marked as needs changes.' })
   async needsChangesOnboardingSubmission(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -541,7 +545,7 @@ export class AdminController {
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'role', required: false })
   @ApiQuery({ name: 'account_type', required: false })
-  @ApiResponse({ status: 200, description: 'text/csv attachment' })
+  @ApiResponse({ status: 200, description: 'CSV file returned.' })
   async exportUsers(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -757,6 +761,7 @@ export class AdminController {
     description: 'Activity metric',
     enum: ['suppliers', 'customers', 'sales', 'collections', 'farms', 'accounts', 'members'],
   })
+  @ApiResponse({ status: 200, description: 'User activity retrieved successfully.' })
   async getUserActivity(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -773,18 +778,19 @@ export class AdminController {
     description:
       'Returns the same shapes as gemura-web list APIs for collections, sales, suppliers, customers, and farms, scoped to an operational account the target user belongs to. Resource "accounts" returns all active memberships and ignores operational_account_id.',
   })
-  @ApiParam({ name: 'id', type: String, description: 'Target user UUID' })
+  @ApiParam({ name: 'id', type: String, description: 'Target user UUID.' })
   @ApiQuery({
     name: 'resource',
     required: true,
     enum: ['collections', 'sales', 'suppliers', 'customers', 'farms', 'accounts', 'members'],
   })
-  @ApiQuery({ name: 'operational_account_id', required: false, description: 'Required except for resource=accounts' })
+  @ApiQuery({ name: 'operational_account_id', required: false, description: 'Required except for resource=accounts.' })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'date_from', required: false })
   @ApiQuery({ name: 'date_to', required: false })
   @ApiQuery({ name: 'supplier_name', required: false })
   @ApiQuery({ name: 'customer_account_code', required: false })
+  @ApiResponse({ status: 200, description: 'User business records retrieved successfully.' })
   async getUserBusinessRecords(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,
@@ -807,14 +813,16 @@ export class AdminController {
   }
 
   @Post('users/:id/account-memberships')
+  @HttpCode(200)
   @RequirePermission('manage_users')
   @ApiOperation({
     summary: 'Grant target user access to an account',
     description:
       'Creates or reactivates a user_accounts row. Defaults to viewer role when platform_role_id is omitted.',
   })
-  @ApiParam({ name: 'id', description: 'Target user UUID' })
+  @ApiParam({ name: 'id', description: 'Target user UUID.' })
   @ApiBody({ type: AssignUserAccountMembershipDto })
+  @ApiResponse({ status: 200, description: 'User account membership added successfully.' })
   async addUserAccountMembership(
     @CurrentUser() admin: User,
     @CurrentAccount() accountId: string,
@@ -830,8 +838,9 @@ export class AdminController {
     summary: 'Revoke target user access to an account',
     description: 'Marks the membership inactive. Cannot remove the user\'s only active account access.',
   })
-  @ApiParam({ name: 'id', description: 'Target user UUID' })
-  @ApiParam({ name: 'membershipAccountId', description: 'Account UUID to detach' })
+  @ApiParam({ name: 'id', description: 'Target user UUID.' })
+  @ApiParam({ name: 'membershipAccountId', description: 'Account UUID to detach.' })
+  @ApiResponse({ status: 200, description: 'User account membership removed successfully.' })
   async removeUserAccountMembership(
     @CurrentUser() admin: User,
     @CurrentAccount() accountId: string,
@@ -848,8 +857,9 @@ export class AdminController {
     description:
       'Target user must belong to the current account. Body: { "immis_member_id": 10 } to link, { "immis_member_id": null } to unlink.',
   })
-  @ApiParam({ name: 'userId', description: 'Gemura user UUID' })
+  @ApiParam({ name: 'userId', description: 'Gemura user UUID.' })
   @ApiBody({ type: LinkUserImmisDto })
+  @ApiResponse({ status: 200, description: 'IMMIS member link updated successfully.' })
   async linkUserImmis(
     @CurrentUser() user: User,
     @CurrentAccount() accountId: string,

@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User } from '@prisma/client';
 import { TokenGuard } from '../../common/guards/token.guard';
 import { CurrentUser } from '../../common/decorators/user.decorator';
@@ -43,7 +43,9 @@ export class PigBatchesController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update pig batch' })
+  @ApiParam({ name: 'id', description: 'Pig batch ID.' })
   @ApiQuery({ name: 'account_id', required: false })
+  @ApiResponse({ status: 200, description: 'Batch updated successfully.' })
   async patch(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -63,15 +65,20 @@ export class PigBatchesController {
 
   @Get(':id/weights')
   @ApiOperation({ summary: 'Weight band / growth records' })
+  @ApiParam({ name: 'id', description: 'Pig batch ID.' })
   @ApiQuery({ name: 'account_id', required: false })
+  @ApiResponse({ status: 200, description: 'Weight records retrieved successfully.' })
   async weights(@CurrentUser() user: User, @Param('id') id: string, @Query('account_id') accountId?: string) {
     const data = await this.svc.listWeights(user, id, accountId);
     return { code: 200, status: 'success', message: 'Weights retrieved', data };
   }
 
   @Post(':id/weights')
+  @HttpCode(200)
   @ApiOperation({ summary: 'Upsert weight row for a date (unique per batch per day)' })
+  @ApiParam({ name: 'id', description: 'Pig batch ID.' })
   @ApiQuery({ name: 'account_id', required: false })
+  @ApiResponse({ status: 200, description: 'Weight record saved successfully.' })
   async upsertWeight(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -93,7 +100,10 @@ export class PigBatchesController {
 
   @Delete(':id/weights/:weightId')
   @ApiOperation({ summary: 'Delete weight record' })
+  @ApiParam({ name: 'id', description: 'Pig batch ID.' })
+  @ApiParam({ name: 'weightId', description: 'Weight record ID.' })
   @ApiQuery({ name: 'account_id', required: false })
+  @ApiResponse({ status: 200, description: 'Weight record deleted successfully.' })
   async deleteWeight(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -106,7 +116,9 @@ export class PigBatchesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get batch' })
+  @ApiParam({ name: 'id', description: 'Pig batch ID.' })
   @ApiQuery({ name: 'account_id', required: false })
+  @ApiResponse({ status: 200, description: 'Batch retrieved successfully.' })
   async get(@CurrentUser() user: User, @Param('id') id: string, @Query('account_id') accountId?: string) {
     const data = await this.svc.getBatch(user, id, accountId);
     return { code: 200, status: 'success', message: 'Batch retrieved', data };

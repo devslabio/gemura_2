@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiUnauthorizedResponse, ApiBadRequestResponse, ApiNotFoundResponse, ApiBody, ApiConflictResponse } from '@nestjs/swagger';
 import { ReferralsService } from './referrals.service';
 import { TokenGuard } from '../../common/guards/token.guard';
@@ -105,6 +105,7 @@ export class ReferralsController {
   }
 
   @Post('use-code')
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Use a referral code',
     description: 'Apply a referral code to link the current user to a referrer. This can only be done once per user and awards points to the referrer.',

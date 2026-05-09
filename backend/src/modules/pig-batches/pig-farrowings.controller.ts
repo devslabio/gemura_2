@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User } from '@prisma/client';
 import { TokenGuard } from '../../common/guards/token.guard';
 import { CurrentUser } from '../../common/decorators/user.decorator';
@@ -54,7 +54,9 @@ export class PigFarrowingsController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete farrowing record' })
+  @ApiParam({ name: 'id', description: 'Farrowing record ID.' })
   @ApiQuery({ name: 'account_id', required: false })
+  @ApiResponse({ status: 200, description: 'Farrowing record deleted successfully.' })
   async delete(@CurrentUser() user: User, @Param('id') id: string, @Query('account_id') accountId?: string) {
     const data = await this.svc.deleteFarrowing(user, id, accountId);
     return { code: 200, status: 'success', message: data.message, data };

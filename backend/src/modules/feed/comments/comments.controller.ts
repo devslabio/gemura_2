@@ -28,14 +28,14 @@ export class CommentsController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new comment' })
-  @ApiResponse({ status: 201, description: 'Comment created successfully' })
+  @ApiResponse({ status: 201, description: 'Comment created successfully.' })
   create(@CurrentUser() user: User, @Body() createCommentDto: CreateCommentDto) {
     return this.commentsService.create(user.id, createCommentDto);
   }
 
   @Get()
   @ApiOperation({ summary: 'Get comments for a post' })
-  @ApiResponse({ status: 200, description: 'List of comments' })
+  @ApiResponse({ status: 200, description: 'Comments retrieved successfully.' })
   findAll(
     @Query('post_id') postId: string,
     @Query('limit') limit?: string,
@@ -123,18 +123,18 @@ export class CommentsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a comment by ID' })
-  @ApiParam({ name: 'id', description: 'Comment ID' })
-  @ApiResponse({ status: 200, description: 'Comment details' })
-  @ApiResponse({ status: 404, description: 'Comment not found' })
+  @ApiParam({ name: 'id', description: 'Comment ID.' })
+  @ApiResponse({ status: 200, description: 'Comment retrieved successfully.' })
+  @ApiResponse({ status: 404, description: 'Comment not found.' })
   findOne(@Param('id') id: string) {
     return this.commentsService.findOne(id);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update a comment' })
-  @ApiParam({ name: 'id', description: 'Comment ID' })
-  @ApiResponse({ status: 200, description: 'Comment updated successfully' })
-  @ApiResponse({ status: 404, description: 'Comment not found' })
+  @ApiParam({ name: 'id', description: 'Comment ID.' })
+  @ApiResponse({ status: 200, description: 'Comment updated successfully.' })
+  @ApiResponse({ status: 404, description: 'Comment not found.' })
   update(
     @Param('id') id: string,
     @CurrentUser() user: User,
@@ -145,9 +145,9 @@ export class CommentsController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a comment' })
-  @ApiParam({ name: 'id', description: 'Comment ID' })
-  @ApiResponse({ status: 200, description: 'Comment deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Comment not found' })
+  @ApiParam({ name: 'id', description: 'Comment ID.' })
+  @ApiResponse({ status: 200, description: 'Comment deleted successfully.' })
+  @ApiResponse({ status: 404, description: 'Comment not found.' })
   remove(@Param('id') id: string, @CurrentUser() user: User) {
     return this.commentsService.remove(id, user.id);
   }

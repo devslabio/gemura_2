@@ -409,9 +409,9 @@ export class CollectionsController {
     example: 'A_ABC123',
     type: String,
   })
-  @ApiResponse({ status: 200, description: 'List of animals' })
-  @ApiBadRequestResponse({ description: 'No default account or supplier not linked' })
-  @ApiNotFoundResponse({ description: 'Supplier account not found' })
+  @ApiResponse({ status: 200, description: 'Animals retrieved successfully.' })
+  @ApiBadRequestResponse({ description: 'No default account or supplier not linked.' })
+  @ApiNotFoundResponse({ description: 'Supplier account not found.' })
   async getSupplierAnimals(@CurrentUser() user: User, @Query('supplier_account_code') supplierAccountCode: string) {
     const data = await this.collectionsService.getSupplierAnimals(user, supplierAccountCode);
     return {
@@ -570,6 +570,7 @@ export class CollectionsController {
   }
 
   @Post('create')
+  @HttpCode(200)
   @RequirePermission('create_collections')
   @ApiOperation({
     summary: 'Record milk collection',
@@ -693,8 +694,8 @@ export class CollectionsController {
   }
 
   @Post('bulk')
-  @RequirePermission('create_collections')
   @HttpCode(200)
+  @RequirePermission('create_collections')
   @ApiOperation({
     summary: 'Bulk create collections',
     description: 'Create multiple milk collections from an array. Returns success count and per-row errors.',
@@ -895,8 +896,8 @@ export class CollectionsController {
   }
 
   @Post('cancel')
-  @RequirePermission('update_collections')
   @HttpCode(200)
+  @RequirePermission('update_collections')
   @ApiOperation({
     summary: 'Cancel collection',
     description: 'Cancel a collection by setting its status to "cancelled". Only collections belonging to the user\'s default account can be cancelled.',
@@ -943,8 +944,8 @@ export class CollectionsController {
   }
 
   @Post(':collectionId/payment')
-  @RequirePermission('update_collections')
   @HttpCode(200)
+  @RequirePermission('update_collections')
   @ApiOperation({
     summary: 'Record payment for a collection',
     description: 'Records a payment against an unpaid/partial collection. Creates journal entry: DR Payable, CR Cash. Supports partial payments.',

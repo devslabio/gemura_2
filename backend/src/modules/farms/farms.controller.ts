@@ -6,6 +6,7 @@ import {
   ApiBadRequestResponse,
   ApiUnauthorizedResponse,
   ApiNotFoundResponse,
+  ApiResponse,
   ApiQuery,
   ApiParam,
 } from '@nestjs/swagger';
@@ -91,12 +92,13 @@ export class FarmsController {
     summary: 'Get farm by ID',
     description: 'Get a single farm with basic stats (animals count).',
   })
-  @ApiParam({ name: 'id', description: 'Farm ID (UUID)' })
+  @ApiParam({ name: 'id', description: 'Farm ID (UUID).' })
   @ApiQuery({
     name: 'account_id',
     required: false,
     description: 'Account ID (defaults to user default account)',
   })
+  @ApiResponse({ status: 200, description: 'Farm retrieved successfully.' })
   @ApiNotFoundResponse({
     description: 'Farm not found',
     schema: {
@@ -140,7 +142,8 @@ export class FarmsController {
     summary: 'Update farm',
     description: 'Update farm details (name, code, location, description, status).',
   })
-  @ApiParam({ name: 'id', description: 'Farm ID (UUID)' })
+  @ApiParam({ name: 'id', description: 'Farm ID (UUID).' })
+  @ApiResponse({ status: 200, description: 'Farm updated successfully.' })
   @ApiNotFoundResponse({
     description: 'Farm not found',
   })
@@ -165,7 +168,8 @@ export class FarmsController {
     description:
       'Delete a farm if it has no animals. If animals exist, the farm is marked inactive instead of being removed.',
   })
-  @ApiParam({ name: 'id', description: 'Farm ID (UUID)' })
+  @ApiParam({ name: 'id', description: 'Farm ID (UUID).' })
+  @ApiResponse({ status: 200, description: 'Farm deleted/deactivated successfully.' })
   @ApiNotFoundResponse({
     description: 'Farm not found',
   })
