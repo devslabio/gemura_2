@@ -216,16 +216,7 @@ export default function AccountsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Accounts</h1>
-        <p className="text-sm text-gray-600 mt-1 max-w-2xl">
-          All platform accounts (tenants, branches, admin). Location comes from operational geography when set. Use{' '}
-          <Link href="/admin/regional-supervision" className="text-[var(--primary)] hover:underline">
-            Regional supervision
-          </Link>{' '}
-          to assign village-level placement.
-        </p>
-      </div>
+      <h1 className="text-2xl font-bold text-gray-900">Accounts</h1>
 
       <FilterBar>
         <FilterBarGroup label="Search">
