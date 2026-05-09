@@ -1,4 +1,11 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  NotFoundException,
+  ConflictException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SmsService } from '../../common/services/sms.service';
 import { EmailService } from '../../common/services/email.service';
@@ -104,6 +111,14 @@ export class AuthService {
         supplier_segment: user.supplier_segment ?? null,
       })),
     );
+
+    if (accounts.length === 0) {
+      throw new ForbiddenException({
+        code: 403,
+        status: 'error',
+        message: 'You have no active account access. Ask an administrator to assign you to an account.',
+      });
+    }
 
     // Find default account
     const defaultAccount = accounts.find((a) => a.is_default);
