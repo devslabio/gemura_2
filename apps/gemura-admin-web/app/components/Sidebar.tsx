@@ -6,7 +6,6 @@ import Image from 'next/image';
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
-import { faDroplet } from '@fortawesome/free-solid-svg-icons';
 import Icon, {
   faChevronRight,
   faBars,
@@ -18,8 +17,6 @@ import Icon, {
   faBuilding,
   faChartLine,
   faClipboardList,
-  faChartBar,
-  faBell,
   faWallet,
   faHandHoldingDollar,
   faBriefcase,
@@ -96,31 +93,6 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
         href: '/admin/dashboard',
         label: 'Dashboard',
         icon: faChartLine,
-      });
-      entries.push({ kind: 'section', label: 'Analytics' });
-      entries.push({
-        kind: 'link',
-        href: '/admin/dashboard/overview',
-        label: 'Overview',
-        icon: faChartBar,
-      });
-      entries.push({
-        kind: 'link',
-        href: '/admin/dashboard/milk',
-        label: 'Milk & collections',
-        icon: faDroplet,
-      });
-      entries.push({
-        kind: 'link',
-        href: '/admin/dashboard/finance',
-        label: 'Finance metrics',
-        icon: faWallet,
-      });
-      entries.push({
-        kind: 'link',
-        href: '/admin/dashboard/usage',
-        label: 'Usage & adoption',
-        icon: faBell,
       });
       entries.push({ kind: 'section', label: 'Reports & lists' });
       entries.push({
@@ -235,10 +207,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
   const linkIsActive = (href: string) => {
     if (!href) return false;
     if (href === '/admin/dashboard') {
-      return pathname === '/admin/dashboard';
-    }
-    if (href === '/admin/dashboard/overview') {
-      return pathname === '/admin/dashboard/overview' || pathname === '/admin/dashboard';
+      return pathname === '/admin/dashboard' || pathname.startsWith('/admin/dashboard/');
     }
     return pathname === href || pathname.startsWith(`${href}/`);
   };
