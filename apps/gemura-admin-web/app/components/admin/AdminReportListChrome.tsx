@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import FilterBar, { FilterBarActions, FilterBarExport, FilterBarGroup } from '@/app/components/FilterBar';
@@ -8,6 +9,7 @@ import { ADMIN_REPORT_PAGE_SIZES } from '@/hooks/useAdminReportNavigation';
 
 type AdminReportListChromeProps<T extends object> = {
   title: string;
+  backHref: string;
   /** Shown under the title (e.g. resolved UTC window from API). */
   periodHint?: string;
   headerRight?: ReactNode;
@@ -28,6 +30,7 @@ type AdminReportListChromeProps<T extends object> = {
 
 export default function AdminReportListChrome<T extends object>({
   title,
+  backHref,
   periodHint,
   headerRight,
   showDateFilters = true,
@@ -47,7 +50,10 @@ export default function AdminReportListChrome<T extends object>({
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+          <Link href={backHref} className="text-sm font-medium text-[var(--primary)] hover:underline">
+            ← Dashboard overview
+          </Link>
+          <h1 className="mt-2 text-2xl font-bold text-gray-900">{title}</h1>
           {periodHint ? <p className="mt-1 text-sm text-gray-600">{periodHint}</p> : null}
         </div>
         {headerRight ? <div className="flex shrink-0 flex-wrap items-center gap-2">{headerRight}</div> : null}

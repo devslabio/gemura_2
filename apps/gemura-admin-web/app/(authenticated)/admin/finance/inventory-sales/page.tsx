@@ -32,7 +32,7 @@ function InventorySalesReportInner() {
   const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
   const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
-  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters } =
+  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters, backToOverviewHref } =
     useAdminReportNavigation();
 
   const [loading, setLoading] = useState(true);
@@ -111,6 +111,7 @@ function InventorySalesReportInner() {
   return (
     <AdminReportListChrome
       title="Inventory sales"
+      backHref={backToOverviewHref}
       periodHint={periodHint}
       dateFrom={filterInputs.dateFrom}
       dateTo={filterInputs.dateTo}

@@ -31,7 +31,7 @@ function PayrollRunsReportInner() {
   const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
   const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
-  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters } =
+  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters, backToOverviewHref } =
     useAdminReportNavigation();
 
   const [loading, setLoading] = useState(true);
@@ -109,6 +109,7 @@ function PayrollRunsReportInner() {
   return (
     <AdminReportListChrome
       title="Payroll runs"
+      backHref={backToOverviewHref}
       periodHint={periodHint}
       dateFrom={filterInputs.dateFrom}
       dateTo={filterInputs.dateTo}

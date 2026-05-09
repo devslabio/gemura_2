@@ -37,7 +37,7 @@ function MilkCollectionsReportInner() {
   const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
   const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
-  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters } =
+  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters, backToOverviewHref } =
     useAdminReportNavigation();
 
   const [loading, setLoading] = useState(true);
@@ -134,6 +134,7 @@ function MilkCollectionsReportInner() {
   return (
     <AdminReportListChrome
       title="Milk collections"
+      backHref={backToOverviewHref}
       periodHint={periodHint}
       headerRight={
         <Link href={rejectionsHref} className="btn btn-secondary">
