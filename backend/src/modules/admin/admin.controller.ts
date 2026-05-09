@@ -384,6 +384,146 @@ export class AdminController {
     });
   }
 
+  @Get('platform/charges')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated supplier charges created or updated in dashboard period' })
+  async listPlatformCharges(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformCharges(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/supplier-customer-links')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated supplier–customer links created in dashboard period' })
+  async listPlatformSupplierCustomerLinks(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformSupplierCustomerLinks(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/accounting-transactions')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated accounting journal batches in dashboard period' })
+  async listPlatformAccountingTransactions(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformAccountingTransactions(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/gate-deliveries')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated MCC gate deliveries in dashboard period' })
+  async listPlatformGateDeliveries(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformGateDeliveries(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
+  @Get('platform/milk-manifests')
+  @RequirePermission('dashboard.view')
+  @ApiOperation({ summary: 'Paginated Umucunda milk manifests created in dashboard period' })
+  async listPlatformMilkManifests(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') pageRaw?: string,
+    @Query('limit') limitRaw?: string,
+    @Query('date_from') dateFrom?: string,
+    @Query('date_to') dateTo?: string,
+    @Query('tz_offset_minutes') tzOffsetRaw?: string,
+  ) {
+    let tzOffsetMinutes: number | undefined;
+    if (tzOffsetRaw !== undefined && tzOffsetRaw !== '') {
+      const n = Number.parseInt(tzOffsetRaw, 10);
+      if (!Number.isNaN(n) && n >= -840 && n <= 840) tzOffsetMinutes = n;
+    }
+    const page = Math.max(1, Number.parseInt(pageRaw ?? '1', 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(limitRaw ?? '25', 10) || 25));
+    return this.adminService.listPlatformMilkManifests(user, accountId, {
+      page,
+      limit,
+      dateFrom,
+      dateTo,
+      tzOffsetMinutes,
+    });
+  }
+
   @Get('roles')
   @RequirePermission('manage_users')
   @ApiOperation({
