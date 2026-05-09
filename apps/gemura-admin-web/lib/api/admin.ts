@@ -325,7 +325,79 @@ export interface TenantAccountRow {
   operational_location_id: string | null;
   operational_district_id: string | null;
   operational_location_label: string | null;
+  /** Administrative district name (Rwanda hierarchy); list/table display. */
+  operational_district_label: string | null;
+  /** Active members, relationships, milk rows, farms — same semantics as former user-list aggregates but per account. */
+  stats?: {
+    members: number;
+    suppliers: number;
+    customers: number;
+    sales: number;
+    collections: number;
+    farms: number;
+  };
 }
+
+/** Extended tenant account payload from GET /admin/tenant-accounts/:id */
+export interface TenantAccountOperationalProfileDTO {
+  id: string;
+  account_id: string;
+  expected_daily_deliveries: number | null;
+  daily_milk_volume_litres: number | null;
+  max_milk_one_day_litres: number | null;
+  tank_capacity_sufficiency: string | null;
+  insufficient_capacity_plan: string | null;
+  power_supply_sources: unknown | null;
+  generator_capacity_kva: number | null;
+  mobile_connectivity: string | null;
+  total_farmers_supplying: number | null;
+  new_farmers_last_3_months: number | null;
+  milk_transporters_count: number | null;
+  average_distance_km: number | null;
+  furthest_farm_km: number | null;
+  evening_milk_pattern: string | null;
+  own_milk_transport_type: string | null;
+  record_system: string | null;
+  avg_days_delivery_to_payment: number | null;
+  average_annual_revenue_rwf: number | null;
+  main_buyer_name: string | null;
+  formal_supply_agreement_details: string | null;
+  source_submission_id: string | null;
+  source_submission_code: string | null;
+  captured_at: string;
+  updated_at: string;
+}
+
+export interface TenantAccountCoolingTankProfileDTO {
+  id: string;
+  account_id: string;
+  tank_number: string | null;
+  capacity_litres: number | null;
+  year_or_age: string | null;
+  condition: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenantAccountFacilitySnapshotDTO {
+  id: string;
+  account_id: string;
+  tank_used_litres: number | null;
+  tank_used_pct: number | null;
+  cooling_temperature_c: number | null;
+  power_status: string | null;
+  generator_status: string | null;
+  generator_fuel_pct: number | null;
+  observed_at: string | null;
+  source: string | null;
+  updated_at: string;
+}
+
+export type TenantAccountAdminDetail = TenantAccountRow & {
+  operational_profile: TenantAccountOperationalProfileDTO | null;
+  cooling_tank_profiles: TenantAccountCoolingTankProfileDTO[];
+  facility_snapshot: TenantAccountFacilitySnapshotDTO | null;
+};
 
 export interface RegionalSupervisorDistrictRef {
   id: string;
@@ -584,6 +656,7 @@ export const adminApi = {
       date_to?: string;
       supplier_name?: string;
       customer_account_code?: string;
+      search?: string;
     },
   ): Promise<{ code: number; status: string; message: string; data: unknown[] }> => {
     const params: Record<string, unknown> = { resource };
@@ -594,6 +667,7 @@ export const adminApi = {
     if (options?.date_to) params.date_to = options.date_to;
     if (options?.supplier_name) params.supplier_name = options.supplier_name;
     if (options?.customer_account_code) params.customer_account_code = options.customer_account_code;
+    if (options?.search) params.search = options.search;
     return apiClient.get(`/admin/users/${userId}/business-records`, { params });
   },
 
@@ -1135,11 +1209,35 @@ export const adminApi = {
     code: number;
     status: string;
     message: string;
-    data: TenantAccountRow & { operational_location_label: string | null };
+    data: TenantAccountAdminDetail;
   }> => {
     const q: Record<string, unknown> = {};
     if (accountId) q.account_id = accountId;
     return apiClient.get(`/admin/tenant-accounts/${targetAccountId}`, { params: q });
+  },
+
+  updateTenantAccountOperationalMetrics: async (
+    accountId: string | undefined,
+    targetAccountId: string,
+    body: {
+      profile?: Record<string, unknown>;
+      facility_snapshot?: Record<string, unknown>;
+      cooling_tanks?: Array<{
+        tank_number?: string | null;
+        capacity_litres?: number | string | null;
+        year_or_age?: string | null;
+        condition?: string | null;
+      }>;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: TenantAccountAdminDetail;
+  }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    return apiClient.put(`/admin/tenant-accounts/${targetAccountId}/operational-metrics`, body, { params: q });
   },
 
   updateTenantAccountOperationalLocation: async (

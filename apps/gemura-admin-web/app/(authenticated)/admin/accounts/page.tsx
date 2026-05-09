@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { accountsApi, type Account } from '@/lib/api/accounts';
@@ -10,7 +10,7 @@ import { useToastStore } from '@/store/toast';
 import { usePermission } from '@/hooks/usePermission';
 import DataTable, { TableColumn } from '@/app/components/DataTable';
 import Pagination from '@/app/components/Pagination';
-import FilterBar, { FilterBarGroup, FilterBarSearch, FilterBarApply, FilterBarActions, FilterBarExport } from '@/app/components/FilterBar';
+import FilterBar, { FilterBarGroup, FilterBarSearch, FilterBarActions, FilterBarExport } from '@/app/components/FilterBar';
 import Icon, { faUserShield, faCheckCircle, faArrowsUpDown, faSpinner, faEye } from '@/app/components/Icon';
 import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
 
@@ -30,7 +30,9 @@ export default function AccountsPage() {
   const [switching, setSwitching] = useState<string | null>(null);
 
   const [searchInput, setSearchInput] = useState('');
-  const [searchApplied, setSearchApplied] = useState('');
+  /** Debounced term sent to the API (auto-search while typing). */
+  const [searchQuery, setSearchQuery] = useState('');
+  const committedSearchRef = useRef('');
   const [accountType, setAccountType] = useState<'tenant' | 'branch' | 'admin' | 'all'>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -47,7 +49,7 @@ export default function AccountsPage() {
         adminApi.listTenantAccountsForAdmin(adminAccountId, {
           page,
           limit: pageSize,
-          search: searchApplied.trim() || undefined,
+          search: searchQuery.trim() || undefined,
           account_type: accountType,
         }),
         accountsApi.getUserAccounts(),
@@ -82,7 +84,22 @@ export default function AccountsPage() {
     } finally {
       setLoading(false);
     }
-  }, [allowed, adminAccountId, page, pageSize, searchApplied, accountType]);
+  }, [allowed, adminAccountId, page, pageSize, searchQuery, accountType]);
+
+  useEffect(() => {
+    committedSearchRef.current = searchQuery;
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      const q = searchInput.trim();
+      if (q !== committedSearchRef.current) {
+        setPage(1);
+      }
+      setSearchQuery(q);
+    }, 320);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
 
   useEffect(() => {
     if (!allowed) {
@@ -92,16 +109,20 @@ export default function AccountsPage() {
     load();
   }, [allowed, load, router]);
 
-  const handleApplySearch = () => {
-    setSearchApplied(searchInput);
+  const handleClearFilters = () => {
+    setSearchInput('');
+    setSearchQuery('');
+    committedSearchRef.current = '';
+    setAccountType('all');
     setPage(1);
   };
 
-  const handleClearFilters = () => {
-    setSearchInput('');
-    setSearchApplied('');
-    setAccountType('all');
-    setPage(1);
+  const flushSearchNow = () => {
+    const q = searchInput.trim();
+    if (q !== committedSearchRef.current) {
+      setPage(1);
+    }
+    setSearchQuery(q);
   };
 
   const handleSwitchAccount = useCallback(
@@ -160,9 +181,41 @@ export default function AccountsPage() {
         ),
       },
       {
-        key: 'operational_location_label',
-        label: 'Location',
-        render: (v) => <span className="text-sm text-gray-700">{(v as string) || '—'}</span>,
+        key: 'operational_district_label',
+        label: 'District',
+        render: (_v, row) => (
+          <span className="text-sm text-gray-700">{row.operational_district_label || '—'}</span>
+        ),
+      },
+      {
+        key: 'stats_members',
+        label: 'Members',
+        render: (_v, row) => <span className="tabular-nums text-sm text-gray-900">{row.stats?.members ?? 0}</span>,
+      },
+      {
+        key: 'stats_suppliers',
+        label: 'Suppliers',
+        render: (_v, row) => <span className="tabular-nums text-sm text-gray-900">{row.stats?.suppliers ?? 0}</span>,
+      },
+      {
+        key: 'stats_customers',
+        label: 'Customers',
+        render: (_v, row) => <span className="tabular-nums text-sm text-gray-900">{row.stats?.customers ?? 0}</span>,
+      },
+      {
+        key: 'stats_sales',
+        label: 'Sales',
+        render: (_v, row) => <span className="tabular-nums text-sm text-gray-900">{row.stats?.sales ?? 0}</span>,
+      },
+      {
+        key: 'stats_collections',
+        label: 'Collections',
+        render: (_v, row) => <span className="tabular-nums text-sm text-gray-900">{row.stats?.collections ?? 0}</span>,
+      },
+      {
+        key: 'stats_farms',
+        label: 'Farms',
+        render: (_v, row) => <span className="tabular-nums text-sm text-gray-900">{row.stats?.farms ?? 0}</span>,
       },
       {
         key: 'membership',
@@ -211,7 +264,7 @@ export default function AccountsPage() {
   if (!allowed) return null;
 
   if (loading && rows.length === 0) {
-    return <ListPageSkeleton title="Accounts" filterFields={4} tableRows={10} tableCols={6} />;
+    return <ListPageSkeleton title="Accounts" filterFields={4} tableRows={10} tableCols={12} />;
   }
 
   return (
@@ -222,9 +275,12 @@ export default function AccountsPage() {
         <FilterBarSearch
           value={searchInput}
           onChange={setSearchInput}
-          placeholder="Name or code"
+          placeholder="Search name or code…"
           onKeyDown={(e) => {
-            if (e.key === 'Enter') handleApplySearch();
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              flushSearchNow();
+            }
           }}
         />
         <FilterBarGroup label="Account type">
@@ -258,7 +314,6 @@ export default function AccountsPage() {
             ))}
           </select>
         </FilterBarGroup>
-        <FilterBarApply onApply={handleApplySearch} />
         <FilterBarActions onClear={handleClearFilters} />
         <FilterBarExport<TenantAccountRow>
           data={rows.map(({ membership: _, ...r }) => r)}
@@ -269,7 +324,13 @@ export default function AccountsPage() {
             { key: 'code', label: 'Code' },
             { key: 'type', label: 'Type' },
             { key: 'status', label: 'Status' },
-            { key: 'operational_location_label', label: 'Location' },
+            { key: 'operational_district_label', label: 'District' },
+            { key: 'stats_members', label: 'Members', getValue: (r) => String(r.stats?.members ?? '') },
+            { key: 'stats_suppliers', label: 'Suppliers', getValue: (r) => String(r.stats?.suppliers ?? '') },
+            { key: 'stats_customers', label: 'Customers', getValue: (r) => String(r.stats?.customers ?? '') },
+            { key: 'stats_sales', label: 'Sales', getValue: (r) => String(r.stats?.sales ?? '') },
+            { key: 'stats_collections', label: 'Collections', getValue: (r) => String(r.stats?.collections ?? '') },
+            { key: 'stats_farms', label: 'Farms', getValue: (r) => String(r.stats?.farms ?? '') },
           ]}
         />
       </FilterBar>
