@@ -16,6 +16,7 @@ export function usePermission() {
   const isSuperAdminOrAdmin = useCallback(() => PermissionService.isSuperAdminOrAdmin(), []);
   const isAdmin = useCallback(() => PermissionService.isAdmin(), []);
   const canManageUsers = useCallback(() => PermissionService.canManageUsers(), []);
+  const canViewPlatformAccounts = useCallback(() => PermissionService.canViewPlatformAccounts(), []);
   const canViewDashboard = useCallback(() => PermissionService.canViewDashboard(), []);
 
   return {
@@ -26,6 +27,7 @@ export function usePermission() {
     isSuperAdminOrAdmin,
     isAdmin,
     canManageUsers,
+    canViewPlatformAccounts,
     canViewDashboard,
     user,
     currentAccount,

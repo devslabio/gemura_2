@@ -328,6 +328,8 @@ model Account {
   operational_location_id String?   @map("operational_location_id") @db.Uuid
   /// Denormalized district (from path of operational_location_id) for filtering and supervisor scope matching.
   operational_district_id String?   @map("operational_district_id") @db.Uuid
+  /// Platform user with `regional_supervisor` role responsible for this account (admin-assigned).
+  regional_supervisor_user_id String? @map("regional_supervisor_user_id") @db.Uuid
 
   // Relations
   parent                Account?            @relation("AccountParent", fields: [parent_id], references: [id], onDelete: SetNull)
@@ -375,6 +377,7 @@ model Account {
   mcc_facility_snapshot              MccFacilitySnapshot?
   operational_location               Location?           @relation("AccountOperationalLocation", fields: [operational_location_id], references: [id], onDelete: SetNull)
   operational_district               Location?           @relation("AccountOperationalDistrict", fields: [operational_district_id], references: [id], onDelete: SetNull)
+  regional_supervisor                User?               @relation("AccountRegionalSupervisor", fields: [regional_supervisor_user_id], references: [id], onDelete: SetNull)
   user_accounts_umucunda_scope       UserAccount[]                  @relation("UserAccountUmucundaSupplierScope")
 
   @@index([code])
@@ -384,6 +387,7 @@ model Account {
   @@index([created_at])
   @@index([operational_location_id])
   @@index([operational_district_id])
+  @@index([regional_supervisor_user_id])
   @@map("accounts")
 }
 
@@ -479,6 +483,7 @@ model User {
   inventory_movements_created  InventoryMovement[]       @relation("InventoryMovementCreatedBy")
   api_keys_created             ApiKey[]
   regional_supervisor_districts RegionalSupervisorDistrict[]
+  accounts_as_regional_supervisor Account[] @relation("AccountRegionalSupervisor")
 
   @@index([code])
   @@index([phone])

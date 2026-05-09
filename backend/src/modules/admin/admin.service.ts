@@ -38,6 +38,7 @@ import { AssignUserAccountMembershipDto } from './dto/assign-user-account-member
 import { UpdateOnboardingOperationalConfigDto } from './dto/update-onboarding-operational-config.dto';
 import { UpdateAccountOperationalLocationDto } from './dto/update-account-operational-location.dto';
 import { SetRegionalSupervisorScopeDto } from './dto/set-regional-supervisor-scope.dto';
+import { UpdateAccountRegionalSupervisorDto } from './dto/update-account-regional-supervisor.dto';
 import {
   CoolingTankRowDto,
   FacilitySnapshotPatchDto,
@@ -542,6 +543,44 @@ export class AdminService {
         message: `Insufficient permissions. ${requiredPermission} permission required.`,
       });
     }
+  }
+
+  /**
+   * List/detail of platform tenant accounts: `manage_users` (full) or `view_regional_accounts` (district-scoped).
+   */
+  private async assertPlatformAccountDirectoryAccess(
+    user: User,
+    accountId: string,
+  ): Promise<{ canManageUsers: boolean; scopeDistrictIds: string[] | null }> {
+    const ua = await this.prisma.userAccount.findFirst({
+      where: { user_id: user.id, account_id: accountId, status: 'active' },
+    });
+    if (!ua) {
+      throw new ForbiddenException({
+        code: 403,
+        status: 'error',
+        message: 'No active account access found.',
+      });
+    }
+    const rbacCtx = { role: ua.role, platform_role_id: ua.platform_role_id, permissions: ua.permissions };
+    const canManageUsers = await this.rbac.assertGuardPermission(rbacCtx, 'manage_users');
+    const canViewRegional = await this.rbac.assertGuardPermission(rbacCtx, 'view_regional_accounts');
+    if (!canManageUsers && !canViewRegional) {
+      throw new ForbiddenException({
+        code: 403,
+        status: 'error',
+        message: 'Insufficient permissions for platform accounts directory.',
+      });
+    }
+    if (canManageUsers) {
+      return { canManageUsers: true, scopeDistrictIds: null };
+    }
+    const rows = await this.prisma.regionalSupervisorDistrict.findMany({
+      where: { user_id: user.id },
+      select: { district_location_id: true },
+    });
+    const ids = [...new Set(rows.map((r) => r.district_location_id).filter(Boolean))] as string[];
+    return { canManageUsers: false, scopeDistrictIds: ids };
   }
 
   private static readonly USERS_SORT_FIELDS: Record<string, string> = {
@@ -4143,7 +4182,7 @@ export class AdminService {
     return d?.id ?? null;
   }
 
-  /** List platform accounts with optional district filter (operational_district_id). Requires manage_users. */
+  /** List platform accounts with optional district / supervisor filters (operational_district_id). Scoped for regional supervisors. */
   async listTenantAccountsForAdmin(
     user: User,
     accountId: string,
@@ -4153,15 +4192,71 @@ export class AdminService {
       search?: string;
       account_type?: 'tenant' | 'branch' | 'admin' | 'all';
       district_location_id?: string;
+      /** UUID of assigned supervisor, or the literal `unassigned`. */
+      regional_supervisor_user_id?: string;
     },
   ) {
-    await this.checkAdminPermission(user, accountId);
+    const { canManageUsers, scopeDistrictIds } = await this.assertPlatformAccountDirectoryAccess(user, accountId);
     const skip = (opts.page - 1) * opts.limit;
     const typeFilter = opts.account_type;
     const types: AccountType[] =
       !typeFilter || typeFilter === 'all'
         ? [AccountType.tenant, AccountType.branch, AccountType.admin]
         : [typeFilter as AccountType];
+
+    const districtRequested = opts.district_location_id?.trim() || undefined;
+    let operationalDistrictWhere: Prisma.AccountWhereInput['operational_district_id'];
+
+    if (canManageUsers) {
+      operationalDistrictWhere = districtRequested ?? undefined;
+    } else {
+      const scoped = scopeDistrictIds ?? [];
+      if (scoped.length === 0) {
+        return {
+          code: 200,
+          status: 'success',
+          message: 'Accounts retrieved.',
+          data: {
+            rows: [],
+            pagination: {
+              page: opts.page,
+              limit: opts.limit,
+              total: 0,
+              totalPages: 1,
+            },
+          },
+        };
+      }
+      if (districtRequested) {
+        if (!scoped.includes(districtRequested)) {
+          return {
+            code: 200,
+            status: 'success',
+            message: 'Accounts retrieved.',
+            data: {
+              rows: [],
+              pagination: {
+                page: opts.page,
+                limit: opts.limit,
+                total: 0,
+                totalPages: 1,
+              },
+            },
+          };
+        }
+        operationalDistrictWhere = districtRequested;
+      } else {
+        operationalDistrictWhere = { in: scoped };
+      }
+    }
+
+    const rsRaw = opts.regional_supervisor_user_id?.trim();
+    const supervisorFilter =
+      rsRaw === 'unassigned'
+        ? ({ regional_supervisor_user_id: null } as const)
+        : rsRaw && AdminService.LOCATION_UUID_RE.test(rsRaw)
+          ? ({ regional_supervisor_user_id: rsRaw } as const)
+          : null;
 
     const where: Prisma.AccountWhereInput = {
       type: types.length === 1 ? types[0] : { in: types },
@@ -4173,7 +4268,10 @@ export class AdminService {
             ],
           }
         : {}),
-      ...(opts.district_location_id ? { operational_district_id: opts.district_location_id } : {}),
+      ...(operationalDistrictWhere !== undefined && operationalDistrictWhere !== null
+        ? { operational_district_id: operationalDistrictWhere }
+        : {}),
+      ...(supervisorFilter ? supervisorFilter : {}),
     };
 
     const [rows, total] = await Promise.all([
@@ -4190,6 +4288,10 @@ export class AdminService {
           status: true,
           operational_location_id: true,
           operational_district_id: true,
+          regional_supervisor_user_id: true,
+          regional_supervisor: {
+            select: { id: true, name: true, email: true, phone: true },
+          },
         },
       }),
       this.prisma.account.count({ where }),
@@ -4247,6 +4349,15 @@ export class AdminService {
             status: r.status,
             operational_location_id: r.operational_location_id,
             operational_district_id: r.operational_district_id,
+            regional_supervisor_user_id: r.regional_supervisor_user_id,
+            regional_supervisor: r.regional_supervisor
+              ? {
+                  id: r.regional_supervisor.id,
+                  name: r.regional_supervisor.name,
+                  email: r.regional_supervisor.email,
+                  phone: r.regional_supervisor.phone,
+                }
+              : null,
             operational_location_label: r.operational_location_id
               ? pathLabelByOpId.get(r.operational_location_id) ?? null
               : null,
@@ -4265,7 +4376,7 @@ export class AdminService {
   }
 
   async getTenantAccountForAdmin(user: User, adminAccountId: string, targetAccountId: string) {
-    await this.checkAdminPermission(user, adminAccountId);
+    const { canManageUsers, scopeDistrictIds } = await this.assertPlatformAccountDirectoryAccess(user, adminAccountId);
     const row = await this.prisma.account.findFirst({
       where: { id: targetAccountId },
       select: {
@@ -4276,10 +4387,20 @@ export class AdminService {
         status: true,
         operational_location_id: true,
         operational_district_id: true,
+        regional_supervisor_user_id: true,
+        regional_supervisor: {
+          select: { id: true, name: true, email: true, phone: true },
+        },
       },
     });
     if (!row) {
       throw new NotFoundException({ code: 404, status: 'error', message: 'Account not found.', data: null });
+    }
+    if (!canManageUsers) {
+      const scoped = scopeDistrictIds ?? [];
+      if (scoped.length === 0 || !row.operational_district_id || !scoped.includes(row.operational_district_id)) {
+        throw new NotFoundException({ code: 404, status: 'error', message: 'Account not found.', data: null });
+      }
     }
     let operational_location_label: string | null = null;
     if (row.operational_location_id) {
@@ -4308,6 +4429,14 @@ export class AdminService {
       message: 'Account retrieved.',
       data: {
         ...row,
+        regional_supervisor: row.regional_supervisor
+          ? {
+              id: row.regional_supervisor.id,
+              name: row.regional_supervisor.name,
+              email: row.regional_supervisor.email,
+              phone: row.regional_supervisor.phone,
+            }
+          : null,
         operational_location_label,
         operational_profile: operationalProfile
           ? {
@@ -4847,6 +4976,89 @@ export class AdminService {
         operational_location_label: operational_location_id ? this.locationPathLabel(path) : null,
       },
     };
+  }
+
+  private async assertUserIsRegionalSupervisorOnPlatform(supervisorUserId: string, platformAccountId: string): Promise<void> {
+    const ua = await this.prisma.userAccount.findFirst({
+      where: {
+        user_id: supervisorUserId,
+        account_id: platformAccountId,
+        status: 'active',
+        role: 'regional_supervisor',
+      },
+      select: { id: true },
+    });
+    if (!ua) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'User must have the regional_supervisor role on this platform account.',
+        data: null,
+      });
+    }
+  }
+
+  async setTenantAccountRegionalSupervisorForAdmin(
+    user: User,
+    adminAccountId: string,
+    targetAccountId: string,
+    dto: UpdateAccountRegionalSupervisorDto,
+  ) {
+    await this.checkAdminPermission(user, adminAccountId);
+    if (!Object.prototype.hasOwnProperty.call(dto, 'regional_supervisor_user_id')) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'regional_supervisor_user_id is required (use null to clear).',
+        data: null,
+      });
+    }
+
+    const raw = dto.regional_supervisor_user_id;
+    let nextSupervisorId: string | null;
+    if (raw === null || raw === '') {
+      nextSupervisorId = null;
+    } else if (!AdminService.LOCATION_UUID_RE.test(raw)) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Invalid regional_supervisor_user_id.',
+        data: null,
+      });
+    } else {
+      nextSupervisorId = raw;
+    }
+
+    const account = await this.prisma.account.findFirst({
+      where: { id: targetAccountId },
+      select: { id: true, operational_district_id: true },
+    });
+    if (!account) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'Account not found.', data: null });
+    }
+
+    if (nextSupervisorId) {
+      await this.assertUserIsRegionalSupervisorOnPlatform(nextSupervisorId, adminAccountId);
+      const districtId = account.operational_district_id;
+      if (districtId) {
+        const existing = await this.prisma.regionalSupervisorDistrict.findFirst({
+          where: { user_id: nextSupervisorId, district_location_id: districtId },
+          select: { id: true },
+        });
+        if (!existing) {
+          await this.prisma.regionalSupervisorDistrict.create({
+            data: { user_id: nextSupervisorId, district_location_id: districtId },
+          });
+        }
+      }
+    }
+
+    await this.prisma.account.update({
+      where: { id: targetAccountId },
+      data: { regional_supervisor_user_id: nextSupervisorId },
+    });
+
+    return this.getTenantAccountForAdmin(user, adminAccountId, targetAccountId);
   }
 
   async getRegionalSupervisorScope(user: User, adminAccountId: string, targetUserId: string) {

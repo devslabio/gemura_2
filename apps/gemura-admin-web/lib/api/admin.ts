@@ -316,6 +316,13 @@ export interface PlatformMilkManifestRow {
   gate_volume_litres: number | null;
 }
 
+export interface RegionalSupervisorUserRef {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+}
+
 export interface TenantAccountRow {
   id: string;
   code: string | null;
@@ -327,6 +334,8 @@ export interface TenantAccountRow {
   operational_location_label: string | null;
   /** Administrative district name (Rwanda hierarchy); list/table display. */
   operational_district_label: string | null;
+  regional_supervisor_user_id?: string | null;
+  regional_supervisor?: RegionalSupervisorUserRef | null;
   /** Active members, relationships, milk rows, farms — same semantics as former user-list aggregates but per account. */
   stats?: {
     members: number;
@@ -1195,6 +1204,8 @@ export const adminApi = {
       search?: string;
       account_type?: 'tenant' | 'branch' | 'admin' | 'all';
       district_location_id?: string;
+      /** User id or `unassigned` */
+      regional_supervisor_user_id?: string;
     },
   ): Promise<{
     code: number;
@@ -1202,12 +1213,28 @@ export const adminApi = {
     message: string;
     data: { rows: TenantAccountRow[]; pagination: AdminPlatformPagination };
   }> => {
-    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 20 };
+    const q: Record<string, unknown> = { page: params.page ?? 1, limit: params.limit ?? 10 };
     if (accountId) q.account_id = accountId;
     if (params.search?.trim()) q.search = params.search.trim();
     if (params.account_type) q.account_type = params.account_type;
     if (params.district_location_id) q.district_location_id = params.district_location_id;
+    if (params.regional_supervisor_user_id) q.regional_supervisor_user_id = params.regional_supervisor_user_id;
     return apiClient.get('/admin/tenant-accounts', { params: q });
+  },
+
+  updateTenantAccountRegionalSupervisor: async (
+    accountId: string | undefined,
+    targetAccountId: string,
+    body: { regional_supervisor_user_id: string | null },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: TenantAccountAdminDetail;
+  }> => {
+    const q: Record<string, unknown> = {};
+    if (accountId) q.account_id = accountId;
+    return apiClient.put(`/admin/tenant-accounts/${targetAccountId}/regional-supervisor`, body, { params: q });
   },
 
   getTenantAccountForAdmin: async (

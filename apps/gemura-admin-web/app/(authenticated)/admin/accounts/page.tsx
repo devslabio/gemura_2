@@ -21,8 +21,9 @@ const PAGE_SIZES = [10, 20, 50, 100] as const;
 export default function AccountsPage() {
   const router = useRouter();
   const { setCurrentAccount, currentAccount } = useAuthStore();
-  const { canManageUsers, isAdmin } = usePermission();
-  const allowed = canManageUsers() || isAdmin();
+  const { canViewPlatformAccounts, canManageUsers, isAdmin } = usePermission();
+  const allowed = canViewPlatformAccounts();
+  const canEditPlatformAccount = canManageUsers() || isAdmin();
 
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<Row[]>([]);
@@ -270,6 +271,12 @@ export default function AccountsPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold text-gray-900">Accounts</h1>
+      {allowed && !canEditPlatformAccount ? (
+        <p className="text-sm text-gray-600 mt-2 max-w-2xl">
+          Showing tenant, branch, and admin accounts whose operational district is in your supervisor scope. Contact a platform
+          admin to change assigned districts.
+        </p>
+      ) : null}
 
       <FilterBar>
         <FilterBarSearch
