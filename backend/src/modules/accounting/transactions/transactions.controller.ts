@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Put, Delete, Body, UseGuards, Query, Param } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiQuery, ApiParam, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiNotFoundResponse } from '@nestjs/swagger';
 import { TransactionsService } from './transactions.service';
 import { TokenGuard } from '../../../common/guards/token.guard';
@@ -15,6 +15,7 @@ export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
   @Post()
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Record revenue or expense transaction',
     description: 'Creates a simplified revenue or expense transaction. Automatically creates journal entries with balanced debit/credit entries. Links to user\'s default account and creates cash/revenue/expense accounts if needed.',

@@ -14,7 +14,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(200)
   @ApiOperation({
     summary: 'User login',
     description: 'Authenticate user with email/phone and password. Returns user data, accounts, and authentication token.',
@@ -188,7 +188,7 @@ export class AuthController {
   }
 
   @Post('verify')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Verify authentication token',
     description: 'Verify if an authentication token is valid and returns user information. Used to check token validity and refresh user session.',
@@ -243,7 +243,7 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Request password reset',
     description: 'Request a password reset code. The code is sent via SMS (if phone provided) or email (if email provided). The code can be used to reset the password via the reset-password endpoint.',
@@ -305,7 +305,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Reset password with code',
     description: 'Reset user password using the reset code received via SMS/email. The code must be valid and not expired. After successful reset, the user can login with the new password.',
@@ -370,7 +370,7 @@ export class AuthController {
   }
 
   @Post('logout')
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Logout current session',
     description:

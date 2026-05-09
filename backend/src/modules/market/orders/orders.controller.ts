@@ -14,9 +14,10 @@ export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
+  @HttpCode(200)
   @ApiOperation({ summary: 'Create order' })
   @ApiBody({ type: CreateOrderDto })
-  @ApiResponse({ status: 200, description: 'Order created successfully' })
+  @ApiResponse({ status: 200, description: 'Order created successfully.' })
   async createOrder(@CurrentUser() user: User, @Body() createDto: CreateOrderDto) {
     return this.ordersService.createOrder(user, createDto);
   }
@@ -24,7 +25,7 @@ export class OrdersController {
   @Get()
   @ApiOperation({ summary: 'List orders' })
   @ApiQuery({ name: 'status', required: false })
-  @ApiResponse({ status: 200, description: 'Orders fetched successfully' })
+  @ApiResponse({ status: 200, description: 'Orders fetched successfully.' })
   async getOrders(@CurrentUser() user: User, @Query('status') status?: string) {
     return this.ordersService.getOrders(user, { status });
   }
@@ -32,7 +33,7 @@ export class OrdersController {
   @Get(':id')
   @ApiOperation({ summary: 'Get order' })
   @ApiParam({ name: 'id' })
-  @ApiResponse({ status: 200, description: 'Order fetched successfully' })
+  @ApiResponse({ status: 200, description: 'Order fetched successfully.' })
   async getOrder(@CurrentUser() user: User, @Param('id') id: string) {
     return this.ordersService.getOrder(user, id);
   }
@@ -41,14 +42,14 @@ export class OrdersController {
   @ApiOperation({ summary: 'Update order status' })
   @ApiParam({ name: 'id' })
   @ApiBody({ schema: { type: 'object', properties: { status: { type: 'string' } } } })
-  @ApiResponse({ status: 200, description: 'Order status updated successfully' })
+  @ApiResponse({ status: 200, description: 'Order status updated successfully.' })
   async updateOrderStatus(@CurrentUser() user: User, @Param('id') id: string, @Body('status') status: string) {
     return this.ordersService.updateOrderStatus(user, id, status);
   }
 
   @Get('admin/list')
   @ApiOperation({ summary: 'Admin order list' })
-  @ApiResponse({ status: 200, description: 'Orders fetched successfully' })
+  @ApiResponse({ status: 200, description: 'Orders fetched successfully.' })
   async getAdminOrders(@CurrentUser() user: User) {
     return this.ordersService.getAdminOrders(user);
   }
@@ -56,14 +57,14 @@ export class OrdersController {
   @Get('admin/:id')
   @ApiOperation({ summary: 'Admin order details' })
   @ApiParam({ name: 'id' })
-  @ApiResponse({ status: 200, description: 'Order fetched successfully' })
+  @ApiResponse({ status: 200, description: 'Order fetched successfully.' })
   async getAdminOrder(@CurrentUser() user: User, @Param('id') id: string) {
     return this.ordersService.getAdminOrder(user, id);
   }
 
   @Get('customers/my-orders')
   @ApiOperation({ summary: 'Get customer orders' })
-  @ApiResponse({ status: 200, description: 'Orders fetched successfully' })
+  @ApiResponse({ status: 200, description: 'Orders fetched successfully.' })
   async getCustomerOrders(@CurrentUser() user: User) {
     return this.ordersService.getCustomerOrders(user);
   }
@@ -71,15 +72,16 @@ export class OrdersController {
   @Get('customers/my-order-details')
   @ApiOperation({ summary: 'Get customer order details' })
   @ApiQuery({ name: 'order_id', required: true })
-  @ApiResponse({ status: 200, description: 'Order fetched successfully' })
+  @ApiResponse({ status: 200, description: 'Order fetched successfully.' })
   async getCustomerOrderDetails(@CurrentUser() user: User, @Query('order_id') orderId: string) {
     return this.ordersService.getCustomerOrderDetails(user, orderId);
   }
 
   @Post('customers/place-order')
+  @HttpCode(200)
   @ApiOperation({ summary: 'Place order' })
   @ApiBody({ type: CreateOrderDto })
-  @ApiResponse({ status: 200, description: 'Order placed successfully' })
+  @ApiResponse({ status: 200, description: 'Order placed successfully.' })
   async placeOrder(@CurrentUser() user: User, @Body() createDto: CreateOrderDto) {
     return this.ordersService.placeOrder(user, createDto);
   }
@@ -88,14 +90,14 @@ export class OrdersController {
   @HttpCode(200)
   @ApiOperation({ summary: 'Cancel order' })
   @ApiBody({ schema: { type: 'object', properties: { order_id: { type: 'string' } } } })
-  @ApiResponse({ status: 200, description: 'Order cancelled successfully' })
+  @ApiResponse({ status: 200, description: 'Order cancelled successfully.' })
   async cancelOrder(@CurrentUser() user: User, @Body('order_id') orderId: string) {
     return this.ordersService.cancelOrder(user, orderId);
   }
 
   @Get('sellers/orders')
   @ApiOperation({ summary: 'Get seller orders' })
-  @ApiResponse({ status: 200, description: 'Orders fetched successfully' })
+  @ApiResponse({ status: 200, description: 'Orders fetched successfully.' })
   async getSellerOrders(@CurrentUser() user: User) {
     return this.ordersService.getSellerOrders(user);
   }
@@ -103,7 +105,7 @@ export class OrdersController {
   @Get('sellers/order-details')
   @ApiOperation({ summary: 'Get seller order details' })
   @ApiQuery({ name: 'order_id', required: true })
-  @ApiResponse({ status: 200, description: 'Order fetched successfully' })
+  @ApiResponse({ status: 200, description: 'Order fetched successfully.' })
   async getSellerOrderDetails(@CurrentUser() user: User, @Query('order_id') orderId: string) {
     return this.ordersService.getSellerOrderDetails(user, orderId);
   }
@@ -112,7 +114,7 @@ export class OrdersController {
   @HttpCode(200)
   @ApiOperation({ summary: 'Update order status (seller)' })
   @ApiBody({ schema: { type: 'object', properties: { order_id: { type: 'string' }, status: { type: 'string' } } } })
-  @ApiResponse({ status: 200, description: 'Order status updated successfully' })
+  @ApiResponse({ status: 200, description: 'Order status updated successfully.' })
   async updateSellerOrderStatus(@CurrentUser() user: User, @Body('order_id') orderId: string, @Body('status') status: string) {
     return this.ordersService.updateSellerOrderStatus(user, orderId, status);
   }

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { 
   ApiTags, 
   ApiOperation, 
@@ -244,18 +244,19 @@ export class ReceivablesPayablesController {
   }
 
   @Post('receivables/inventory/:inventorySaleId/payment')
+  @HttpCode(200)
   @ApiOperation({
     summary: 'Record payment for inventory receivable',
     description: 'Record a direct payment against an InventorySale receivable (supplier debt). Use when a supplier pays off their inventory debt directly, not via payroll deduction. Updates Receivables automatically.',
   })
-  @ApiParam({ name: 'inventorySaleId', description: 'Inventory sale ID (receivable UUID)' })
+  @ApiParam({ name: 'inventorySaleId', description: 'Inventory sale ID (receivable UUID).' })
   @ApiBody({
     type: RecordPaymentDto,
     description: 'Payment amount and optional date/notes',
   })
-  @ApiResponse({ status: 200, description: 'Payment recorded successfully' })
-  @ApiBadRequestResponse({ description: 'Invalid amount or exceeds outstanding' })
-  @ApiUnauthorizedResponse({ description: 'Access denied' })
+  @ApiResponse({ status: 200, description: 'Payment recorded successfully.' })
+  @ApiBadRequestResponse({ description: 'Invalid amount or exceeds outstanding.' })
+  @ApiUnauthorizedResponse({ description: 'Access denied.' })
   async recordPaymentForReceivable(
     @CurrentUser() user: User,
     @Param('inventorySaleId') inventorySaleId: string,

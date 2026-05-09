@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Put, Body, UseGuards, Query, Param, HttpCode, Res } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiNotFoundResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiBadRequestResponse, ApiUnauthorizedResponse, ApiNotFoundResponse, ApiParam } from '@nestjs/swagger';
 import { Response } from 'express';
 import { SalesService } from './sales.service';
 import { TokenGuard } from '../../common/guards/token.guard';
@@ -22,8 +22,8 @@ export class SalesController {
   constructor(private readonly salesService: SalesService) {}
 
   @Post('sales')
-  @RequirePermission('view_sales')
   @HttpCode(200)
+  @RequirePermission('view_sales')
   @ApiOperation({
     summary: 'Get sales list with filters',
     description: 'Retrieve milk sales for the authenticated user\'s default account (as supplier). Supports filtering by customer account code, status, date range, quantity range, and price range. Data is scoped to the user\'s default account.',
@@ -238,8 +238,8 @@ export class SalesController {
   }
 
   @Post('cancel')
-  @RequirePermission('update_sales')
   @HttpCode(200)
+  @RequirePermission('update_sales')
   @ApiOperation({
     summary: 'Cancel a sale',
     description: 'Cancel a sale by setting its status to "cancelled". Only sales belonging to the user\'s default account can be cancelled.',
@@ -307,6 +307,7 @@ export class SalesController {
   }
 
   @Post()
+  @HttpCode(200)
   @RequirePermission('create_sales')
   @ApiOperation({
     summary: 'Create a new sale',
@@ -469,8 +470,8 @@ export class SalesController {
   }
 
   @Post('bulk')
-  @RequirePermission('create_sales')
   @HttpCode(200)
+  @RequirePermission('create_sales')
   @ApiOperation({
     summary: 'Bulk create sales',
     description: 'Create multiple milk sales from an array. Returns success count and per-row errors.',
@@ -497,12 +498,13 @@ export class SalesController {
   }
 
   @Post(':saleId/payment')
-  @RequirePermission('update_sales')
   @HttpCode(200)
+  @RequirePermission('update_sales')
   @ApiOperation({
     summary: 'Record payment for a sale',
     description: 'Records a payment against an unpaid/partial sale. Creates journal entry: DR Cash, CR Receivable. Supports partial payments.',
   })
+  @ApiParam({ name: 'saleId', description: 'Sale ID.' })
   @ApiBody({
     type: RecordPaymentDto,
     description: 'Payment details',

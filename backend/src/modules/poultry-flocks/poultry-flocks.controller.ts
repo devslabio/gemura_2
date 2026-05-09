@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { User } from '@prisma/client';
 import { TokenGuard } from '../../common/guards/token.guard';
 import { CurrentUser } from '../../common/decorators/user.decorator';
@@ -47,9 +47,11 @@ export class PoultryFlocksController {
 
   @Get(':id/daily')
   @ApiOperation({ summary: 'Daily egg & mortality records' })
+  @ApiParam({ name: 'id', description: 'Poultry flock ID.' })
   @ApiQuery({ name: 'account_id', required: false })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
+  @ApiResponse({ status: 200, description: 'Daily records retrieved successfully.' })
   async listDaily(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -62,8 +64,11 @@ export class PoultryFlocksController {
   }
 
   @Post(':id/daily')
+  @HttpCode(200)
   @ApiOperation({ summary: 'Upsert daily record by date' })
+  @ApiParam({ name: 'id', description: 'Poultry flock ID.' })
   @ApiQuery({ name: 'account_id', required: false })
+  @ApiResponse({ status: 200, description: 'Daily record saved successfully.' })
   async upsertDaily(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -76,7 +81,10 @@ export class PoultryFlocksController {
 
   @Delete(':id/daily/:recordId')
   @ApiOperation({ summary: 'Delete daily record' })
+  @ApiParam({ name: 'id', description: 'Poultry flock ID.' })
+  @ApiParam({ name: 'recordId', description: 'Daily record ID.' })
   @ApiQuery({ name: 'account_id', required: false })
+  @ApiResponse({ status: 200, description: 'Daily record deleted successfully.' })
   async deleteDaily(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -89,7 +97,9 @@ export class PoultryFlocksController {
 
   @Get(':id/movements')
   @ApiOperation({ summary: 'Batch intake & other movements' })
+  @ApiParam({ name: 'id', description: 'Poultry flock ID.' })
   @ApiQuery({ name: 'account_id', required: false })
+  @ApiResponse({ status: 200, description: 'Flock movements retrieved successfully.' })
   async listMovements(@CurrentUser() user: User, @Param('id') id: string, @Query('account_id') accountId?: string) {
     const data = await this.svc.listMovements(user, id, accountId);
     return { code: 200, status: 'success', message: 'Movements retrieved', data };
@@ -97,7 +107,9 @@ export class PoultryFlocksController {
 
   @Post(':id/movements')
   @ApiOperation({ summary: 'Add movement' })
+  @ApiParam({ name: 'id', description: 'Poultry flock ID.' })
   @ApiQuery({ name: 'account_id', required: false })
+  @ApiResponse({ status: 201, description: 'Movement recorded successfully.' })
   async addMovement(
     @CurrentUser() user: User,
     @Param('id') id: string,
@@ -116,7 +128,9 @@ export class PoultryFlocksController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get flock' })
+  @ApiParam({ name: 'id', description: 'Poultry flock ID.' })
   @ApiQuery({ name: 'account_id', required: false })
+  @ApiResponse({ status: 200, description: 'Flock retrieved successfully.' })
   async getOne(@CurrentUser() user: User, @Param('id') id: string, @Query('account_id') accountId?: string) {
     const data = await this.svc.getOne(user, id, accountId);
     return { code: 200, status: 'success', message: 'Flock retrieved', data };
@@ -124,7 +138,9 @@ export class PoultryFlocksController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update flock' })
+  @ApiParam({ name: 'id', description: 'Poultry flock ID.' })
   @ApiQuery({ name: 'account_id', required: false })
+  @ApiResponse({ status: 200, description: 'Flock updated successfully.' })
   async update(
     @CurrentUser() user: User,
     @Param('id') id: string,

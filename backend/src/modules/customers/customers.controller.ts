@@ -19,6 +19,7 @@ export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
   @Post()
+  @HttpCode(200)
   @RequireAnyPermission(['create_customers', 'update_customers'])
   @ApiOperation({
     summary: 'Create or update customer',
@@ -117,6 +118,7 @@ export class CustomersController {
   }
 
   @Post('bulk')
+  @HttpCode(200)
   @RequireAnyPermission(['create_customers', 'update_customers'])
   @ApiOperation({
     summary: 'Bulk create or update customers',
@@ -144,8 +146,8 @@ export class CustomersController {
   }
 
   @Post('get')
-  @RequirePermission('view_customers')
   @HttpCode(200)
+  @RequirePermission('view_customers')
   @ApiOperation({
     summary: 'Get all customers',
     description: 'Retrieve all active customer relationships for the authenticated user\'s default account. Returns customer information including account details, pricing, and relationship status.',
