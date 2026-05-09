@@ -8,7 +8,13 @@ import { adminApi, UserBusinessResource } from '@/lib/api/admin';
 import { useAuthStore } from '@/store/auth';
 import DataTableWithPagination from '@/app/components/DataTableWithPagination';
 import type { TableColumn } from '@/app/components/DataTable';
-import FilterBar, { FilterBarGroup, FilterBarActions, FilterBarApply, FilterBarExport } from '@/app/components/FilterBar';
+import FilterBar, {
+  FilterBarGroup,
+  FilterBarActions,
+  FilterBarApply,
+  FilterBarExport,
+  FilterBarSearch,
+} from '@/app/components/FilterBar';
 import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
 import Icon, { faArrowLeft } from '@/app/components/Icon';
 
@@ -74,6 +80,7 @@ export default function UserBusinessRecordsPage() {
     date_to: searchParams.get('date_to') || '',
     supplier_name: searchParams.get('supplier_name') || '',
     customer_account_code: searchParams.get('customer_account_code') || '',
+    search: searchParams.get('search') || '',
   });
 
   const userAccountRows = useMemo(() => {
@@ -148,6 +155,7 @@ export default function UserBusinessRecordsPage() {
         date_to: filters.date_to || undefined,
         supplier_name: filters.supplier_name || undefined,
         customer_account_code: filters.customer_account_code || undefined,
+        search: resource === 'members' && filters.search.trim() ? filters.search.trim() : undefined,
       });
       if (res.code === 200 && Array.isArray(res.data)) setRows(res.data);
       else setListError(res.message || 'Failed to load records');
@@ -167,6 +175,7 @@ export default function UserBusinessRecordsPage() {
     filters.date_to,
     filters.supplier_name,
     filters.customer_account_code,
+    filters.search,
   ]);
 
   useEffect(() => {
@@ -184,11 +193,32 @@ export default function UserBusinessRecordsPage() {
   };
 
   const handleApplyFilters = () => {
+    if (resource === 'members') {
+      const q = new URLSearchParams(searchParams.toString());
+      if (filters.search.trim()) q.set('search', filters.search.trim());
+      else q.delete('search');
+      if (filters.status) q.set('status', filters.status);
+      else q.delete('status');
+      router.replace(`/admin/users/${userId}/records/${resource}?${q.toString()}`);
+    }
     void loadRecords();
   };
 
   const handleClearFilters = () => {
-    setFilters({ status: '', date_from: '', date_to: '', supplier_name: '', customer_account_code: '' });
+    setFilters({
+      status: '',
+      date_from: '',
+      date_to: '',
+      supplier_name: '',
+      customer_account_code: '',
+      search: '',
+    });
+    if (resource === 'members') {
+      const q = new URLSearchParams(searchParams.toString());
+      q.delete('search');
+      q.delete('status');
+      router.replace(`/admin/users/${userId}/records/${resource}?${q.toString()}`);
+    }
   };
 
   const columns: TableColumn<any>[] = useMemo(() => {
@@ -380,6 +410,14 @@ export default function UserBusinessRecordsPage() {
   const showStatusFilter = resource === 'collections' || resource === 'sales';
   const showSupplierName = resource === 'collections';
   const showCustomerCode = resource === 'sales';
+  const showMembersFilters = resource === 'members';
+  const hasFilterControls =
+    showDateFilters ||
+    showStatusFilter ||
+    showSupplierName ||
+    showCustomerCode ||
+    showMembersFilters ||
+    resource !== 'accounts';
 
   const title = RESOURCE_LABELS[resource];
   const exportName = `${resource}-${userId.slice(0, 8)}`;
@@ -410,35 +448,56 @@ export default function UserBusinessRecordsPage() {
         </p>
       </div>
 
-      {resource !== 'accounts' && (
-        <div className="bg-white border border-gray-200 rounded-sm p-4">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Operational account (user must belong)</label>
-          <select
-            className="input text-sm max-w-xl text-gray-900"
-            value={operationalAccountId ?? ''}
-            onChange={(e) => setOperationalAndUrl(e.target.value)}
-          >
-            {userAccountRows.length === 0 ? (
-              <option value="">No linked accounts</option>
-            ) : (
-              userAccountRows.map((row: any) => {
-                const id = uaAccountId(row);
-                if (!id) return null;
-                const label = row.account?.name
-                  ? `${row.account.name} (${row.account.code ?? id.slice(0, 8)}…)${row.role ? ` · ${row.role}` : ''}`
-                  : id;
-                return (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                );
-              })
-            )}
-          </select>
-        </div>
-      )}
-
       <FilterBar>
+        {resource !== 'accounts' && (
+          <FilterBarGroup label="Account" className="md:min-w-[220px] lg:min-w-[260px]">
+            <select
+              className="input h-9 text-sm text-gray-900"
+              value={operationalAccountId ?? ''}
+              onChange={(e) => setOperationalAndUrl(e.target.value)}
+            >
+              {userAccountRows.length === 0 ? (
+                <option value="">No linked accounts</option>
+              ) : (
+                userAccountRows.map((row: any) => {
+                  const id = uaAccountId(row);
+                  if (!id) return null;
+                  const label = row.account?.name
+                    ? `${row.account.name} (${row.account.code ?? id.slice(0, 8)}…)${row.role ? ` · ${row.role}` : ''}`
+                    : id;
+                  return (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  );
+                })
+              )}
+            </select>
+          </FilterBarGroup>
+        )}
+        {showMembersFilters && (
+          <>
+            <FilterBarSearch
+              value={filters.search}
+              onChange={(v) => setFilters((f) => ({ ...f, search: v }))}
+              placeholder="Name, email, or phone…"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleApplyFilters();
+              }}
+            />
+            <FilterBarGroup label="User status">
+              <select
+                className="input h-9 text-sm text-gray-900"
+                value={filters.status}
+                onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
+              >
+                <option value="">All</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </FilterBarGroup>
+          </>
+        )}
         {showStatusFilter && (
           <FilterBarGroup label="Status">
             <select
@@ -496,7 +555,7 @@ export default function UserBusinessRecordsPage() {
             />
           </FilterBarGroup>
         )}
-        {(showDateFilters || showStatusFilter || showSupplierName || showCustomerCode) && (
+        {hasFilterControls && (
           <>
             <FilterBarActions onClear={handleClearFilters} />
             <FilterBarApply onApply={handleApplyFilters} />

@@ -320,7 +320,7 @@ export default function Header({
             <div className="hidden sm:block text-right">
               <p className="text-sm font-semibold text-gray-900 m-0 leading-tight">{userName}</p>
               <p className="text-xs text-gray-500 m-0 leading-tight capitalize">
-                {currentAccount ? getRoleLabel(currentAccount.role) : '—'}
+                {currentAccount ? getRoleLabel(currentAccount.role, currentAccount.account_type) : '—'}
               </p>
             </div>
             <button

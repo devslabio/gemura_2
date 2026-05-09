@@ -6,6 +6,10 @@ import Link from 'next/link';
 import Image from 'next/image';
 import Icon, { faEye, faEyeSlash, faEnvelope, faLock, faPhone } from '@/app/components/Icon';
 import { useAuthStore } from '@/store/auth';
+import { isBusinessAccount } from '@/lib/config/nav.config';
+import { profileApi } from '@/lib/api/profile';
+import { supplierOnboardingApi } from '@/lib/api/supplierOnboardingApi';
+import { computeOnboardingRecordCompletion } from '@/app/(authenticated)/suppliers/onboarding/onboardingRecordCompletion';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -74,9 +78,38 @@ export default function LoginPage() {
 
       const defaultAccount = result.accounts.find((acc) => acc.is_default) || result.accounts[0] || null;
       const defaultRole = (defaultAccount?.role || '').toLowerCase();
-      const targetRoute = defaultRole === 'collector' || defaultRole === 'agent' ? '/collections' : '/dashboard';
+      const accType = (defaultAccount?.account_type ?? '').toLowerCase();
+      const isOpsCollectorOrAgent = defaultRole === 'collector' || defaultRole === 'agent';
 
-      await new Promise(resolve => setTimeout(resolve, 100));
+      let targetRoute =
+        isOpsCollectorOrAgent && isBusinessAccount(accType) ? '/collections' : '/dashboard';
+
+      if (isOpsCollectorOrAgent && isBusinessAccount(accType)) {
+        await new Promise((r) => setTimeout(r, 100));
+      } else if (accType === 'supplier' || accType === 'farmer' || accType === 'customer') {
+        await new Promise((r) => setTimeout(r, 200));
+        try {
+          const [prof, ob] = await Promise.all([
+            profileApi.getProfile().catch(() => null),
+            supplierOnboardingApi.getMy().catch(() => null),
+          ]);
+          const serverPct = prof?.data?.profile_completion;
+          const pct =
+            typeof serverPct === 'number' && !Number.isNaN(serverPct)
+              ? Math.round(Math.min(100, serverPct))
+              : ob?.data?.onboarding
+                ? computeOnboardingRecordCompletion(ob.data.onboarding)
+                : 0;
+          if (pct < 100) {
+            targetRoute = '/profile';
+          }
+        } catch {
+          /* keep /dashboard */
+        }
+      } else {
+        await new Promise((r) => setTimeout(r, 100));
+      }
+
       router.push(targetRoute);
     } catch (err: any) {
       setError(err?.message || 'Login failed. Please try again.');

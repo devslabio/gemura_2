@@ -42,12 +42,48 @@ export interface MccManagerStaffRow {
   tasks_done: number;
 }
 
+export interface MccManagerWalletSummary {
+  id: string;
+  code: string | null;
+  balance: number;
+  currency: string;
+  is_default: boolean;
+}
+
+export interface MccManagerOperationalProfile {
+  expected_daily_deliveries: number | null;
+  cooling_tank_total_capacity_litres: number | null;
+  power_supply_sources: string[];
+}
+
+export interface MccManagerFacilitySnapshot {
+  tank_used_litres: number | null;
+  tank_used_pct: number | null;
+  cooling_temperature_c: number | null;
+  power_status: string | null;
+  generator_status: string | null;
+  generator_fuel_pct: number | null;
+  observed_at: string | null;
+}
+
+export interface MccManagerAlert {
+  id: string;
+  priority: number;
+  title: string;
+  detail: string;
+  tone: 'critical' | 'warn' | 'info';
+}
+
 export interface MccManagerOverviewData {
   date: string;
   gate: MccManagerGateSummary;
   manifests: MccManagerManifestRow[];
   rejections: MccManagerRejectionRow[];
   staff: MccManagerStaffRow[];
+  wallet: MccManagerWalletSummary | null;
+  profile: MccManagerOperationalProfile | null;
+  facility_snapshot: MccManagerFacilitySnapshot | null;
+  alerts: MccManagerAlert[];
 }
 
 export interface MccManagerOverviewResponse {

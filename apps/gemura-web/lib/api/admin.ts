@@ -93,6 +93,10 @@ export interface CreateUserData {
   status?: string;
   role?: string;
   permissions?: Record<string, boolean>;
+  /** If backend supports provisioning supplier accounts from MCC. */
+  supplier_segment?: 'direct_farmer' | 'farmer_collector' | 'pure_collector' | string;
+  /** Optional JSON payload for server-side import */
+  onboarding_payload?: Record<string, unknown>;
 }
 
 export interface UpdateUserData {

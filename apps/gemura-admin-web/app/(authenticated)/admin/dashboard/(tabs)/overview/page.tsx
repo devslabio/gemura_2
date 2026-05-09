@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
 import { adminApi, type DashboardStats, type FinanceDashboardData, type UsageDashboardData } from '@/lib/api/admin';
 import { useAuthStore } from '@/store/auth';
@@ -11,17 +12,26 @@ import SystemAdminOverview from '../../SystemAdminOverview';
 
 import { useDashboardPeriod } from '../../dashboard-period-context';
 
-export default function AdminDashboardOverviewPage() {
+function AdminDashboardOverviewContent() {
   const { currentAccount } = useAuthStore();
   const { dateRange, periodLabel } = useDashboardPeriod();
+  const searchParams = useSearchParams();
+  const tzOffsetMinutes = useMemo(() => -(typeof window !== 'undefined' ? new Date().getTimezoneOffset() : 0), []);
+
+  const querySuffix = useMemo(() => {
+    const p = new URLSearchParams(searchParams.toString());
+    if (dateRange.date_from) p.set('date_from', dateRange.date_from);
+    if (dateRange.date_to) p.set('date_to', dateRange.date_to);
+    p.set('tz_offset_minutes', String(tzOffsetMinutes));
+    const s = p.toString();
+    return s ? `?${s}` : '';
+  }, [searchParams, dateRange.date_from, dateRange.date_to, tzOffsetMinutes]);
 
   const [loading, setLoading] = useState(true);
   const [apiStats, setApiStats] = useState<DashboardStats | null>(null);
   const [financeData, setFinanceData] = useState<FinanceDashboardData | null>(null);
   const [usageData, setUsageData] = useState<UsageDashboardData | null>(null);
   const [error, setError] = useState('');
-
-  const tzOffsetMinutes = useMemo(() => -(typeof window !== 'undefined' ? new Date().getTimezoneOffset() : 0), []);
 
   const stats = apiStats;
 
@@ -109,7 +119,21 @@ export default function AdminDashboardOverviewPage() {
 
   return (
     <div className="space-y-3">
-      <SystemAdminOverview periodLabel={periodLabel} stats={stats} finance={financeData} usage={usageData} />
+      <SystemAdminOverview
+        periodLabel={periodLabel}
+        querySuffix={querySuffix}
+        stats={stats}
+        finance={financeData}
+        usage={usageData}
+      />
     </div>
+  );
+}
+
+export default function AdminDashboardOverviewPage() {
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <AdminDashboardOverviewContent />
+    </Suspense>
   );
 }

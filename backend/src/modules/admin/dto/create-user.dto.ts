@@ -53,4 +53,14 @@ export class CreateUserDto {
   @IsObject()
   @IsOptional()
   permissions?: Record<string, boolean>;
+
+  @ApiPropertyOptional({ description: 'Milk app segment for supplier/farmer' })
+  @IsString()
+  @IsOptional()
+  supplier_segment?: string;
+
+  @ApiPropertyOptional({ description: 'Full supplier onboarding JSON (MCC import)' })
+  @IsObject()
+  @IsOptional()
+  onboarding_payload?: Record<string, unknown>;
 }
