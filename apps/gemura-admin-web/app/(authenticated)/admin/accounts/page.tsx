@@ -33,8 +33,8 @@ export default function AccountsPage() {
   const [searchApplied, setSearchApplied] = useState('');
   const [accountType, setAccountType] = useState<'tenant' | 'branch' | 'admin' | 'all'>('all');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 0 });
+  const [pageSize, setPageSize] = useState(10);
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
 
   const adminAccountId = currentAccount?.account_id;
 
