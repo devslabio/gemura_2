@@ -1,14 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
-import PlatformDrilldownShell from '@/app/components/admin/PlatformDrilldownShell';
+import AdminReportListChrome from '@/app/components/admin/AdminReportListChrome';
 import DataTable, { TableColumn } from '@/app/components/DataTable';
 import Pagination from '@/app/components/Pagination';
+import type { ExportColumn } from '@/app/components/FilterBar';
 import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
 import { adminApi, type PlatformMilkSaleRow } from '@/lib/api/admin';
+import { useAdminReportNavigation } from '@/hooks/useAdminReportNavigation';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
 
@@ -16,30 +18,36 @@ function formatRf(n: number) {
   return `RF ${new Intl.NumberFormat('en-RW', { maximumFractionDigits: 0 }).format(n)}`;
 }
 
-export default function MilkRejectionsReportPage() {
+const rejectionExportColumns: ExportColumn<PlatformMilkSaleRow>[] = [
+  { key: 'sale_at', label: 'Sale at' },
+  { key: 'status', label: 'Status' },
+  { key: 'quantity', label: 'Qty (L)' },
+  { key: 'unit_price', label: 'Unit price' },
+  { key: 'supplier_name', label: 'Supplier' },
+  { key: 'customer_name', label: 'Customer' },
+];
+
+function MilkRejectionsReportInner() {
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
   const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
   const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
+  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters, backToOverviewHref } =
+    useAdminReportNavigation();
+
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<PlatformMilkSaleRow[]>([]);
   const [period, setPeriod] = useState<{ start: string; end: string } | null>(null);
-  const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, totalPages: 0 });
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [error, setError] = useState('');
 
-  const apiParams = useMemo(() => {
-    const page = Math.max(1, Number(searchParams.get('page') || 1) || 1);
-    const limit = Math.min(100, Math.max(10, Number(searchParams.get('limit') || 25) || 25));
-    const date_from = searchParams.get('date_from') ?? undefined;
-    const date_to = searchParams.get('date_to') ?? undefined;
-    const tzRaw = searchParams.get('tz_offset_minutes');
-    const tzParsed = tzRaw !== null && tzRaw !== '' ? Number.parseInt(tzRaw, 10) : NaN;
-    const tz_offset_minutes = Number.isFinite(tzParsed) ? tzParsed : undefined;
-    return { page, limit, date_from, date_to, tz_offset_minutes };
-  }, [searchParams.toString()]);
+  const collectionsHref = useMemo(() => {
+    const p = new URLSearchParams(searchParams.toString());
+    p.set('page', '1');
+    return `/admin/milk/collections?${p.toString()}`;
+  }, [searchParams]);
 
   const load = useCallback(async () => {
     if (!allowed) return;
@@ -74,27 +82,8 @@ export default function MilkRejectionsReportPage() {
     load();
   }, [allowed, load, router]);
 
-  const onPageChange = (page: number) => {
-    const p = new URLSearchParams(searchParams.toString());
-    p.set('page', String(page));
-    router.push(`${pathname}?${p.toString()}`);
-  };
-
-  const backHref = useMemo(() => {
-    const p = new URLSearchParams(searchParams.toString());
-    p.delete('page');
-    const s = p.toString();
-    return `/admin/dashboard/overview${s ? `?${s}` : ''}`;
-  }, [searchParams]);
-
-  const collectionsHref = useMemo(() => {
-    const p = new URLSearchParams(searchParams.toString());
-    p.set('page', '1');
-    return `/admin/milk/collections?${p.toString()}`;
-  }, [searchParams]);
-
-  const periodLabel = period
-    ? `UTC window: ${new Date(period.start).toLocaleString()} → ${new Date(period.end).toLocaleString()}`
+  const periodHint = period
+    ? `Resolved window (UTC): ${new Date(period.start).toLocaleString()} → ${new Date(period.end).toLocaleString()}`
     : undefined;
 
   const columns: TableColumn<PlatformMilkSaleRow>[] = [
@@ -124,40 +113,68 @@ export default function MilkRejectionsReportPage() {
   if (!allowed) return null;
 
   if (loading && rows.length === 0) {
-    return (
-      <PlatformDrilldownShell title="Milk rejections" backHref={backHref}>
-        <ListPageSkeleton title="" filterFields={0} tableRows={8} tableCols={5} />
-      </PlatformDrilldownShell>
-    );
+    return <ListPageSkeleton title="Milk rejections" filterFields={4} tableRows={10} tableCols={5} />;
   }
 
   return (
-    <PlatformDrilldownShell title="Milk rejections (period)" periodLabel={periodLabel} backHref={backHref}>
-      {error ? (
-        <div className="rounded-sm border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{error}</div>
-      ) : null}
-      <div className="overflow-x-auto rounded-sm border border-gray-200 bg-white">
-        <DataTable
-          columns={columns}
-          data={rows}
-          loading={loading}
-          showRowNumbers
-          emptyMessage="No rejected milk transactions in this period."
-        />
-      </div>
-      <Pagination
-        currentPage={pagination.page}
-        totalPages={pagination.totalPages}
-        totalItems={pagination.total}
-        pageSize={pagination.limit}
-        itemLabel="rejections"
-        onPageChange={onPageChange}
-      />
-      <p className="text-xs text-gray-500">
-        <Link href={collectionsHref} className="font-medium text-[var(--primary)] hover:underline">
-          ← All collections in period
+    <AdminReportListChrome
+      title="Milk rejections"
+      backHref={backToOverviewHref}
+      periodHint={periodHint}
+      headerRight={
+        <Link href={collectionsHref} className="btn btn-secondary">
+          All collections
         </Link>
-      </p>
-    </PlatformDrilldownShell>
+      }
+      dateFrom={filterInputs.dateFrom}
+      dateTo={filterInputs.dateTo}
+      pageSize={filterInputs.pageSize}
+      onDateFromChange={setDateFrom}
+      onDateToChange={setDateTo}
+      onPageSizeChange={setPageSize}
+      onClearFilters={clearFilters}
+      exportFilename={`milk-rejections-${new Date().toISOString().split('T')[0]}.csv`}
+      exportColumns={rejectionExportColumns}
+      exportRows={rows}
+    >
+      {error ? (
+        <div className="rounded-sm border border-red-200 bg-red-50 p-4">
+          <p className="text-sm text-red-600">{error}</p>
+        </div>
+      ) : null}
+
+      {loading && rows.length > 0 ? (
+        <p className="text-xs text-gray-500" aria-live="polite">
+          Updating results…
+        </p>
+      ) : null}
+
+      <DataTable
+        columns={columns}
+        data={rows}
+        loading={loading && rows.length === 0}
+        showRowNumbers
+        emptyMessage="No rejected milk transactions in this period."
+      />
+
+      {pagination.total > 0 ? (
+        <Pagination
+          currentPage={pagination.page}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.total}
+          pageSize={pagination.limit}
+          itemLabel="rejections"
+          onPageChange={setPage}
+        />
+      ) : null}
+    </AdminReportListChrome>
+  );
+}
+
+export default function MilkRejectionsReportPage() {
+  return (
+    <Suspense fallback={<ListPageSkeleton title="Milk rejections" filterFields={4} tableRows={10} tableCols={5} />}>
+      <MilkRejectionsReportInner />
+    </Suspense>
   );
 }

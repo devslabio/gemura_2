@@ -1,40 +1,41 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-import PlatformDrilldownShell from '@/app/components/admin/PlatformDrilldownShell';
+import AdminReportListChrome from '@/app/components/admin/AdminReportListChrome';
 import DataTable, { TableColumn } from '@/app/components/DataTable';
 import Pagination from '@/app/components/Pagination';
+import type { ExportColumn } from '@/app/components/FilterBar';
 import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
 import { adminApi, type PlatformAuditEventRow } from '@/lib/api/admin';
+import { useAdminReportNavigation } from '@/hooks/useAdminReportNavigation';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
 
-export default function AuditLogReportPage() {
+const exportColumns: ExportColumn<PlatformAuditEventRow>[] = [
+  { key: 'created_at', label: 'When' },
+  { key: 'action', label: 'Action' },
+  { key: 'entity_type', label: 'Entity' },
+  { key: 'entity_id', label: 'Entity id' },
+  { key: 'user_label', label: 'User' },
+  { key: 'ip_address', label: 'IP' },
+];
+
+function AuditLogReportInner() {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
   const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
   const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
+  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters, backToOverviewHref } =
+    useAdminReportNavigation();
+
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<PlatformAuditEventRow[]>([]);
   const [period, setPeriod] = useState<{ start: string; end: string } | null>(null);
-  const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, totalPages: 0 });
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [error, setError] = useState('');
-
-  const apiParams = useMemo(() => {
-    const page = Math.max(1, Number(searchParams.get('page') || 1) || 1);
-    const limit = Math.min(100, Math.max(10, Number(searchParams.get('limit') || 25) || 25));
-    const date_from = searchParams.get('date_from') ?? undefined;
-    const date_to = searchParams.get('date_to') ?? undefined;
-    const tzRaw = searchParams.get('tz_offset_minutes');
-    const tzParsed = tzRaw !== null && tzRaw !== '' ? Number.parseInt(tzRaw, 10) : NaN;
-    const tz_offset_minutes = Number.isFinite(tzParsed) ? tzParsed : undefined;
-    return { page, limit, date_from, date_to, tz_offset_minutes };
-  }, [searchParams.toString()]);
 
   const load = useCallback(async () => {
     if (!allowed) return;
@@ -66,21 +67,8 @@ export default function AuditLogReportPage() {
     load();
   }, [allowed, load, router]);
 
-  const onPageChange = (page: number) => {
-    const p = new URLSearchParams(searchParams.toString());
-    p.set('page', String(page));
-    router.push(`${pathname}?${p.toString()}`);
-  };
-
-  const backHref = useMemo(() => {
-    const p = new URLSearchParams(searchParams.toString());
-    p.delete('page');
-    const s = p.toString();
-    return `/admin/dashboard/overview${s ? `?${s}` : ''}`;
-  }, [searchParams]);
-
-  const periodLabel = period
-    ? `UTC window: ${new Date(period.start).toLocaleString()} → ${new Date(period.end).toLocaleString()}`
+  const periodHint = period
+    ? `Resolved window (UTC): ${new Date(period.start).toLocaleString()} → ${new Date(period.end).toLocaleString()}`
     : undefined;
 
   const columns: TableColumn<PlatformAuditEventRow>[] = [
@@ -94,7 +82,7 @@ export default function AuditLogReportPage() {
     {
       key: 'entity_id',
       label: 'Entity id',
-      render: (v) => <span className="font-mono text-xs">{String(v).slice(0, 8)}…</span>,
+      render: (v) => <span className="font-mono text-xs">{String(v)}</span>,
     },
     {
       key: 'user_label',
@@ -111,35 +99,63 @@ export default function AuditLogReportPage() {
   if (!allowed) return null;
 
   if (loading && rows.length === 0) {
-    return (
-      <PlatformDrilldownShell title="Audit log" backHref={backHref}>
-        <ListPageSkeleton title="" filterFields={0} tableRows={8} tableCols={6} />
-      </PlatformDrilldownShell>
-    );
+    return <ListPageSkeleton title="Audit log" filterFields={4} tableRows={10} tableCols={6} />;
   }
 
   return (
-    <PlatformDrilldownShell title="Audit events (period)" periodLabel={periodLabel} backHref={backHref}>
+    <AdminReportListChrome
+      title="Audit log"
+      backHref={backToOverviewHref}
+      periodHint={periodHint}
+      dateFrom={filterInputs.dateFrom}
+      dateTo={filterInputs.dateTo}
+      pageSize={filterInputs.pageSize}
+      onDateFromChange={setDateFrom}
+      onDateToChange={setDateTo}
+      onPageSizeChange={setPageSize}
+      onClearFilters={clearFilters}
+      exportFilename={`audit-events-${new Date().toISOString().split('T')[0]}.csv`}
+      exportColumns={exportColumns}
+      exportRows={rows}
+    >
       {error ? (
-        <div className="rounded-sm border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{error}</div>
+        <div className="rounded-sm border border-red-200 bg-red-50 p-4">
+          <p className="text-sm text-red-600">{error}</p>
+        </div>
       ) : null}
-      <div className="overflow-x-auto rounded-sm border border-gray-200 bg-white">
-        <DataTable
-          columns={columns}
-          data={rows}
-          loading={loading}
-          showRowNumbers
-          emptyMessage="No audit events in this period."
-        />
-      </div>
-      <Pagination
-        currentPage={pagination.page}
-        totalPages={pagination.totalPages}
-        totalItems={pagination.total}
-        pageSize={pagination.limit}
-        itemLabel="events"
-        onPageChange={onPageChange}
+
+      {loading && rows.length > 0 ? (
+        <p className="text-xs text-gray-500" aria-live="polite">
+          Updating results…
+        </p>
+      ) : null}
+
+      <DataTable
+        columns={columns}
+        data={rows}
+        loading={loading && rows.length === 0}
+        showRowNumbers
+        emptyMessage="No audit events in this period."
       />
-    </PlatformDrilldownShell>
+
+      {pagination.total > 0 ? (
+        <Pagination
+          currentPage={pagination.page}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.total}
+          pageSize={pagination.limit}
+          itemLabel="events"
+          onPageChange={setPage}
+        />
+      ) : null}
+    </AdminReportListChrome>
+  );
+}
+
+export default function AuditLogReportPage() {
+  return (
+    <Suspense fallback={<ListPageSkeleton title="Audit log" filterFields={4} tableRows={10} tableCols={6} />}>
+      <AuditLogReportInner />
+    </Suspense>
   );
 }

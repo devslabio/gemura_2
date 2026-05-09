@@ -1,13 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
-import PlatformDrilldownShell from '@/app/components/admin/PlatformDrilldownShell';
+import AdminReportListChrome from '@/app/components/admin/AdminReportListChrome';
 import DataTable, { TableColumn } from '@/app/components/DataTable';
 import Pagination from '@/app/components/Pagination';
+import type { ExportColumn } from '@/app/components/FilterBar';
 import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
 import { adminApi, type PlatformLoanRow } from '@/lib/api/admin';
+import { useAdminReportNavigation } from '@/hooks/useAdminReportNavigation';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
 
@@ -15,29 +17,28 @@ function formatRf(n: number) {
   return `RF ${new Intl.NumberFormat('en-RW', { maximumFractionDigits: 0 }).format(n)}`;
 }
 
-export default function ActiveLoansReportPage() {
+const loanExportColumns: ExportColumn<PlatformLoanRow>[] = [
+  { key: 'disbursement_date', label: 'Disbursed' },
+  { key: 'status', label: 'Status' },
+  { key: 'principal', label: 'Principal' },
+  { key: 'amount_repaid', label: 'Repaid' },
+  { key: 'borrower_label', label: 'Borrower' },
+  { key: 'borrower_code', label: 'Borrower code' },
+  { key: 'lender_name', label: 'Lender' },
+];
+
+function ActiveLoansReportInner() {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
   const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
   const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
+  const { apiParams, filterInputs, setPageSize, setPage, clearFilters, backToOverviewHref } = useAdminReportNavigation();
+
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<PlatformLoanRow[]>([]);
-  const [pagination, setPagination] = useState({ page: 1, limit: 25, total: 0, totalPages: 0 });
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [error, setError] = useState('');
-
-  const apiParams = useMemo(() => {
-    const page = Math.max(1, Number(searchParams.get('page') || 1) || 1);
-    const limit = Math.min(100, Math.max(10, Number(searchParams.get('limit') || 25) || 25));
-    const date_from = searchParams.get('date_from') ?? undefined;
-    const date_to = searchParams.get('date_to') ?? undefined;
-    const tzRaw = searchParams.get('tz_offset_minutes');
-    const tzParsed = tzRaw !== null && tzRaw !== '' ? Number.parseInt(tzRaw, 10) : NaN;
-    const tz_offset_minutes = Number.isFinite(tzParsed) ? tzParsed : undefined;
-    return { page, limit, date_from, date_to, tz_offset_minutes };
-  }, [searchParams.toString()]);
 
   const load = useCallback(async () => {
     if (!allowed) return;
@@ -71,26 +72,19 @@ export default function ActiveLoansReportPage() {
     load();
   }, [allowed, load, router]);
 
-  const onPageChange = (page: number) => {
-    const p = new URLSearchParams(searchParams.toString());
-    p.set('page', String(page));
-    router.push(`${pathname}?${p.toString()}`);
-  };
-
-  const backHref = useMemo(() => {
-    const p = new URLSearchParams(searchParams.toString());
-    p.delete('page');
-    const s = p.toString();
-    return `/admin/dashboard/overview${s ? `?${s}` : ''}`;
-  }, [searchParams]);
-
   const columns: TableColumn<PlatformLoanRow>[] = [
     {
       key: 'disbursement_date',
       label: 'Disbursed',
       render: (v) => new Date(v as string).toLocaleDateString(),
     },
-    { key: 'status', label: 'Status' },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (value) => (
+        <span className="rounded px-2 py-1 text-xs font-medium capitalize bg-gray-100 text-gray-800">{String(value)}</span>
+      ),
+    },
     {
       key: 'principal',
       label: 'Principal',
@@ -108,33 +102,54 @@ export default function ActiveLoansReportPage() {
   if (!allowed) return null;
 
   if (loading && rows.length === 0) {
-    return (
-      <PlatformDrilldownShell title="Active loans" backHref={backHref}>
-        <ListPageSkeleton title="" filterFields={0} tableRows={8} tableCols={6} />
-      </PlatformDrilldownShell>
-    );
+    return <ListPageSkeleton title="Active loans" filterFields={4} tableRows={10} tableCols={6} />;
   }
 
   return (
-    <PlatformDrilldownShell
-      title="Active loans (portfolio)"
-      periodLabel="All loans with status active, platform-wide."
-      backHref={backHref}
+    <AdminReportListChrome
+      title="Active loans"
+      backHref={backToOverviewHref}
+      periodHint="Portfolio view: all loans with status active (date filters do not apply)."
+      showDateFilters={false}
+      pageSize={filterInputs.pageSize}
+      onPageSizeChange={setPageSize}
+      onClearFilters={clearFilters}
+      exportFilename={`active-loans-${new Date().toISOString().split('T')[0]}.csv`}
+      exportColumns={loanExportColumns}
+      exportRows={rows}
     >
       {error ? (
-        <div className="rounded-sm border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{error}</div>
+        <div className="rounded-sm border border-red-200 bg-red-50 p-4">
+          <p className="text-sm text-red-600">{error}</p>
+        </div>
       ) : null}
-      <div className="overflow-x-auto rounded-sm border border-gray-200 bg-white">
-        <DataTable columns={columns} data={rows} loading={loading} showRowNumbers emptyMessage="No active loans." />
-      </div>
-      <Pagination
-        currentPage={pagination.page}
-        totalPages={pagination.totalPages}
-        totalItems={pagination.total}
-        pageSize={pagination.limit}
-        itemLabel="loans"
-        onPageChange={onPageChange}
-      />
-    </PlatformDrilldownShell>
+
+      {loading && rows.length > 0 ? (
+        <p className="text-xs text-gray-500" aria-live="polite">
+          Updating results…
+        </p>
+      ) : null}
+
+      <DataTable columns={columns} data={rows} loading={loading && rows.length === 0} showRowNumbers emptyMessage="No active loans." />
+
+      {pagination.total > 0 ? (
+        <Pagination
+          currentPage={pagination.page}
+          totalPages={pagination.totalPages}
+          totalItems={pagination.total}
+          pageSize={pagination.limit}
+          itemLabel="loans"
+          onPageChange={setPage}
+        />
+      ) : null}
+    </AdminReportListChrome>
+  );
+}
+
+export default function ActiveLoansReportPage() {
+  return (
+    <Suspense fallback={<ListPageSkeleton title="Active loans" filterFields={4} tableRows={10} tableCols={6} />}>
+      <ActiveLoansReportInner />
+    </Suspense>
   );
 }
