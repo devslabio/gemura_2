@@ -4,10 +4,10 @@
   "description": "Gemura Backend API - NestJS with PostgreSQL",
   "main": "dist/main.js",
   "scripts": {
-    "build": "nest build",
+    "build": "rm -f tsconfig.build.tsbuildinfo && prisma generate && nest build",
     "start": "nest start",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/main.js",
     "test": "jest",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import Icon, {
   faBuilding,
   faChartLine,
@@ -15,6 +16,8 @@ import Icon, {
   faChevronDown,
 } from '@/app/components/Icon';
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
+import { supervisorApi, type SupervisorAccountRow, type SupervisorScope } from '@/lib/api/supervisor';
+import { useAuthStore } from '@/store/auth';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
 
@@ -226,22 +229,26 @@ function KpiStrip({
   accent: 'blue' | 'green' | 'amber' | 'red' | 'slate';
 }) {
   const map = {
-    blue: 'border-blue-100 bg-blue-50/80 text-blue-900',
-    green: 'border-emerald-100 bg-emerald-50/80 text-emerald-900',
-    amber: 'border-amber-100 bg-amber-50/80 text-amber-900',
-    red: 'border-red-100 bg-red-50/80 text-red-900',
-    slate: 'border-gray-200 bg-gray-50/90 text-gray-900',
-  };
+    blue: { bg: '#eff6ff', fg: '#004AAD' },
+    green: { bg: '#dcfce7', fg: '#059669' },
+    amber: { bg: '#fef3c7', fg: '#b45309' },
+    red: { bg: '#fee2e2', fg: '#b91c1c' },
+    slate: { bg: '#f1f5f9', fg: '#475569' },
+  } as const;
+  const accentMeta = map[accent];
   return (
-    <div className={`rounded-sm border p-3 min-w-0 ${map[accent]}`}>
-      <div className="flex items-start justify-between gap-1">
+    <div className="rounded-sm border border-gray-200 bg-white p-4 min-h-[104px] min-w-0 hover:border-gray-300 transition-colors">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="text-[9px] font-semibold uppercase tracking-wide opacity-75 mb-0.5 truncate">{label}</div>
-          <div className="text-lg font-bold leading-tight truncate">{value}</div>
-          <div className="text-[10px] mt-0.5 opacity-90 leading-snug break-words">{sub}</div>
-          {trend ? <div className="text-[10px] font-medium text-emerald-700 mt-0.5">{trend}</div> : null}
+          <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-500 truncate">{label}</div>
+          <div className="text-xl sm:text-2xl font-bold tabular-nums text-gray-900 truncate">{value}</div>
+          <div className="mt-1.5 text-xs text-gray-600 line-clamp-2">{sub}</div>
+          {trend ? <div className="mt-1 text-xs font-medium text-emerald-700 truncate">{trend}</div> : null}
         </div>
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/70 text-[var(--primary)] border border-black/5">
+        <div
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+          style={{ backgroundColor: accentMeta.bg, color: accentMeta.fg }}
+        >
           <Icon icon={icon} size="sm" />
         </div>
       </div>
@@ -263,16 +270,35 @@ function ProgressCell({ pct, color }: { pct: number; color?: 'blue' | 'amber' | 
 }
 
 export interface RegionalSupervisorDashboardProps {
-  regionName?: string;
-  districtCount?: number;
-  mccCount?: number;
+  regionName?: string; // legacy mock prop (ignored once dynamic)
+  districtCount?: number; // legacy mock prop (ignored once dynamic)
+  mccCount?: number; // legacy mock prop (ignored once dynamic)
 }
 
 export default function RegionalSupervisorDashboard({
-  regionName = 'Eastern Region',
-  districtCount = 5,
-  mccCount = 5,
+  regionName: _regionName = 'Eastern Region',
+  districtCount: _districtCount = 5,
+  mccCount: _mccCount = 5,
 }: RegionalSupervisorDashboardProps) {
+  const searchParams = useSearchParams();
+  const regionId = searchParams?.get('region_id')?.trim() || '';
+  const districtId = searchParams?.get('district_id')?.trim() || '';
+  const apiAccountId = useAuthStore((s) => s.currentAccount?.account_id?.trim()) || undefined;
+
+  const [scope, setScope] = useState<SupervisorScope | null>(null);
+  const [summary, setSummary] = useState<{
+    mcc_count: number;
+    members: number;
+    suppliers: number;
+    customers: number;
+    farms: number;
+    sales: number;
+    collections: number;
+  } | null>(null);
+  const [accounts, setAccounts] = useState<SupervisorAccountRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
   const [visitTab, setVisitTab] = useState(0);
   const filteredVisits = useMemo(() => {
     if (visitTab === 0) return VISITS;
@@ -314,58 +340,99 @@ export default function RegionalSupervisorDashboard({
   const pinColor = (tone: 'good' | 'fair' | 'at_risk') =>
     tone === 'good' ? 'bg-emerald-500' : tone === 'fair' ? 'bg-amber-500' : 'bg-red-500';
 
+  const effectiveDistrictCount = useMemo(() => {
+    if (!scope) return 0;
+    if (districtId) return 1;
+    if (regionId) return scope.districts.filter((d) => d.province_id === regionId).length;
+    return scope.districts.length;
+  }, [scope, regionId, districtId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    const accountParams = apiAccountId ? { account_id: apiAccountId } : {};
+    Promise.all([
+      supervisorApi.getScope(accountParams),
+      supervisorApi.getSummary({
+        ...accountParams,
+        region_id: regionId || undefined,
+        district_location_id: districtId || undefined,
+      }),
+      supervisorApi.getAccounts({
+        ...accountParams,
+        limit: 50,
+        account_type: 'tenant',
+        region_id: regionId || undefined,
+        district_location_id: districtId || undefined,
+      }),
+    ])
+      .then(([scopeRes, summaryRes, accountsRes]) => {
+        if (cancelled) return;
+        setScope(scopeRes.code === 200 ? scopeRes.data : null);
+        setSummary(summaryRes.code === 200 ? summaryRes.data : null);
+        setAccounts(accountsRes.code === 200 ? accountsRes.data.rows : []);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const msg =
+          (e as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ??
+          (e as Error)?.message ??
+          'Failed to load supervisor dashboard';
+        setError(msg);
+        setScope(null);
+        setSummary(null);
+        setAccounts([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [regionId, districtId, apiAccountId]);
+
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="flex flex-wrap items-end justify-between gap-3 rounded-sm border border-gray-200 bg-white p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Region</label>
-            <select className="min-w-[10rem] rounded-sm border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]">
-              <option>{regionName}</option>
-              <option>Northern Region</option>
-              <option>Southern Region</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">District</label>
-            <select className="min-w-[10rem] rounded-sm border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]">
-              <option>All districts</option>
-              <option>Musanze</option>
-              <option>Rwamagana</option>
-              <option>Kirehe</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-[10px] font-semibold uppercase text-gray-500 mb-1">Date range</label>
-            <select className="min-w-[11rem] rounded-sm border border-gray-300 bg-white px-2 py-1.5 text-sm text-gray-900 focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]">
-              <option>May 4 – May 17, 2025</option>
-              <option>Last 30 days</option>
-              <option>This quarter</option>
-            </select>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-sm border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-        >
-          <Icon icon={faDownload} size="sm" />
-          Download
-          <Icon icon={faChevronDown} className="text-gray-400" size="xs" />
-        </button>
-      </div>
+      {error ? (
+        <div className="rounded-sm border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-900">{error}</div>
+      ) : null}
 
       {/* KPI strip */}
-      <div className="max-h-[min(38vh,16rem)] overflow-y-auto overflow-x-hidden overscroll-y-contain -mr-1 pr-1">
-        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
-          <KpiStrip label="MCCs under supervision" value={String(mccCount)} sub="Active" trend="+0 vs last week" icon={faBuilding} accent="blue" />
-          <KpiStrip label="Total litres today" value="27,642 L" sub="Aggregated gate + collections" trend="+8.3% vs yesterday" icon={faChartLine} accent="green" />
-          <KpiStrip label="Avg manifest compliance" value="87%" sub="Across supervised MCCs" trend="+1.2% vs prior week" icon={faClipboardList} accent="blue" />
-          <KpiStrip label="Avg rejection rate" value="2.6%" sub="Quality-weighted" trend="−0.4% vs yesterday" icon={faTriangleExclamation} accent="amber" />
-          <KpiStrip label="MCCs &gt;85% tank" value="3 / 5" sub="60% of MCCs" trend="Watch Kirehe" icon={faBuilding} accent="amber" />
-          <KpiStrip label="Unresolved rejections" value="26" sub="Region total" trend="4 due within 48h" icon={faTriangleExclamation} accent="red" />
-          <KpiStrip label="Staff coverage" value="91%" sub="Scheduled vs on duty" trend="+2% vs yesterday" icon={faUserFriends} accent="green" />
-          <KpiStrip label="Open field actions" value="34" sub="Tasks & interventions" trend="12 high priority" icon={faClipboardList} accent="slate" />
+      <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <KpiStrip
+            label="MCCs in scope"
+            value={loading ? '—' : String(summary?.mcc_count ?? 0)}
+            sub={`${effectiveDistrictCount} districts`}
+            icon={faBuilding}
+            accent="blue"
+          />
+          <KpiStrip
+            label="Members"
+            value={loading ? '—' : String(summary?.members ?? 0)}
+            sub="Active memberships"
+            icon={faUserFriends}
+            accent="slate"
+          />
+          <KpiStrip
+            label="Milk sales (count)"
+            value={loading ? '—' : String(summary?.sales ?? 0)}
+            sub="Transactions as supplier"
+            icon={faChartLine}
+            accent="green"
+          />
+          <KpiStrip
+            label="Milk collections (count)"
+            value={loading ? '—' : String(summary?.collections ?? 0)}
+            sub="Transactions as customer"
+            icon={faClipboardList}
+            accent="blue"
+          />
+          <KpiStrip label="Avg manifest compliance" value="—" sub="Mock" icon={faClipboardList} accent="amber" />
+          <KpiStrip label="Avg rejection rate" value="—" sub="Mock" icon={faTriangleExclamation} accent="amber" />
+          <KpiStrip label="Tank utilization" value="—" sub="Mock" icon={faBuilding} accent="amber" />
+          <KpiStrip label="Open field actions" value="—" sub="Mock" icon={faClipboardList} accent="slate" />
         </div>
       </div>
 
@@ -374,38 +441,46 @@ export default function RegionalSupervisorDashboard({
         <section className={`${PANEL} xl:col-span-5 min-h-0`}>
           <SectionHeader number={1} title="MCC portfolio snapshot" />
           <div className={`min-h-0 -mx-1 ${SCROLL_TABLE}`}>
-            <table className="w-full min-w-[520px]">
+            <table className="w-full min-w-[640px]">
               <thead>
                 <tr>
-                  <th className={TH}>MCC</th>
-                  <th className={`${TH} text-right`}>Total (L)</th>
-                  <th className={TH}>14d trend</th>
-                  <th className={TH}>Manifest</th>
-                  <th className={`${TH} text-right`}>Reject %</th>
-                  <th className={TH}>Tank</th>
-                  <th className={TH}>Status</th>
+                  <th className={`${TH} min-w-[14rem]`}>MCC</th>
+                  <th className={`${TH} text-right`}>Members</th>
+                  <th className={`${TH} text-right`}>Sales</th>
+                  <th className={`${TH} text-right`}>Collections</th>
+                  <th className={`${TH} text-right`}>Farms</th>
+                  <th className={TH}>District</th>
                 </tr>
               </thead>
               <tbody>
-                {MCC_PORTFOLIO.map((row) => (
-                  <tr key={row.id} className="hover:bg-gray-50/80">
-                    <td className={`${TD} font-medium`}>{row.name}</td>
-                    <td className={`${TD} text-right tabular-nums`}>{row.litres.toLocaleString()}</td>
-                    <td className={TD}>
-                      <MiniSparkline values={row.spark} />
-                    </td>
-                    <td className={TD}>
-                      <ProgressCell pct={row.manifestPct} color={row.manifestPct >= 88 ? 'blue' : 'amber'} />
-                    </td>
-                    <td className={`${TD} text-right tabular-nums`}>{row.rejectPct}%</td>
-                    <td className={TD}>
-                      <ProgressCell pct={row.tankPct} color={row.tankPct >= 85 ? 'red' : 'blue'} />
-                    </td>
-                    <td className={TD}>
-                      <StatusPill kind={row.status} />
+                {accounts.length === 0 ? (
+                  <tr>
+                    <td className={`${TD_MUTED}`} colSpan={6}>
+                      {loading ? 'Loading…' : 'No MCCs found in this scope.'}
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  accounts.map((row) => {
+                    const m = row.stats ?? {
+                      members: 0,
+                      suppliers: 0,
+                      customers: 0,
+                      sales: 0,
+                      collections: 0,
+                      farms: 0,
+                    };
+                    return (
+                    <tr key={row.id} className="hover:bg-gray-50/80">
+                      <td className={`${TD} font-medium whitespace-nowrap`}>{row.name}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{m.members.toLocaleString()}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{m.sales.toLocaleString()}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{m.collections.toLocaleString()}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{m.farms.toLocaleString()}</td>
+                      <td className={`${TD} text-gray-700`}>{row.operational_district_label || '—'}</td>
+                    </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -415,8 +490,15 @@ export default function RegionalSupervisorDashboard({
         </section>
 
         <section className={`${PANEL} xl:col-span-4 min-h-0`}>
-          <SectionHeader number={2} title="Regional map / coverage" />
-          <p className="text-xs text-gray-500 mb-2">{districtCount} districts · {mccCount} MCCs · status by location</p>
+          <div className="flex items-center justify-between gap-2">
+            <SectionHeader number={2} title="Regional map / coverage" />
+            <span className="inline-flex items-center rounded-sm border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900">
+              Mock
+            </span>
+          </div>
+          <p className="text-xs text-gray-500 mb-2">
+            {effectiveDistrictCount} districts · {summary?.mcc_count ?? 0} MCCs · status by location
+          </p>
           <div className="relative h-56 rounded-sm border border-gray-200 bg-gradient-to-br from-sky-50 via-emerald-50/40 to-amber-50/30 overflow-hidden">
             <div className="absolute inset-2 rounded-sm border border-dashed border-gray-300/60" />
             {MAP_PINS.map((p) => (

@@ -31,9 +31,9 @@ const SPLIT_DIRECT = '#059669';
 const SPLIT_UMUCUNDA = '#004AAD';
 
 const PANEL =
-  'bg-white border border-gray-200 rounded-sm p-5 min-h-0 h-full flex flex-col';
-const PANEL_TITLE = 'text-sm font-semibold text-gray-900';
-const PANEL_DESC = 'text-xs text-gray-500 mt-1 mb-4';
+  'bg-white border border-gray-200 rounded-sm p-6 sm:p-7 min-h-0 h-full flex flex-col';
+const PANEL_TITLE = 'text-base font-semibold text-gray-900';
+const PANEL_DESC = 'text-sm text-gray-500 mt-1.5 mb-5';
 const TH = 'text-left py-2 px-3 text-[11px] font-medium text-gray-700 border-b border-gray-200 whitespace-nowrap';
 const TD = 'py-2.5 px-3 text-[13px] text-gray-900 border-b border-gray-100 align-middle whitespace-nowrap';
 const TD_MUTED = 'py-2.5 px-3 text-[13px] text-gray-600 border-b border-gray-100 align-middle whitespace-nowrap';
@@ -179,28 +179,33 @@ function KpiTile({
     <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="mb-1 text-[11px] font-semibold text-gray-500 truncate">{label}</p>
-          <p className="text-[52px] sm:text-[60px] font-black leading-none text-slate-950 tracking-tight whitespace-nowrap">{value}</p>
-          <p className="mt-1.5 text-[8px] font-normal leading-tight text-gray-500 line-clamp-2">{sub}</p>
+          <p className="mb-1 text-xs font-semibold text-gray-500 truncate">{label}</p>
+          <p className="font-black leading-none text-slate-950 tracking-tight whitespace-nowrap text-[clamp(2.2rem,3.8vw,3.6rem)]">
+            {value}
+          </p>
+          <p className="mt-2 text-[11px] font-normal leading-snug text-gray-500 line-clamp-2">{sub}</p>
         </div>
         <div
-          className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-lg border border-black/5"
+          className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-xl border border-black/5"
           style={{ backgroundColor: iconAccents[accent].bg, color: iconAccents[accent].fg }}
         >
-          <Icon icon={icon} size="sm" />
+          <Icon icon={icon} size="lg" />
         </div>
       </div>
     </>
   );
   if (href) {
     return (
-      <Link href={href} className="block rounded-sm border border-gray-200 bg-white p-4 min-h-[96px] min-w-0 transition-colors hover:border-gray-300">
+      <Link
+        href={href}
+        className="block rounded-sm border border-gray-200 bg-white p-5 sm:p-6 min-h-[120px] min-w-0 transition-colors hover:border-gray-300"
+      >
         {content}
       </Link>
     );
   }
   return (
-    <div className="rounded-sm border border-gray-200 bg-white p-4 min-h-[96px] min-w-0 transition-colors hover:border-gray-300">
+    <div className="rounded-sm border border-gray-200 bg-white p-5 sm:p-6 min-h-[120px] min-w-0 transition-colors hover:border-gray-300">
       {content}
     </div>
   );

@@ -1,7 +1,21 @@
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-// Production backend. Set NEXT_PUBLIC_API_URL to use local (e.g. http://localhost:3004/api) or another host.
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://159.198.65.38:3004/api';
+/**
+ * API base URL. Prefer `NEXT_PUBLIC_API_URL` in `.env.local`.
+ * - In `next dev`, when unset, use same-origin `/api` so `next.config` rewrites proxy to Nest (port 3004).
+ * - In production builds, when unset, fall back to the hosted API (set env in real deployments).
+ */
+function resolveApiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (process.env.NODE_ENV === 'development') {
+    return '/api';
+  }
+  return 'http://159.198.65.38:3004/api';
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
 
 class ApiClient {
   private client: AxiosInstance;

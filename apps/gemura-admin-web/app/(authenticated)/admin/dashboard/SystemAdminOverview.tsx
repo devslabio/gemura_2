@@ -412,7 +412,11 @@ export default function SystemAdminOverview({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{k.label}</div>
-                  <div className="text-2xl font-bold tabular-nums text-gray-900">{k.value}</div>
+                  <div className="min-w-0">
+                    <div className="truncate whitespace-nowrap font-bold tabular-nums leading-none text-gray-900 text-[clamp(0.95rem,1.6vw,1.35rem)]">
+                      {k.value}
+                    </div>
+                  </div>
                   {k.trend ? (
                     <div
                       className={`mt-1.5 text-[11px] font-medium leading-snug ${
