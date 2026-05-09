@@ -242,7 +242,7 @@ export default function UsersPage() {
   };
 
   if (loading && users.length === 0 && !hasLoadedRef.current) {
-    return <ListPageSkeleton title="Users" filterFields={4} tableRows={10} tableCols={13} />;
+    return <ListPageSkeleton title="Users" filterFields={4} tableRows={10} tableCols={8} />;
   }
 
   const columns: TableColumn<UserListItem>[] = [
@@ -263,36 +263,6 @@ export default function UsersPage() {
       key: 'role',
       label: 'Role',
       render: (value) => <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-medium capitalize">{value || 'N/A'}</span>,
-    },
-    {
-      key: 'suppliers',
-      label: 'Suppliers',
-      sortable: true,
-      render: (_, row) => row.stats?.suppliers ?? 0,
-    },
-    {
-      key: 'customers',
-      label: 'Customers',
-      sortable: true,
-      render: (_, row) => row.stats?.customers ?? 0,
-    },
-    {
-      key: 'sales',
-      label: 'Sales',
-      sortable: true,
-      render: (_, row) => row.stats?.sales ?? 0,
-    },
-    {
-      key: 'collections',
-      label: 'Collections',
-      sortable: true,
-      render: (_, row) => row.stats?.collections ?? 0,
-    },
-    {
-      key: 'farms',
-      label: 'Farms',
-      sortable: true,
-      render: (_, row) => row.stats?.farms ?? 0,
     },
     {
       key: 'status',

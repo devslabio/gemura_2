@@ -31,6 +31,7 @@ import { CreatePlatformRoleDto } from './dto/create-platform-role.dto';
 import { UpdatePlatformRoleDto } from './dto/update-platform-role.dto';
 import { AssignUserAccountMembershipDto } from './dto/assign-user-account-membership.dto';
 import { UpdateAccountOperationalLocationDto } from './dto/update-account-operational-location.dto';
+import { UpdateTenantAccountOperationalMetricsDto } from './dto/update-tenant-account-operational-metrics.dto';
 import { SetRegionalSupervisorScopeDto } from './dto/set-regional-supervisor-scope.dto';
 
 @ApiTags('Admin')
@@ -925,6 +926,24 @@ export class AdminController {
     return this.adminService.updateAccountOperationalLocationForAdmin(user, accountId, targetAccountId, dto);
   }
 
+  @Put('tenant-accounts/:accountId/operational-metrics')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'Update MCC operational profile, facility snapshot, and/or cooling tanks',
+    description:
+      'Partial update for account-scoped metrics (omit sections you do not want to change). Sending cooling_tanks replaces all tank rows for the account.',
+  })
+  @ApiParam({ name: 'accountId', description: 'Account UUID.' })
+  @ApiBody({ type: UpdateTenantAccountOperationalMetricsDto })
+  async updateTenantAccountOperationalMetrics(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Param('accountId') targetAccountId: string,
+    @Body() dto: UpdateTenantAccountOperationalMetricsDto,
+  ) {
+    return this.adminService.updateTenantAccountOperationalMetricsForAdmin(user, accountId, targetAccountId, dto);
+  }
+
   @Get('users/:userId/regional-supervisor-scope')
   @RequirePermission('manage_users')
   @ApiOperation({ summary: 'List district scope for a regional supervisor user' })
@@ -1209,7 +1228,11 @@ export class AdminController {
   @ApiQuery({ name: 'date_to', required: false })
   @ApiQuery({ name: 'supplier_name', required: false })
   @ApiQuery({ name: 'customer_account_code', required: false })
-  @ApiQuery({ name: 'search', required: false, description: 'For resource=members: filters by name, email, or phone' })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'For resource=members: match name, email, or phone (case-insensitive).',
+  })
   @ApiResponse({ status: 200, description: 'User business records retrieved successfully.' })
   async getUserBusinessRecords(
     @CurrentUser() user: User,

@@ -38,6 +38,12 @@ import { AssignUserAccountMembershipDto } from './dto/assign-user-account-member
 import { UpdateOnboardingOperationalConfigDto } from './dto/update-onboarding-operational-config.dto';
 import { UpdateAccountOperationalLocationDto } from './dto/update-account-operational-location.dto';
 import { SetRegionalSupervisorScopeDto } from './dto/set-regional-supervisor-scope.dto';
+import {
+  CoolingTankRowDto,
+  FacilitySnapshotPatchDto,
+  TenantOperationalProfilePatchDto,
+  UpdateTenantAccountOperationalMetricsDto,
+} from './dto/update-tenant-account-operational-metrics.dto';
 
 export type UserActivityMetric =
   | 'suppliers'
@@ -123,6 +129,101 @@ export class AdminService {
   private normalizeGroupCount(row: { _count?: number | { _all?: number } }): number {
     if (typeof row._count === 'number') return row._count;
     return row._count?._all ?? 0;
+  }
+
+  /** Business volumes keyed by account id (tenant/MCC operational context). */
+  private async getBusinessMetricsByAccountId(accountIds: string[]): Promise<
+    Record<
+      string,
+      {
+        members: number;
+        suppliers: number;
+        customers: number;
+        sales: number;
+        collections: number;
+        farms: number;
+      }
+    >
+  > {
+    const ids = [...new Set(accountIds.filter(Boolean))];
+    const emptyStat = () => ({
+      members: 0,
+      suppliers: 0,
+      customers: 0,
+      sales: 0,
+      collections: 0,
+      farms: 0,
+    });
+    const out: Record<string, ReturnType<typeof emptyStat>> = {};
+    for (const id of ids) out[id] = emptyStat();
+    if (ids.length === 0) return out;
+
+    const [
+      membersByAccount,
+      suppliersByCustomerAccount,
+      customersBySupplierAccount,
+      salesBySupplierAccount,
+      collectionsByCustomerAccount,
+      farmsByAccount,
+    ] = await Promise.all([
+      this.prisma.userAccount.groupBy({
+        by: ['account_id'],
+        where: { account_id: { in: ids }, status: 'active' },
+        _count: true,
+      }),
+      this.prisma.supplierCustomer.groupBy({
+        by: ['customer_account_id'],
+        where: { customer_account_id: { in: ids }, relationship_status: 'active' },
+        _count: true,
+      }),
+      this.prisma.supplierCustomer.groupBy({
+        by: ['supplier_account_id'],
+        where: { supplier_account_id: { in: ids }, relationship_status: 'active' },
+        _count: true,
+      }),
+      this.prisma.milkSale.groupBy({
+        by: ['supplier_account_id'],
+        where: { supplier_account_id: { in: ids }, status: { not: 'deleted' } },
+        _count: true,
+      }),
+      this.prisma.milkSale.groupBy({
+        by: ['customer_account_id'],
+        where: { customer_account_id: { in: ids }, status: { not: 'deleted' } },
+        _count: true,
+      }),
+      this.prisma.farm.groupBy({
+        by: ['account_id'],
+        where: { account_id: { in: ids } },
+        _count: true,
+      }),
+    ]);
+
+    const membersByAccountId = new Map(membersByAccount.map((row) => [row.account_id, this.normalizeGroupCount(row)]));
+    const suppliersByAccountId = new Map(
+      suppliersByCustomerAccount.map((row) => [row.customer_account_id, this.normalizeGroupCount(row)]),
+    );
+    const customersByAccountId = new Map(
+      customersBySupplierAccount.map((row) => [row.supplier_account_id, this.normalizeGroupCount(row)]),
+    );
+    const salesByAccountId = new Map(
+      salesBySupplierAccount.map((row) => [row.supplier_account_id, this.normalizeGroupCount(row)]),
+    );
+    const collectionsByAccountId = new Map(
+      collectionsByCustomerAccount.map((row) => [row.customer_account_id, this.normalizeGroupCount(row)]),
+    );
+    const farmsByAccountId = new Map(farmsByAccount.map((row) => [row.account_id, this.normalizeGroupCount(row)]));
+
+    for (const id of ids) {
+      out[id] = {
+        members: membersByAccountId.get(id) ?? 0,
+        suppliers: suppliersByAccountId.get(id) ?? 0,
+        customers: customersByAccountId.get(id) ?? 0,
+        sales: salesByAccountId.get(id) ?? 0,
+        collections: collectionsByAccountId.get(id) ?? 0,
+        farms: farmsByAccountId.get(id) ?? 0,
+      };
+    }
+    return out;
   }
 
   private asRecord(value: unknown): Record<string, unknown> {
@@ -327,81 +428,7 @@ export class AdminService {
       return empty;
     }
 
-    const [
-      membersByAccount,
-      suppliersByCustomerAccount,
-      customersBySupplierAccount,
-      salesBySupplierAccount,
-      collectionsByCustomerAccount,
-      farmsByAccount,
-    ] = await Promise.all([
-      this.prisma.userAccount.groupBy({
-        by: ['account_id'],
-        where: {
-          account_id: { in: accountIds },
-          status: 'active',
-        },
-        _count: true,
-      }),
-      this.prisma.supplierCustomer.groupBy({
-        by: ['customer_account_id'],
-        where: {
-          customer_account_id: { in: accountIds },
-          relationship_status: 'active',
-        },
-        _count: true,
-      }),
-      this.prisma.supplierCustomer.groupBy({
-        by: ['supplier_account_id'],
-        where: {
-          supplier_account_id: { in: accountIds },
-          relationship_status: 'active',
-        },
-        _count: true,
-      }),
-      this.prisma.milkSale.groupBy({
-        by: ['supplier_account_id'],
-        where: {
-          supplier_account_id: { in: accountIds },
-          status: { not: 'deleted' },
-        },
-        _count: true,
-      }),
-      this.prisma.milkSale.groupBy({
-        by: ['customer_account_id'],
-        where: {
-          customer_account_id: { in: accountIds },
-          status: { not: 'deleted' },
-        },
-        _count: true,
-      }),
-      this.prisma.farm.groupBy({
-        by: ['account_id'],
-        where: {
-          account_id: { in: accountIds },
-        },
-        _count: true,
-      }),
-    ]);
-
-    const suppliersByAccountId = new Map(
-      suppliersByCustomerAccount.map((row) => [row.customer_account_id, this.normalizeGroupCount(row)]),
-    );
-    const membersByAccountId = new Map(
-      membersByAccount.map((row) => [row.account_id, this.normalizeGroupCount(row)]),
-    );
-    const customersByAccountId = new Map(
-      customersBySupplierAccount.map((row) => [row.supplier_account_id, this.normalizeGroupCount(row)]),
-    );
-    const salesByAccountId = new Map(
-      salesBySupplierAccount.map((row) => [row.supplier_account_id, this.normalizeGroupCount(row)]),
-    );
-    const collectionsByAccountId = new Map(
-      collectionsByCustomerAccount.map((row) => [row.customer_account_id, this.normalizeGroupCount(row)]),
-    );
-    const farmsByAccountId = new Map(
-      farmsByAccount.map((row) => [row.account_id, this.normalizeGroupCount(row)]),
-    );
+    const metricsByAccount = await this.getBusinessMetricsByAccountId(accountIds);
 
     const accountIdsByUserId = new Map<string, Set<string>>();
     for (const row of userAccounts) {
@@ -415,12 +442,14 @@ export class AdminService {
       empty[userId].accounts = accountSet.size;
 
       for (const linkedAccountId of accountSet) {
-        empty[userId].members += membersByAccountId.get(linkedAccountId) ?? 0;
-        empty[userId].suppliers += suppliersByAccountId.get(linkedAccountId) ?? 0;
-        empty[userId].customers += customersByAccountId.get(linkedAccountId) ?? 0;
-        empty[userId].sales += salesByAccountId.get(linkedAccountId) ?? 0;
-        empty[userId].collections += collectionsByAccountId.get(linkedAccountId) ?? 0;
-        empty[userId].farms += farmsByAccountId.get(linkedAccountId) ?? 0;
+        const m = metricsByAccount[linkedAccountId];
+        if (!m) continue;
+        empty[userId].members += m.members;
+        empty[userId].suppliers += m.suppliers;
+        empty[userId].customers += m.customers;
+        empty[userId].sales += m.sales;
+        empty[userId].collections += m.collections;
+        empty[userId].farms += m.farms;
       }
     }
 
@@ -608,8 +637,6 @@ export class AdminService {
       this.prisma.user.count({ where }),
     ]);
 
-    const statsByUserId = await this.getUserOperationalStats(users.map((u) => u.id));
-
     return {
       code: 200,
       status: 'success',
@@ -619,7 +646,6 @@ export class AdminService {
           ...u,
           role: u.user_accounts[0]?.role || null,
           permissions: u.user_accounts[0]?.permissions || null,
-          stats: statsByUserId[u.id],
         })),
         pagination: {
           page,
@@ -1223,6 +1249,7 @@ export class AdminService {
       date_to?: string;
       supplier_name?: string;
       customer_account_code?: string;
+      /** Full-text-ish match on user name, email, phone (members resource only). */
       search?: string;
     },
   ) {
@@ -1304,10 +1331,27 @@ export class AdminService {
     }
 
     if (resource === 'members') {
+      const userWhere: Prisma.UserWhereInput = {};
+      if (filters.search?.trim()) {
+        const q = filters.search.trim();
+        userWhere.OR = [
+          { name: { contains: q, mode: 'insensitive' } },
+          { email: { contains: q, mode: 'insensitive' } },
+          { phone: { contains: q, mode: 'insensitive' } },
+        ];
+      }
+      if (filters.status?.trim()) {
+        const st = filters.status.trim().toLowerCase();
+        if (st === 'active' || st === 'inactive') {
+          userWhere.status = st;
+        }
+      }
+
       const rows = await this.prisma.userAccount.findMany({
         where: {
           account_id: opAccountId,
           status: 'active',
+          ...(Object.keys(userWhere).length > 0 ? { user: userWhere } : {}),
         },
         include: {
           user: {
@@ -2150,9 +2194,7 @@ export class AdminService {
       },
     });
 
-    const statsByUserId = await this.getUserOperationalStats(users.map((u) => u.id));
-
-    const headers = ['Name', 'Email', 'Phone', 'Account Type', 'Role', 'Members', 'Suppliers', 'Customers', 'Sales', 'Collections', 'Farms', 'Status', 'Created At'];
+    const headers = ['Name', 'Email', 'Phone', 'Account Type', 'Role', 'Status', 'Created At'];
 
     const escape = (v: unknown): string => {
       if (v === null || v === undefined) return '';
@@ -2166,19 +2208,12 @@ export class AdminService {
     const csvRows = [
       headers.join(','),
       ...users.map((u) => {
-        const stats = statsByUserId[u.id] ?? { members: 0, suppliers: 0, customers: 0, sales: 0, collections: 0, farms: 0 };
         return [
           escape(u.name),
           escape(u.email),
           escape(u.phone),
           escape(u.account_type),
           escape(u.user_accounts[0]?.role ?? ''),
-          escape(stats.members),
-          escape(stats.suppliers),
-          escape(stats.customers),
-          escape(stats.sales),
-          escape(stats.collections),
-          escape(stats.farms),
           escape(u.status),
           escape(u.created_at.toISOString()),
         ].join(',');
@@ -4161,31 +4196,64 @@ export class AdminService {
     ]);
 
     const uniqueOpIds = [...new Set(rows.map((r) => r.operational_location_id).filter(Boolean))] as string[];
+    const uniqueDistrictIds = [...new Set(rows.map((r) => r.operational_district_id).filter(Boolean))] as string[];
+    const districtNameById = new Map(
+      uniqueDistrictIds.length
+        ? (
+            await this.prisma.location.findMany({
+              where: { id: { in: uniqueDistrictIds } },
+              select: { id: true, name: true },
+            })
+          ).map((loc) => [loc.id, loc.name] as const)
+        : [],
+    );
+
     const pathLabelByOpId = new Map<string, string>();
+    const districtNameByOperationalLocationId = new Map<string, string>();
     await Promise.all(
       uniqueOpIds.map(async (id) => {
         const path = await this.locationsService.getPath(id);
         pathLabelByOpId.set(id, this.locationPathLabel(path));
+        const dist = path.find((p) => p.location_type === 'DISTRICT');
+        if (dist?.name) districtNameByOperationalLocationId.set(id, dist.name);
       }),
     );
+
+    const metricsByAccountId = await this.getBusinessMetricsByAccountId(rows.map((r) => r.id));
+    const zeroStats = {
+      members: 0,
+      suppliers: 0,
+      customers: 0,
+      sales: 0,
+      collections: 0,
+      farms: 0,
+    };
 
     return {
       code: 200,
       status: 'success',
       message: 'Accounts retrieved.',
       data: {
-        rows: rows.map((r) => ({
-          id: r.id,
-          code: r.code,
-          name: r.name,
-          type: r.type,
-          status: r.status,
-          operational_location_id: r.operational_location_id,
-          operational_district_id: r.operational_district_id,
-          operational_location_label: r.operational_location_id
-            ? pathLabelByOpId.get(r.operational_location_id) ?? null
-            : null,
-        })),
+        rows: rows.map((r) => {
+          const districtLabel =
+            (r.operational_district_id ? districtNameById.get(r.operational_district_id) : undefined) ??
+            (r.operational_location_id ? districtNameByOperationalLocationId.get(r.operational_location_id) : undefined) ??
+            null;
+          return {
+            id: r.id,
+            code: r.code,
+            name: r.name,
+            type: r.type,
+            status: r.status,
+            operational_location_id: r.operational_location_id,
+            operational_district_id: r.operational_district_id,
+            operational_location_label: r.operational_location_id
+              ? pathLabelByOpId.get(r.operational_location_id) ?? null
+              : null,
+            operational_district_label: districtLabel,
+            stats: metricsByAccountId[r.id] ?? zeroStats,
+          };
+        }),
         pagination: {
           page: opts.page,
           limit: opts.limit,
@@ -4218,6 +4286,22 @@ export class AdminService {
       const path = await this.locationsService.getPath(row.operational_location_id);
       operational_location_label = this.locationPathLabel(path);
     }
+
+    const decNOrNull = (v: { toString(): string } | null | undefined): number | null => {
+      if (v == null) return null;
+      const n = Number(v.toString());
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const [operationalProfile, coolingTankProfiles, facilitySnapshot] = await Promise.all([
+      this.prisma.mccOperationalProfile.findUnique({ where: { account_id: targetAccountId } }),
+      this.prisma.mccCoolingTankProfile.findMany({
+        where: { account_id: targetAccountId },
+        orderBy: { created_at: 'asc' },
+      }),
+      this.prisma.mccFacilitySnapshot.findUnique({ where: { account_id: targetAccountId } }),
+    ]);
+
     return {
       code: 200,
       status: 'success',
@@ -4225,8 +4309,485 @@ export class AdminService {
       data: {
         ...row,
         operational_location_label,
+        operational_profile: operationalProfile
+          ? {
+              ...operationalProfile,
+              daily_milk_volume_litres: decNOrNull(operationalProfile.daily_milk_volume_litres),
+              max_milk_one_day_litres: decNOrNull(operationalProfile.max_milk_one_day_litres),
+              generator_capacity_kva: decNOrNull(operationalProfile.generator_capacity_kva),
+              average_distance_km: decNOrNull(operationalProfile.average_distance_km),
+              furthest_farm_km: decNOrNull(operationalProfile.furthest_farm_km),
+              average_annual_revenue_rwf: decNOrNull(operationalProfile.average_annual_revenue_rwf),
+              captured_at: operationalProfile.captured_at.toISOString(),
+              updated_at: operationalProfile.updated_at.toISOString(),
+            }
+          : null,
+        cooling_tank_profiles: coolingTankProfiles.map((t) => ({
+          ...t,
+          capacity_litres: decNOrNull(t.capacity_litres),
+          created_at: t.created_at.toISOString(),
+          updated_at: t.updated_at.toISOString(),
+        })),
+        facility_snapshot: facilitySnapshot
+          ? {
+              ...facilitySnapshot,
+              tank_used_litres: decNOrNull(facilitySnapshot.tank_used_litres),
+              tank_used_pct: decNOrNull(facilitySnapshot.tank_used_pct),
+              cooling_temperature_c: decNOrNull(facilitySnapshot.cooling_temperature_c),
+              generator_fuel_pct: decNOrNull(facilitySnapshot.generator_fuel_pct),
+              observed_at: facilitySnapshot.observed_at?.toISOString() ?? null,
+              updated_at: facilitySnapshot.updated_at.toISOString(),
+            }
+          : null,
       },
     };
+  }
+
+  async updateTenantAccountOperationalMetricsForAdmin(
+    user: User,
+    adminAccountId: string,
+    targetAccountId: string,
+    dto: UpdateTenantAccountOperationalMetricsDto,
+  ) {
+    await this.checkAdminPermission(user, adminAccountId);
+    const exists = await this.prisma.account.findFirst({ where: { id: targetAccountId }, select: { id: true } });
+    if (!exists) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'Account not found.', data: null });
+    }
+
+    const hasProfile = Object.prototype.hasOwnProperty.call(dto, 'profile') && dto.profile != null;
+    const hasSnapshot = Object.prototype.hasOwnProperty.call(dto, 'facility_snapshot') && dto.facility_snapshot != null;
+    const hasTanks = Object.prototype.hasOwnProperty.call(dto, 'cooling_tanks');
+
+    if (!hasProfile && !hasSnapshot && !hasTanks) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Provide at least one of profile, facility_snapshot, or cooling_tanks.',
+      });
+    }
+
+    if (hasProfile) await this.applyTenantOperationalProfilePatch(targetAccountId, dto.profile!);
+    if (hasSnapshot) await this.applyTenantFacilitySnapshotPatch(targetAccountId, dto.facility_snapshot!);
+    if (hasTanks) await this.replaceTenantCoolingTanks(targetAccountId, dto.cooling_tanks ?? []);
+
+    return this.getTenantAccountForAdmin(user, adminAccountId, targetAccountId);
+  }
+
+  private normalizeProfileStringField(label: string, value: unknown, maxLen: number): string | null {
+    if (value === undefined || value === null || value === '') return null;
+    const s = String(value);
+    if (s.length > maxLen) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: `${label} must be at most ${maxLen} characters.`,
+      });
+    }
+    return s;
+  }
+
+  private async applyTenantOperationalProfilePatch(accountId: string, dto: TenantOperationalProfilePatchDto): Promise<void> {
+    const hasKey = (key: keyof TenantOperationalProfilePatchDto) =>
+      Object.prototype.hasOwnProperty.call(dto, key);
+
+    const ensureRange = (label: string, value: number | null, min: number, max: number) => {
+      if (value == null) return;
+      if (value < min || value > max) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `${label} must be between ${min} and ${max}.`,
+        });
+      }
+    };
+
+    const updateData: Prisma.MccOperationalProfileUpdateInput = {};
+    const createData: Prisma.MccOperationalProfileCreateInput = {
+      account: { connect: { id: accountId } },
+    };
+
+    if (hasKey('expected_daily_deliveries')) {
+      const v =
+        dto.expected_daily_deliveries == null || dto.expected_daily_deliveries === ''
+          ? null
+          : this.asInt(dto.expected_daily_deliveries);
+      if (dto.expected_daily_deliveries != null && dto.expected_daily_deliveries !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'expected_daily_deliveries must be numeric.' });
+      }
+      ensureRange('expected_daily_deliveries', v, 0, 1000);
+      updateData.expected_daily_deliveries = v;
+      createData.expected_daily_deliveries = v;
+    }
+    if (hasKey('daily_milk_volume_litres')) {
+      const dec =
+        dto.daily_milk_volume_litres == null || dto.daily_milk_volume_litres === ''
+          ? null
+          : this.asDecimal(dto.daily_milk_volume_litres);
+      if (dto.daily_milk_volume_litres != null && dto.daily_milk_volume_litres !== '' && dec == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'daily_milk_volume_litres must be numeric.' });
+      }
+      ensureRange('daily_milk_volume_litres', dec != null ? Number(dec.toString()) : null, 0, 500_000);
+      updateData.daily_milk_volume_litres = dec;
+      createData.daily_milk_volume_litres = dec;
+    }
+    if (hasKey('max_milk_one_day_litres')) {
+      const dec =
+        dto.max_milk_one_day_litres == null || dto.max_milk_one_day_litres === ''
+          ? null
+          : this.asDecimal(dto.max_milk_one_day_litres);
+      if (dto.max_milk_one_day_litres != null && dto.max_milk_one_day_litres !== '' && dec == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'max_milk_one_day_litres must be numeric.' });
+      }
+      ensureRange('max_milk_one_day_litres', dec != null ? Number(dec.toString()) : null, 0, 500_000);
+      updateData.max_milk_one_day_litres = dec;
+      createData.max_milk_one_day_litres = dec;
+    }
+    if (hasKey('tank_capacity_sufficiency')) {
+      const v = this.normalizeProfileStringField('tank_capacity_sufficiency', dto.tank_capacity_sufficiency, 120);
+      updateData.tank_capacity_sufficiency = v;
+      createData.tank_capacity_sufficiency = v;
+    }
+    if (hasKey('insufficient_capacity_plan')) {
+      const v =
+        dto.insufficient_capacity_plan === undefined
+          ? undefined
+          : dto.insufficient_capacity_plan === null || dto.insufficient_capacity_plan === ''
+            ? null
+            : String(dto.insufficient_capacity_plan);
+      if (typeof v === 'string' && v.length > 20000) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'insufficient_capacity_plan is too long.' });
+      }
+      if (v !== undefined) {
+        updateData.insufficient_capacity_plan = v;
+        createData.insufficient_capacity_plan = v;
+      }
+    }
+    if (hasKey('power_supply_sources')) {
+      if (dto.power_supply_sources === null) {
+        updateData.power_supply_sources = Prisma.JsonNull;
+        createData.power_supply_sources = Prisma.JsonNull;
+      } else if (dto.power_supply_sources === undefined) {
+        /* skip */
+      } else if (typeof dto.power_supply_sources === 'object' && !Array.isArray(dto.power_supply_sources)) {
+        updateData.power_supply_sources = dto.power_supply_sources as Prisma.InputJsonValue;
+        createData.power_supply_sources = dto.power_supply_sources as Prisma.InputJsonValue;
+      } else {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'power_supply_sources must be a JSON object or null.' });
+      }
+    }
+    if (hasKey('generator_capacity_kva')) {
+      const dec =
+        dto.generator_capacity_kva == null || dto.generator_capacity_kva === ''
+          ? null
+          : this.asDecimal(dto.generator_capacity_kva);
+      if (dto.generator_capacity_kva != null && dto.generator_capacity_kva !== '' && dec == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'generator_capacity_kva must be numeric.' });
+      }
+      ensureRange('generator_capacity_kva', dec != null ? Number(dec.toString()) : null, 0, 50_000);
+      updateData.generator_capacity_kva = dec;
+      createData.generator_capacity_kva = dec;
+    }
+    if (hasKey('mobile_connectivity')) {
+      const v = this.normalizeProfileStringField('mobile_connectivity', dto.mobile_connectivity, 120);
+      updateData.mobile_connectivity = v;
+      createData.mobile_connectivity = v;
+    }
+    if (hasKey('total_farmers_supplying')) {
+      const v =
+        dto.total_farmers_supplying == null || dto.total_farmers_supplying === ''
+          ? null
+          : this.asInt(dto.total_farmers_supplying);
+      if (dto.total_farmers_supplying != null && dto.total_farmers_supplying !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'total_farmers_supplying must be numeric.' });
+      }
+      ensureRange('total_farmers_supplying', v, 0, 500_000);
+      updateData.total_farmers_supplying = v;
+      createData.total_farmers_supplying = v;
+    }
+    if (hasKey('new_farmers_last_3_months')) {
+      const v =
+        dto.new_farmers_last_3_months == null || dto.new_farmers_last_3_months === ''
+          ? null
+          : this.asInt(dto.new_farmers_last_3_months);
+      if (dto.new_farmers_last_3_months != null && dto.new_farmers_last_3_months !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'new_farmers_last_3_months must be numeric.' });
+      }
+      ensureRange('new_farmers_last_3_months', v, 0, 100_000);
+      updateData.new_farmers_last_3_months = v;
+      createData.new_farmers_last_3_months = v;
+    }
+    if (hasKey('milk_transporters_count')) {
+      const v =
+        dto.milk_transporters_count == null || dto.milk_transporters_count === ''
+          ? null
+          : this.asInt(dto.milk_transporters_count);
+      if (dto.milk_transporters_count != null && dto.milk_transporters_count !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'milk_transporters_count must be numeric.' });
+      }
+      ensureRange('milk_transporters_count', v, 0, 50_000);
+      updateData.milk_transporters_count = v;
+      createData.milk_transporters_count = v;
+    }
+    if (hasKey('average_distance_km')) {
+      const dec =
+        dto.average_distance_km == null || dto.average_distance_km === ''
+          ? null
+          : this.asDecimal(dto.average_distance_km);
+      if (dto.average_distance_km != null && dto.average_distance_km !== '' && dec == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'average_distance_km must be numeric.' });
+      }
+      ensureRange('average_distance_km', dec != null ? Number(dec.toString()) : null, 0, 10_000);
+      updateData.average_distance_km = dec;
+      createData.average_distance_km = dec;
+    }
+    if (hasKey('furthest_farm_km')) {
+      const dec =
+        dto.furthest_farm_km == null || dto.furthest_farm_km === '' ? null : this.asDecimal(dto.furthest_farm_km);
+      if (dto.furthest_farm_km != null && dto.furthest_farm_km !== '' && dec == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'furthest_farm_km must be numeric.' });
+      }
+      ensureRange('furthest_farm_km', dec != null ? Number(dec.toString()) : null, 0, 10_000);
+      updateData.furthest_farm_km = dec;
+      createData.furthest_farm_km = dec;
+    }
+    if (hasKey('evening_milk_pattern')) {
+      const v = this.normalizeProfileStringField('evening_milk_pattern', dto.evening_milk_pattern, 120);
+      updateData.evening_milk_pattern = v;
+      createData.evening_milk_pattern = v;
+    }
+    if (hasKey('own_milk_transport_type')) {
+      const v = this.normalizeProfileStringField('own_milk_transport_type', dto.own_milk_transport_type, 160);
+      updateData.own_milk_transport_type = v;
+      createData.own_milk_transport_type = v;
+    }
+    if (hasKey('record_system')) {
+      const v = this.normalizeProfileStringField('record_system', dto.record_system, 160);
+      updateData.record_system = v;
+      createData.record_system = v;
+    }
+    if (hasKey('avg_days_delivery_to_payment')) {
+      const v =
+        dto.avg_days_delivery_to_payment == null || dto.avg_days_delivery_to_payment === ''
+          ? null
+          : this.asInt(dto.avg_days_delivery_to_payment);
+      if (dto.avg_days_delivery_to_payment != null && dto.avg_days_delivery_to_payment !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'avg_days_delivery_to_payment must be numeric.' });
+      }
+      ensureRange('avg_days_delivery_to_payment', v, 0, 3650);
+      updateData.avg_days_delivery_to_payment = v;
+      createData.avg_days_delivery_to_payment = v;
+    }
+    if (hasKey('average_annual_revenue_rwf')) {
+      const dec =
+        dto.average_annual_revenue_rwf == null || dto.average_annual_revenue_rwf === ''
+          ? null
+          : this.asDecimal(dto.average_annual_revenue_rwf);
+      if (dto.average_annual_revenue_rwf != null && dto.average_annual_revenue_rwf !== '' && dec == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'average_annual_revenue_rwf must be numeric.' });
+      }
+      ensureRange('average_annual_revenue_rwf', dec != null ? Number(dec.toString()) : null, 0, 1e15);
+      updateData.average_annual_revenue_rwf = dec;
+      createData.average_annual_revenue_rwf = dec;
+    }
+    if (hasKey('main_buyer_name')) {
+      const v = this.normalizeProfileStringField('main_buyer_name', dto.main_buyer_name, 255);
+      updateData.main_buyer_name = v;
+      createData.main_buyer_name = v;
+    }
+    if (hasKey('formal_supply_agreement_details')) {
+      const v =
+        dto.formal_supply_agreement_details === undefined
+          ? undefined
+          : dto.formal_supply_agreement_details === null || dto.formal_supply_agreement_details === ''
+            ? null
+            : String(dto.formal_supply_agreement_details);
+      if (typeof v === 'string' && v.length > 20000) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'formal_supply_agreement_details is too long.' });
+      }
+      if (v !== undefined) {
+        updateData.formal_supply_agreement_details = v;
+        createData.formal_supply_agreement_details = v;
+      }
+    }
+
+    if (Object.keys(updateData).length === 0) return;
+
+    await this.prisma.mccOperationalProfile.upsert({
+      where: { account_id: accountId },
+      create: createData,
+      update: updateData,
+    });
+  }
+
+  private async applyTenantFacilitySnapshotPatch(accountId: string, dto: FacilitySnapshotPatchDto): Promise<void> {
+    const hasKey = (key: keyof FacilitySnapshotPatchDto) => Object.prototype.hasOwnProperty.call(dto, key);
+    const asFiniteNumber = (v: Prisma.Decimal | null): number | null => {
+      if (v == null) return null;
+      const n = Number(v.toString());
+      return Number.isFinite(n) ? n : null;
+    };
+    const ensureRange = (label: string, value: number | null, min: number, max: number) => {
+      if (value == null) return;
+      if (value < min || value > max) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `${label} must be between ${min} and ${max}.`,
+        });
+      }
+    };
+
+    const POWER = new Set(['grid', 'generator', 'solar', 'outage', 'unknown']);
+    const GEN = new Set(['available', 'running', 'fault', 'offline', 'unknown']);
+
+    const updateData: Prisma.MccFacilitySnapshotUpdateInput = { source: 'admin_manual' };
+    const createData: Prisma.MccFacilitySnapshotCreateInput = {
+      account: { connect: { id: accountId } },
+      source: 'admin_manual',
+    };
+
+    if (hasKey('tank_used_litres')) {
+      const v = dto.tank_used_litres == null || dto.tank_used_litres === '' ? null : this.asDecimal(dto.tank_used_litres);
+      if (dto.tank_used_litres != null && dto.tank_used_litres !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'tank_used_litres must be numeric.' });
+      }
+      ensureRange('tank_used_litres', asFiniteNumber(v), 0, 200_000);
+      updateData.tank_used_litres = v;
+      createData.tank_used_litres = v;
+    }
+    if (hasKey('tank_used_pct')) {
+      const v = dto.tank_used_pct == null || dto.tank_used_pct === '' ? null : this.asDecimal(dto.tank_used_pct);
+      if (dto.tank_used_pct != null && dto.tank_used_pct !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'tank_used_pct must be numeric.' });
+      }
+      ensureRange('tank_used_pct', asFiniteNumber(v), 0, 100);
+      updateData.tank_used_pct = v;
+      createData.tank_used_pct = v;
+    }
+    if (hasKey('cooling_temperature_c')) {
+      const v =
+        dto.cooling_temperature_c == null || dto.cooling_temperature_c === ''
+          ? null
+          : this.asDecimal(dto.cooling_temperature_c);
+      if (dto.cooling_temperature_c != null && dto.cooling_temperature_c !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'cooling_temperature_c must be numeric.' });
+      }
+      ensureRange('cooling_temperature_c', asFiniteNumber(v), -10, 25);
+      updateData.cooling_temperature_c = v;
+      createData.cooling_temperature_c = v;
+    }
+    if (hasKey('power_status')) {
+      const raw = dto.power_status == null || dto.power_status === '' ? null : String(dto.power_status).toLowerCase();
+      if (raw != null && !POWER.has(raw)) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `power_status must be one of: ${[...POWER].join(', ')}.`,
+        });
+      }
+      updateData.power_status = raw;
+      createData.power_status = raw;
+    }
+    if (hasKey('generator_status')) {
+      const raw = dto.generator_status == null || dto.generator_status === '' ? null : String(dto.generator_status).toLowerCase();
+      if (raw != null && !GEN.has(raw)) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `generator_status must be one of: ${[...GEN].join(', ')}.`,
+        });
+      }
+      updateData.generator_status = raw;
+      createData.generator_status = raw;
+    }
+    if (hasKey('generator_fuel_pct')) {
+      const v =
+        dto.generator_fuel_pct == null || dto.generator_fuel_pct === '' ? null : this.asDecimal(dto.generator_fuel_pct);
+      if (dto.generator_fuel_pct != null && dto.generator_fuel_pct !== '' && v == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'generator_fuel_pct must be numeric.' });
+      }
+      ensureRange('generator_fuel_pct', asFiniteNumber(v), 0, 100);
+      updateData.generator_fuel_pct = v;
+      createData.generator_fuel_pct = v;
+    }
+
+    const snapshotKeys: Array<keyof FacilitySnapshotPatchDto> = [
+      'tank_used_litres',
+      'tank_used_pct',
+      'cooling_temperature_c',
+      'power_status',
+      'generator_status',
+      'generator_fuel_pct',
+    ];
+    const anyMetric = snapshotKeys.some((key) => hasKey(key));
+
+    if (hasKey('observed_at')) {
+      if (dto.observed_at == null || dto.observed_at === '') {
+        updateData.observed_at = null;
+        createData.observed_at = null;
+      } else {
+        const observedAt = new Date(dto.observed_at);
+        if (Number.isNaN(observedAt.getTime())) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'observed_at must be a valid ISO date.',
+          });
+        }
+        updateData.observed_at = observedAt;
+        createData.observed_at = observedAt;
+      }
+    } else if (anyMetric) {
+      const now = new Date();
+      updateData.observed_at = now;
+      createData.observed_at = now;
+    }
+
+    await this.prisma.mccFacilitySnapshot.upsert({
+      where: { account_id: accountId },
+      create: createData,
+      update: updateData,
+    });
+  }
+
+  private async replaceTenantCoolingTanks(accountId: string, rows: CoolingTankRowDto[]): Promise<void> {
+    const normalized = rows.filter((row) => {
+      const cap =
+        row.capacity_litres == null || row.capacity_litres === ''
+          ? null
+          : this.asDecimal(row.capacity_litres);
+      if (row.capacity_litres != null && row.capacity_litres !== '' && cap == null) {
+        throw new BadRequestException({ code: 400, status: 'error', message: 'cooling_tanks[].capacity_litres must be numeric.' });
+      }
+      const tn = row.tank_number != null && row.tank_number !== '' ? String(row.tank_number).slice(0, 120) : '';
+      const ya = row.year_or_age != null && row.year_or_age !== '' ? String(row.year_or_age).slice(0, 120) : '';
+      const cond = row.condition != null && row.condition !== '' ? String(row.condition).slice(0, 60) : '';
+      return Boolean(cap != null || tn || ya || cond);
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.mccCoolingTankProfile.deleteMany({ where: { account_id: accountId } });
+      if (normalized.length === 0) return;
+      await tx.mccCoolingTankProfile.createMany({
+        data: normalized.map((row) => {
+          const capacity_litres =
+            row.capacity_litres == null || row.capacity_litres === ''
+              ? null
+              : this.asDecimal(row.capacity_litres);
+          return {
+            account_id: accountId,
+            tank_number:
+              row.tank_number != null && row.tank_number !== '' ? String(row.tank_number).slice(0, 120) : null,
+            capacity_litres,
+            year_or_age:
+              row.year_or_age != null && row.year_or_age !== '' ? String(row.year_or_age).slice(0, 120) : null,
+            condition:
+              row.condition != null && row.condition !== '' ? String(row.condition).slice(0, 60) : null,
+          };
+        }),
+      });
+    });
   }
 
   async updateAccountOperationalLocationForAdmin(
