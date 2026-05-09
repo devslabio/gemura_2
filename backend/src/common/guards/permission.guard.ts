@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   ForbiddenException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PERMISSION_KEY, PERMISSION_ANY_KEY, ROLE_KEY } from '../decorators/permission.decorator';
 import { RbacService } from '../../modules/rbac/rbac.service';
@@ -48,13 +49,34 @@ export class PermissionGuard implements CanActivate {
       });
     }
 
-    const userAccount = await this.prisma.userAccount.findFirst({
-      where: {
-        user_id: user.id,
-        account_id: accountId,
-        status: 'active',
-      },
-    });
+    // Use raw SQL to stay compatible with legacy databases that don't have
+    // newer Prisma-mapped columns like `platform_role_id`.
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        user_id: string;
+        account_id: string;
+        role: string | null;
+        status: string;
+        permissions: unknown;
+        platform_role_id: string | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        ua.id,
+        ua.user_id,
+        ua.account_id,
+        ua.role,
+        ua.status,
+        ua.permissions,
+        ua.platform_role_id
+      FROM user_accounts ua
+      WHERE ua.user_id::text = ${String(user.id)}
+        AND ua.account_id::text = ${String(accountId)}
+        AND ua.status = 'active'
+      LIMIT 1
+    `);
+    const userAccount = rows[0];
 
     if (!userAccount) {
       throw new ForbiddenException({
@@ -65,7 +87,14 @@ export class PermissionGuard implements CanActivate {
     }
 
     if (requiredAnyPermissions?.length) {
-      const okAny = await this.rbac.assertGuardAnyPermission(userAccount, requiredAnyPermissions);
+      const okAny = await this.rbac.assertGuardAnyPermission(
+        {
+          role: userAccount.role ?? '',
+          platform_role_id: userAccount.platform_role_id,
+          permissions: userAccount.permissions,
+        },
+        requiredAnyPermissions,
+      );
       if (!okAny) {
         throw new ForbiddenException({
           code: 403,
@@ -76,7 +105,14 @@ export class PermissionGuard implements CanActivate {
     }
 
     if (requiredPermission) {
-      const okPerm = await this.rbac.assertGuardPermission(userAccount, requiredPermission);
+      const okPerm = await this.rbac.assertGuardPermission(
+        {
+          role: userAccount.role ?? '',
+          platform_role_id: userAccount.platform_role_id,
+          permissions: userAccount.permissions,
+        },
+        requiredPermission,
+      );
       if (!okPerm) {
         throw new ForbiddenException({
           code: 403,
@@ -87,7 +123,7 @@ export class PermissionGuard implements CanActivate {
     }
 
     if (requiredRole) {
-      const okRole = await this.rbac.assertGuardRole(userAccount, requiredRole);
+      const okRole = await this.rbac.assertGuardRole({ role: userAccount.role ?? '' }, requiredRole);
       if (!okRole) {
         throw new ForbiddenException({
           code: 403,

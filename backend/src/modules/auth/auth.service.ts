@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException, BadRequestException, NotFoundExcepti
 import { PrismaService } from '../../prisma/prisma.service';
 import { SmsService } from '../../common/services/sms.service';
 import { EmailService } from '../../common/services/email.service';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { LoginDto } from './dto/login.dto';
 import { AuthResponseDto, LoginResponseDataDto } from './dto/auth-response.dto';
 import { RegisterDto } from './dto/register.dto';

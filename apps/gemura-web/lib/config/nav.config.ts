@@ -35,6 +35,16 @@ export const ADMIN_ROLES = ['owner', 'admin'] as const;
 export const OPERATIONS_ROLES = ['manager', 'accountant', 'collector', 'viewer', 'employee', 'agent'] as const;
 export const EXTERNAL_ACCOUNT_TYPES = ['supplier', 'customer', 'farmer'] as const;
 
+/**
+ * Cooperative membership roster (`/members`). Align with backend `ACCOUNT_MEMBERSHIP_LIST_PERMISSIONS`.
+ */
+export const MEMBERS_NAV_PERMISSIONS: readonly string[] = [
+  'manage_users',
+  'create_suppliers',
+  'update_suppliers',
+  'view_suppliers',
+];
+
 export type Section = 'admin' | 'operations' | 'external_supplier' | 'external_customer';
 
 export interface NavItem {

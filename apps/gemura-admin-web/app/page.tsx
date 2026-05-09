@@ -15,6 +15,18 @@ export default function HomePage() {
     else router.replace('/auth/login');
   }, [hasHydrated, isAuthenticated, user, router]);
 
-  return null;
+  if (!hasHydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <p className="text-sm text-gray-600">Loading admin…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <p className="text-sm text-gray-600">Redirecting…</p>
+    </div>
+  );
 }
 

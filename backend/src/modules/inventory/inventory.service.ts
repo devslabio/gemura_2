@@ -8,7 +8,7 @@ import { ToggleListingDto } from './dto/toggle-listing.dto';
 import { CreateInventorySaleDto, InventorySaleBuyerType, InventorySalePaymentStatus } from './dto/create-inventory-sale.dto';
 import { TransactionsService } from '../accounting/transactions/transactions.service';
 import { TransactionType } from '../accounting/transactions/dto/create-transaction.dto';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { composeUserFullName, splitIntoFirstLast } from '../../common/utils/user-name.util';
 

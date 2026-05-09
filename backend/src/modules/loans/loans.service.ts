@@ -5,7 +5,7 @@ import { CreateLoanDto } from './dto/create-loan.dto';
 import { UpdateLoanDto } from './dto/update-loan.dto';
 import { RecordRepaymentDto } from './dto/record-repayment.dto';
 import { TransactionsService } from '../accounting/transactions/transactions.service';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { composeUserFullName, splitIntoFirstLast } from '../../common/utils/user-name.util';
 
