@@ -18,9 +18,10 @@ const previewPanelStack =
   'flex flex-col bg-white border border-gray-200 rounded-sm p-6 min-h-0';
 const panelTitle = 'text-base font-semibold text-gray-900 pb-3 mb-4 border-b border-gray-100 shrink-0';
 
-function numInput(v: number | null | undefined): string {
-  if (v == null || Number.isNaN(v)) return '';
-  return String(v);
+function numInput(v: number | string | null | undefined): string {
+  if (v == null) return '';
+  if (typeof v === 'number') return Number.isNaN(v) ? '' : String(v);
+  return String(v).trim();
 }
 
 function strInput(v: string | null | undefined): string {

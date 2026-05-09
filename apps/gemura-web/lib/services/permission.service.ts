@@ -1,5 +1,6 @@
 import { useAuthStore } from '@/store/auth';
 import { isExternalCustomer, isExternalSupplier } from '@/lib/config/nav.config';
+import { isPlatformSuperAdminRole } from '@/lib/utils/platform-rbac';
 
 export interface Permission {
   [key: string]: boolean;
@@ -77,6 +78,16 @@ export class PermissionService {
       return false;
     }
     return currentAccount.role === 'admin' || currentAccount.role === 'owner';
+  }
+
+  /** System admin / admin / owner on a business account (not external milk logins). */
+  static isSuperAdminOrAdmin(): boolean {
+    const { currentAccount } = useAuthStore.getState();
+    if (!currentAccount) return false;
+    if (isExternalMilkAccount(currentAccount.account_type)) {
+      return false;
+    }
+    return isPlatformSuperAdminRole(currentAccount.role ?? '');
   }
 
   /**

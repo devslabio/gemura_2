@@ -257,16 +257,23 @@ export default function SuppliersPage() {
         ]}
         onDownloadTemplate={() => suppliersApi.downloadTemplate()}
         onBulkCreate={(rows) => {
-          const data: import('@/lib/api/suppliers').CreateSupplierData[] = rows.map((row) => ({
-            name: String(row.name ?? ''),
-            phone: String(row.phone ?? ''),
-            price_per_liter: Number(row.price_per_liter) || 0,
-            email: row.email != null ? String(row.email) : undefined,
-            nid: row.nid != null ? String(row.nid) : undefined,
-            address: row.address != null ? String(row.address) : undefined,
-            bank_name: row.bank_name != null ? String(row.bank_name) : undefined,
-            bank_account_number: row.bank_account_number != null ? String(row.bank_account_number) : undefined,
-          }));
+          const data: import('@/lib/api/suppliers').CreateSupplierData[] = rows.map((row) => {
+            const raw = String(row.name ?? '').trim();
+            const ix = raw.indexOf(' ');
+            const first_name = (ix === -1 ? raw || 'Supplier' : raw.slice(0, ix)).trim();
+            const last_name = (ix === -1 ? '-' : raw.slice(ix + 1)).trim() || '-';
+            return {
+              first_name,
+              last_name,
+              phone: String(row.phone ?? ''),
+              price_per_liter: Number(row.price_per_liter) || 0,
+              email: row.email != null ? String(row.email) : undefined,
+              nid: row.nid != null ? String(row.nid) : undefined,
+              address: row.address != null ? String(row.address) : undefined,
+              bank_name: row.bank_name != null ? String(row.bank_name) : undefined,
+              bank_account_number: row.bank_account_number != null ? String(row.bank_account_number) : undefined,
+            };
+          });
           return suppliersApi.bulkCreate(data).then((r) => r.data);
         }}
         mapRow={(row) => ({

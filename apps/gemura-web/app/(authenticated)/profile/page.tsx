@@ -93,8 +93,13 @@ export default function ExternalProfilePage() {
     e.preventDefault();
     setSaving(true);
     try {
+      const trimmed = name.trim();
+      const i = trimmed.indexOf(' ');
+      const first_name = (i === -1 ? trimmed : trimmed.slice(0, i)).trim();
+      const last_name = (i === -1 ? '-' : trimmed.slice(i + 1)).trim() || '-';
       const res = await profileApi.updateProfile({
-        name: name.trim() || undefined,
+        ...(first_name ? { first_name } : {}),
+        ...(last_name ? { last_name } : {}),
         email: email.trim() || undefined,
         phone: phone.replace(/\D/g, '') || undefined,
       });
