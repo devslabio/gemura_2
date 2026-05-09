@@ -33,7 +33,8 @@
     "seed:members-from-suppliers": "tsx prisma/seed-members-from-suppliers.ts",
     "migrate": "ts-node src/migration/migrate.ts",
     "migrate:selective": "ts-node src/migration/migrate-selective.ts",
-    "migrate:fix-default-accounts": "ts-node src/migration/fix-default-accounts.ts"
+    "migrate:fix-default-accounts": "ts-node src/migration/fix-default-accounts.ts",
+    "seed:regional-supervisors": "tsx prisma/run-seed-regional-supervisor-demos.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

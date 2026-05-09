@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { composeUserFullName, splitIntoFirstLast } from './user-name-shared';
+import { seedRegionalSupervisorDemos } from './seed-regional-supervisor-demos';
 
 const prisma = new PrismaClient();
 
@@ -147,6 +148,8 @@ async function main() {
   console.log(
     `✅ Role demos on ${mainAccount.code}: admin, manager, veterinary_officer, casual_laborer, leadership, regulator, umucunda_a, umucunda_b, accountant, collector, viewer, agent`,
   );
+
+  await seedRegionalSupervisorDemos(prisma, mainAccount, hashedPassword, userNameFields, SEED_DEMO_PASSWORD);
 
   /** Demo Umucunda hub — `linked_umucunda_supplier_account_id` is required for scoped MCC API access */
   const umucundaHubSeed = await prisma.account.upsert({
@@ -603,6 +606,8 @@ async function main() {
   console.log('   250788409029 casual_laborer · 250788409030 leadership · 250788409031 regulator');
   console.log('   250788409032 umucunda_a · 250788409033 umucunda_b · 250788409023 accountant');
   console.log('   250788409024 collector · 250788409025 viewer · 250788409026 agent');
+  console.log('👤 regional_supervisor (multi-district):');
+  console.log('   250788409050 Kigali · 250788409051 South&West · 250788409052 West&North · 250788409053 East');
   console.log(`👤 supplier (Jean Baptiste): 250788111222 (+ 250788333444, 250788555666)`);
   console.log(`👤 customer (own account): 250788409027`);
   console.log(`📧 Main email: ${mainUser.email}`);
