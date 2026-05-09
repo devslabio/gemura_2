@@ -219,16 +219,14 @@ export default function AccountsPage() {
       <h1 className="text-2xl font-bold text-gray-900">Accounts</h1>
 
       <FilterBar>
-        <FilterBarGroup label="Search">
-          <FilterBarSearch
-            value={searchInput}
-            onChange={setSearchInput}
-            placeholder="Name or code"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleApplySearch();
-            }}
-          />
-        </FilterBarGroup>
+        <FilterBarSearch
+          value={searchInput}
+          onChange={setSearchInput}
+          placeholder="Name or code"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleApplySearch();
+          }}
+        />
         <FilterBarGroup label="Account type">
           <select
             className="w-full min-h-[36px] rounded-sm border border-gray-300 px-3 py-2 text-sm text-gray-900 bg-white"
