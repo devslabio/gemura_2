@@ -30,6 +30,13 @@ export const REGIONAL_SUPERVISOR_DEMO_DISTRICTS = [
     email: 'supervisor.east@gemura.rw',
     districtCodes: ['05-01', '05-02', '02-01'] as const,
   },
+  {
+    phone: '250788409054',
+    code: 'U_RS_DEMO_5',
+    name: 'Demo Supervisor North',
+    email: 'supervisor.north@gemura.rw',
+    districtCodes: ['04-01', '04-02'] as const,
+  },
 ] as const;
 
 type UserNameFields = (display: string) => { first_name: string; last_name: string; name: string };

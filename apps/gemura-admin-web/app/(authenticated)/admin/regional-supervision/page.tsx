@@ -14,12 +14,13 @@ import { adminApi, type TenantAccountRow, type UserListItem } from '@/lib/api/ad
 import { locationsApi, type Location } from '@/lib/api/locations';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
+import { useToastStore } from '@/store/toast';
 
 const PAGE_SIZES = [10, 20, 50, 100] as const;
 
 export default function RegionalSupervisionPage() {
   const router = useRouter();
-  const { currentAccount } = useAuthStore();
+  const { currentAccount, accounts } = useAuthStore();
   const { canManageUsers, isAdmin } = usePermission();
   const allowed = canManageUsers() || isAdmin();
 
@@ -54,7 +55,17 @@ export default function RegionalSupervisionPage() {
   const [scopeError, setScopeError] = useState('');
   const [bulkDistrictModalOpen, setBulkDistrictModalOpen] = useState(false);
 
-  const adminAccountId = currentAccount?.account_id;
+  /**
+   * Admin APIs scope permissions + role filters to a specific "platform/admin" account.
+   * If the user switches the header account to a tenant, we still want supervision tools
+   * to operate against the platform admin account (ACC_MAIN_001) when available.
+   */
+  const platformAdminAccountId =
+    accounts.find((a) => a.account_code === 'ACC_MAIN_001')?.account_id ??
+    accounts.find((a) => String(a.account_type || '').toLowerCase() === 'admin')?.account_id ??
+    currentAccount?.account_id;
+
+  const adminAccountId = platformAdminAccountId;
 
   const loadAccounts = useCallback(async () => {
     if (!allowed) return;
@@ -195,7 +206,18 @@ export default function RegionalSupervisionPage() {
         });
         if (res.code === 200) {
           setListReload((n) => n + 1);
+          useToastStore
+            .getState()
+            .success(next ? 'Supervisor assigned successfully.' : 'Supervisor cleared successfully.');
+        } else {
+          useToastStore.getState().error(res.message || 'Failed to assign supervisor');
         }
+      } catch (e: unknown) {
+        const msg =
+          (e as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ??
+          (e as Error)?.message ??
+          'Failed to assign supervisor';
+        useToastStore.getState().error(msg);
       } finally {
         setSavingSupervisorForAccountId(null);
       }
