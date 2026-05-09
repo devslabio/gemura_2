@@ -61,13 +61,6 @@ export function useAdminReportNavigation() {
     router.push(`${pathname}?${p.toString()}`);
   }, [pathname, router, searchParams]);
 
-  const backToOverviewHref = useMemo(() => {
-    const p = new URLSearchParams(searchParams.toString());
-    p.delete('page');
-    const s = p.toString();
-    return `/admin/dashboard/overview${s ? `?${s}` : ''}`;
-  }, [searchParams]);
-
   return {
     apiParams,
     filterInputs,
@@ -77,6 +70,5 @@ export function useAdminReportNavigation() {
     setPageSize,
     setPage,
     clearFilters,
-    backToOverviewHref,
   };
 }

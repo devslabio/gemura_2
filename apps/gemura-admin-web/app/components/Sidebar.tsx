@@ -94,6 +94,19 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
         label: 'Dashboard',
         icon: faChartLine,
       });
+      entries.push({ kind: 'section', label: 'Operations' });
+      entries.push({
+        kind: 'link',
+        href: '/admin/operations/gate-deliveries',
+        label: 'Gate deliveries',
+        icon: faTruck,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/operations/milk-manifests',
+        label: 'Milk manifests',
+        icon: faClipboardList,
+      });
       entries.push({ kind: 'section', label: 'Reports & lists' });
       entries.push({
         kind: 'link',
@@ -160,19 +173,6 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
         href: '/admin/audit-log',
         label: 'Audit log',
         icon: faFileAlt,
-      });
-      entries.push({ kind: 'section', label: 'Operations' });
-      entries.push({
-        kind: 'link',
-        href: '/admin/operations/gate-deliveries',
-        label: 'Gate deliveries',
-        icon: faTruck,
-      });
-      entries.push({
-        kind: 'link',
-        href: '/admin/operations/milk-manifests',
-        label: 'Milk manifests',
-        icon: faClipboardList,
       });
     }
 
@@ -346,7 +346,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
                 ${collapsed ? 'justify-center px-3' : ''}
                 ${
                   active
-                    ? 'bg-[#031a3a] text-white border-l-4 border-[var(--primary)]'
+                    ? 'bg-[#031a3a] text-white border-l-4 border-white/30'
                     : 'text-gray-300 hover:bg-[#031a3a] hover:text-white active:bg-[#031a3a]'
                 }
               `;
