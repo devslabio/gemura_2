@@ -180,8 +180,8 @@ function KpiTile({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="mb-1 text-[11px] font-semibold text-gray-500 truncate">{label}</p>
-          <p className="text-xl sm:text-2xl font-bold leading-tight text-slate-900 tracking-tight truncate">{value}</p>
-          <p className="mt-1.5 text-[11px] font-normal leading-snug text-gray-600 line-clamp-2">{sub}</p>
+          <p className="text-[52px] sm:text-[60px] font-black leading-none text-slate-950 tracking-tight whitespace-nowrap">{value}</p>
+          <p className="mt-1.5 text-[8px] font-normal leading-tight text-gray-500 line-clamp-2">{sub}</p>
         </div>
         <div
           className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-lg border border-black/5"

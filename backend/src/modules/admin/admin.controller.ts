@@ -56,6 +56,7 @@ export class AdminController {
         accounts: { total: 850 },
         sales: { total: 15000, liters: 658420 },
         collections: { total: 15000 },
+        rejections: { transactions: 120, liters: 980 },
         suppliers: { total: 18642 },
         customers: { total: 19420 },
         revenue: { total: 278500000, last30Days: 512000000, last7Days: 125000000, today: 20100000 },

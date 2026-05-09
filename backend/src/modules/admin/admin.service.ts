@@ -2770,6 +2770,8 @@ export class AdminService {
       todayRows,
       salesByStatus,
       recentSales,
+      rejectedMilkCount,
+      rejectedMilkLitersAgg,
       overview,
     ] = await Promise.all([
       this.prisma.supplierCustomer.findMany({
@@ -2827,6 +2829,19 @@ export class AdminService {
             select: { name: true },
           },
         },
+      }),
+      this.prisma.milkSale.count({
+        where: {
+          status: 'rejected',
+          sale_at: { gte: saleBounds.gte, lte: saleBounds.lte },
+        },
+      }),
+      this.prisma.milkSale.aggregate({
+        where: {
+          status: 'rejected',
+          sale_at: { gte: saleBounds.gte, lte: saleBounds.lte },
+        },
+        _sum: { quantity: true },
       }),
       overviewDataPromise,
     ]);
@@ -2895,6 +2910,10 @@ export class AdminService {
         },
         collections: {
           total: salesInRange,
+        },
+        rejections: {
+          transactions: rejectedMilkCount,
+          liters: Number(rejectedMilkLitersAgg._sum.quantity ?? 0),
         },
         suppliers: {
           total: totalSuppliers,
