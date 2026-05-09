@@ -2,8 +2,18 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Icon, { faBars, faRightFromBracket, faUser, faSearch, faSpinner } from './Icon';
+import Link from 'next/link';
+import Icon, {
+  faBars,
+  faChevronDown,
+  faCog,
+  faRightFromBracket,
+  faSearch,
+  faSpinner,
+  faUser,
+} from './Icon';
 import { useAuthStore } from '@/store/auth';
+import { getRoleLabel } from '@/lib/utils/role';
 
 interface HeaderProps {
   sidebarOpen: boolean;
@@ -11,24 +21,43 @@ interface HeaderProps {
   onMenuToggle: () => void;
 }
 
-export default function Header({ sidebarOpen, sidebarCollapsed, onMenuToggle }: HeaderProps) {
+export default function Header({ sidebarOpen: _sidebarOpen, sidebarCollapsed: _sidebarCollapsed, onMenuToggle }: HeaderProps) {
   const router = useRouter();
   const { user, logout, currentAccount } = useAuthStore();
 
   const [userName, setUserName] = useState('User');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchLoading] = useState(false);
-  const searchRef = useRef<HTMLDivElement>(null);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!user) return;
     setUserName(`${user.firstName} ${user.lastName}`.trim() || 'User');
   }, [user]);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+
+    if (userMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [userMenuOpen]);
+
   const handleLogout = () => {
+    setUserMenuOpen(false);
     logout();
     router.push('/auth/login');
   };
+
+  const profileHref = user?.id ? `/admin/users/${user.id}` : '/admin/users';
+  const settingsHref = user?.id ? `/admin/users/${user.id}/edit` : '/admin/users';
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50 safe-area-inset">
@@ -42,11 +71,7 @@ export default function Header({ sidebarOpen, sidebarCollapsed, onMenuToggle }: 
           <Icon icon={faBars} size="sm" />
         </button>
 
-        {/* Search Input (matches gemura-web header) */}
-        <div
-          className="flex-1 relative hidden sm:block max-w-[200px] md:max-w-[260px] lg:max-w-[320px] xl:max-w-[360px]"
-          ref={searchRef}
-        >
+        <div className="flex-1 relative hidden sm:block max-w-[200px] md:max-w-[260px] lg:max-w-[320px] xl:max-w-[360px]">
           <div className="relative w-full">
             <div
               className={`absolute left-0 top-0 bottom-0 w-12 flex items-center justify-center pointer-events-none text-gray-400 z-10 transition-colors ${
@@ -65,38 +90,79 @@ export default function Header({ sidebarOpen, sidebarCollapsed, onMenuToggle }: 
           </div>
         </div>
 
-        {/* Spacer */}
         <div className="flex-1" />
 
-        <div className="flex items-center min-w-0 gap-3">
-          {/* Account info */}
-          <div className="hidden md:flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 bg-[var(--primary)]/10 rounded-lg flex items-center justify-center text-[var(--primary)]">
-              <Icon icon={faUser} size="sm" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-900 m-0 leading-tight truncate">{userName}</p>
-              <p className="text-xs text-gray-500 m-0 capitalize leading-tight truncate">
-                {currentAccount?.role ? String(currentAccount.role).toLowerCase() : ''}
+        {/* Right: user menu — pattern from gemura-web Header */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="relative flex items-center gap-3" ref={userMenuRef}>
+            <div className="hidden sm:block text-right">
+              <p className="text-sm font-semibold text-gray-900 m-0 leading-tight truncate max-w-[160px] md:max-w-[220px]">
+                {userName}
+              </p>
+              <p className="text-xs text-gray-500 m-0 leading-tight capitalize">
+                {currentAccount ? getRoleLabel(currentAccount.role) : '—'}
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setUserMenuOpen(!userMenuOpen)}
+              className="flex items-center gap-2 min-w-[44px] min-h-[44px] p-2 bg-transparent border-none cursor-pointer rounded-lg transition-all hover:bg-gray-100 active:scale-95"
+              aria-label="User menu"
+              aria-expanded={userMenuOpen}
+            >
+              <div className="w-9 h-9 bg-[var(--primary)]/10 rounded-full flex items-center justify-center text-[var(--primary)] flex-shrink-0">
+                <Icon icon={faUser} size="sm" />
+              </div>
+              <Icon
+                icon={faChevronDown}
+                className={`text-gray-600 transition-transform flex-shrink-0 ${userMenuOpen ? 'rotate-180' : ''}`}
+                size="sm"
+              />
+            </button>
+
+            {userMenuOpen && (
+              <div className="absolute right-0 top-full mt-2 w-52 min-w-[208px] max-w-[calc(100vw-2rem)] bg-white border border-gray-200 rounded-xl z-[1000] shadow-lg shadow-gray-200/50">
+                <div className="py-1">
+                  {user && (
+                    <>
+                      <div className="px-4 py-3 border-b border-gray-200">
+                        <p className="text-sm font-semibold text-gray-900 m-0 mb-1 truncate">{userName}</p>
+                        <p className="text-xs text-gray-500 m-0 truncate">{user.email || 'No email'}</p>
+                      </div>
+                      <div className="h-px bg-gray-200 my-1" />
+                    </>
+                  )}
+                  <Link
+                    href={profileHref}
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-3 w-full px-4 py-3 bg-transparent border-none text-left text-sm text-gray-700 cursor-pointer no-underline transition-colors hover:bg-gray-50"
+                  >
+                    <Icon icon={faUser} className="text-gray-500" size="sm" />
+                    <span>Profile</span>
+                  </Link>
+                  <Link
+                    href={settingsHref}
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-3 w-full px-4 py-3 bg-transparent border-none text-left text-sm text-gray-700 cursor-pointer no-underline transition-colors hover:bg-gray-50"
+                  >
+                    <Icon icon={faCog} className="text-gray-500" size="sm" />
+                    <span>Settings</span>
+                  </Link>
+                  <div className="h-px bg-gray-200 my-1" />
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex items-center gap-3 w-full px-4 py-3 bg-transparent border-none text-left text-sm text-red-600 cursor-pointer transition-colors hover:bg-red-50 hover:text-red-600"
+                  >
+                    <Icon icon={faRightFromBracket} className="text-gray-500" size="sm" />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        </div>
-
-        <div className="flex items-center gap-3 flex-shrink-0">
-          {/* Logout */}
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="flex items-center justify-center min-w-[44px] min-h-[44px] p-2 bg-transparent border-none cursor-pointer rounded-lg transition-all hover:bg-gray-100 active:scale-95"
-            aria-label="Logout"
-          >
-            <Icon icon={faRightFromBracket} size="sm" />
-          </button>
         </div>
       </div>
     </header>
   );
 }
-
