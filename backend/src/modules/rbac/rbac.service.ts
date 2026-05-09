@@ -239,7 +239,7 @@ export class RbacService implements OnModuleInit {
         where: { platform_role_id: userAccount.platform_role_id },
         include: { permission: true },
       });
-      let fromRole = links.map((l) => l.permission.code);
+      let fromRole = links.map((l) => l.permission?.code).filter((c): c is string => typeof c === 'string');
       const slug = await this.resolveSlugFromPlatformRoleId(userAccount.platform_role_id);
       if (slug === 'regional_supervisor') {
         fromRole = [...new Set([...fromRole, 'view_regional_accounts'])];

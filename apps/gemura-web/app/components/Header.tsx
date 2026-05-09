@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth';
 import { getRoleLabel } from '@/lib/utils/role';
 import { accountsApi } from '@/lib/api/accounts';
 import { useToastStore } from '@/store/toast';
+import { supervisorApi, type SupervisorScope } from '@/lib/api/supervisor';
 import Icon, {
   faBars,
   faSearch,
@@ -37,6 +38,8 @@ export default function Header({
   onSidebarToggle,
 }: HeaderProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user, logout, accounts, currentAccount, setCurrentAccount, setAccounts } = useAuthStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -46,11 +49,15 @@ export default function Header({
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [switchingAccountId, setSwitchingAccountId] = useState<string | null>(null);
   const [userName, setUserName] = useState('User');
+  const [regionOpen, setRegionOpen] = useState(false);
+  const [districtOpen, setDistrictOpen] = useState(false);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLDivElement>(null);
   const accountSwitcherRef = useRef<HTMLDivElement>(null);
+  const regionRef = useRef<HTMLDivElement>(null);
+  const districtRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (user) {
@@ -73,16 +80,22 @@ export default function Header({
       if (accountSwitcherRef.current && !accountSwitcherRef.current.contains(event.target as Node)) {
         setAccountSwitcherOpen(false);
       }
+      if (regionRef.current && !regionRef.current.contains(event.target as Node)) {
+        setRegionOpen(false);
+      }
+      if (districtRef.current && !districtRef.current.contains(event.target as Node)) {
+        setDistrictOpen(false);
+      }
     };
 
-    if (userMenuOpen || notificationsOpen || searchOpen || accountSwitcherOpen) {
+    if (userMenuOpen || notificationsOpen || searchOpen || accountSwitcherOpen || regionOpen || districtOpen) {
       document.addEventListener('mousedown', handleClickOutside);
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [userMenuOpen, notificationsOpen, searchOpen, accountSwitcherOpen]);
+  }, [userMenuOpen, notificationsOpen, searchOpen, accountSwitcherOpen, regionOpen, districtOpen]);
 
   const handleLogout = () => {
     logout();
@@ -122,6 +135,107 @@ export default function Header({
   const notifications: any[] = [];
   const unreadCount = 0;
 
+  const showSupervisorGeoFilters =
+    pathname?.startsWith('/dashboard') && (currentAccount?.role || '').toLowerCase() === 'regional_supervisor';
+
+  const [scope, setScope] = useState<SupervisorScope | null>(null);
+  const [scopeLoading, setScopeLoading] = useState(false);
+  const [scopeError, setScopeError] = useState('');
+  const [selectedProvinceId, setSelectedProvinceId] = useState<string>(''); // province location id
+  const [selectedDistrictId, setSelectedDistrictId] = useState<string>(''); // district location id
+
+  const provinces = scope?.provinces ?? [];
+  const allDistricts = scope?.districts ?? [];
+
+  const districts = useMemo(() => {
+    if (!selectedProvinceId) return allDistricts;
+    return allDistricts.filter((d) => d.province_id === selectedProvinceId);
+  }, [allDistricts, selectedProvinceId]);
+
+  const selectedProvinceLabel = useMemo(() => {
+    if (!selectedProvinceId) return 'All regions';
+    return provinces.find((p) => p.id === selectedProvinceId)?.name ?? 'All regions';
+  }, [provinces, selectedProvinceId]);
+
+  const selectedDistrictLabel = useMemo(() => {
+    if (!selectedDistrictId) return 'All districts';
+    return allDistricts.find((d) => d.id === selectedDistrictId)?.name ?? 'All districts';
+  }, [allDistricts, selectedDistrictId]);
+
+  const setGeoQuery = (next: { region_id?: string; district_id?: string }) => {
+    const p = new URLSearchParams(searchParams?.toString() || '');
+    if (typeof next.region_id === 'string' && next.region_id.length > 0) p.set('region_id', next.region_id);
+    else p.delete('region_id');
+    if (typeof next.district_id === 'string' && next.district_id.length > 0) p.set('district_id', next.district_id);
+    else p.delete('district_id');
+    const q = p.toString();
+    router.replace(q ? `${pathname}?${q}` : pathname);
+  };
+
+  const closeGeoMenus = () => {
+    setRegionOpen(false);
+    setDistrictOpen(false);
+  };
+
+  useEffect(() => {
+    if (!showSupervisorGeoFilters) return;
+    let cancelled = false;
+    setScopeLoading(true);
+    setScopeError('');
+    const accountId = currentAccount?.account_id?.trim();
+    supervisorApi
+      .getScope(accountId ? { account_id: accountId } : undefined)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.code === 200 && res.data) setScope(res.data);
+        else setScope(null);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const msg =
+          (e as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message ??
+          (e as Error)?.message ??
+          'Failed to load scope';
+        setScopeError(msg);
+        setScope(null);
+      })
+      .finally(() => {
+        if (!cancelled) setScopeLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showSupervisorGeoFilters, currentAccount?.account_id]);
+
+  useEffect(() => {
+    if (!showSupervisorGeoFilters) return;
+    if (!scope) return;
+    const regionId = searchParams?.get('region_id')?.trim() || '';
+    const districtId = searchParams?.get('district_id')?.trim() || '';
+
+    const scopedDistrictIds = new Set(scope.districts.map((d) => d.id));
+    const scopedProvinceIds = new Set(scope.provinces.map((p) => p.id));
+
+    const nextDistrictOk = districtId && scopedDistrictIds.has(districtId);
+    const nextRegionOk = regionId && scopedProvinceIds.has(regionId);
+
+    if (nextDistrictOk) {
+      const d = scope.districts.find((x) => x.id === districtId);
+      setSelectedDistrictId(districtId);
+      setSelectedProvinceId(d?.province_id ?? '');
+      return;
+    }
+    if (nextRegionOk) {
+      setSelectedProvinceId(regionId);
+      setSelectedDistrictId('');
+      return;
+    }
+
+    // Default: show all scoped districts (no query filter).
+    setSelectedProvinceId('');
+    setSelectedDistrictId('');
+  }, [showSupervisorGeoFilters, scope, searchParams]);
+
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50 safe-area-inset">
       <div className="flex items-center min-h-[56px] sm:min-h-[64px] md:min-h-[72px] lg:h-20 px-3 sm:px-4 md:px-6 lg:px-8 gap-2 sm:gap-4">
@@ -157,6 +271,143 @@ export default function Header({
 
         {/* Spacer */}
         <div className="flex-1"></div>
+
+        {showSupervisorGeoFilters && (
+          <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
+            <div className="relative" ref={regionRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setRegionOpen((v) => !v);
+                  setDistrictOpen(false);
+                  setUserMenuOpen(false);
+                  setNotificationsOpen(false);
+                  setAccountSwitcherOpen(false);
+                }}
+                className="flex items-center gap-2 min-w-0 max-w-[220px] px-3 py-2 min-h-[44px] rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 hover:border-gray-300 transition-colors"
+                aria-label="Region"
+                aria-expanded={regionOpen}
+              >
+                <span className="text-sm font-semibold text-gray-900 truncate">
+                  {scopeLoading ? 'Loading…' : selectedProvinceLabel}
+                </span>
+                <Icon
+                  icon={faChevronDown}
+                  className={`text-gray-400 transition-transform ${regionOpen ? 'rotate-180' : ''}`}
+                  size="sm"
+                />
+              </button>
+              {regionOpen && (
+                <div className="absolute left-0 top-full mt-2 w-64 bg-white rounded-xl border border-gray-200 shadow-lg shadow-gray-200/50 py-1 z-[1000]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedProvinceId('');
+                      setSelectedDistrictId('');
+                      setGeoQuery({ region_id: '', district_id: '' });
+                      closeGeoMenus();
+                    }}
+                    className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left text-sm rounded-lg mx-1 transition-colors ${
+                      !selectedProvinceId ? 'bg-[var(--primary)]/10 text-[var(--primary)]' : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="truncate font-medium">All regions</span>
+                    {!selectedProvinceId ? <Icon icon={faCheck} className="text-[var(--primary)] shrink-0" size="sm" /> : null}
+                  </button>
+                  {provinces.map((opt) => {
+                    const active = opt.id === selectedProvinceId;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedProvinceId(opt.id);
+                          setSelectedDistrictId('');
+                          setGeoQuery({ region_id: opt.id, district_id: '' });
+                          closeGeoMenus();
+                        }}
+                        className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left text-sm rounded-lg mx-1 transition-colors ${
+                          active ? 'bg-[var(--primary)]/10 text-[var(--primary)]' : 'text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="truncate font-medium">{opt.name}</span>
+                        {active ? <Icon icon={faCheck} className="text-[var(--primary)] shrink-0" size="sm" /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="relative" ref={districtRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setDistrictOpen((v) => !v);
+                  setRegionOpen(false);
+                  setUserMenuOpen(false);
+                  setNotificationsOpen(false);
+                  setAccountSwitcherOpen(false);
+                }}
+                className="flex items-center gap-2 min-w-0 max-w-[220px] px-3 py-2 min-h-[44px] rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 hover:border-gray-300 transition-colors"
+                aria-label="District"
+                aria-expanded={districtOpen}
+              >
+                <span className="text-sm font-semibold text-gray-900 truncate">
+                  {scopeLoading ? 'Loading…' : selectedDistrictLabel}
+                </span>
+                <Icon
+                  icon={faChevronDown}
+                  className={`text-gray-400 transition-transform ${districtOpen ? 'rotate-180' : ''}`}
+                  size="sm"
+                />
+              </button>
+              {districtOpen && (
+                <div className="absolute left-0 top-full mt-2 w-64 bg-white rounded-xl border border-gray-200 shadow-lg shadow-gray-200/50 py-1 z-[1000]">
+                  <div className="px-3 py-2 border-b border-gray-100">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">District</p>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedDistrictId('');
+                        setGeoQuery({ region_id: selectedProvinceId, district_id: '' });
+                        closeGeoMenus();
+                      }}
+                      className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left text-sm rounded-lg mx-1 transition-colors ${
+                        !selectedDistrictId ? 'bg-[var(--primary)]/10 text-[var(--primary)]' : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="truncate font-medium">All districts</span>
+                      {!selectedDistrictId ? <Icon icon={faCheck} className="text-[var(--primary)] shrink-0" size="sm" /> : null}
+                    </button>
+                    {districts.map((opt) => {
+                      const active = opt.id === selectedDistrictId;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedDistrictId(opt.id);
+                            setGeoQuery({ region_id: selectedProvinceId, district_id: opt.id });
+                            closeGeoMenus();
+                          }}
+                          className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left text-sm rounded-lg mx-1 transition-colors ${
+                            active ? 'bg-[var(--primary)]/10 text-[var(--primary)]' : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <span className="truncate font-medium">{opt.name}</span>
+                          {active ? <Icon icon={faCheck} className="text-[var(--primary)] shrink-0" size="sm" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Account Switcher (hidden until product-ready) */}
         {SHOW_ACCOUNT_SWITCHER && accounts.length > 0 && (
