@@ -153,14 +153,18 @@ echo "📥 pg_dump (local) → psql restore into ${REMOTE_DB_NAME} (this may tak
 # Single schema used by Prisma; avoids noise from other schemas if any.
 # Strip PG17+ session SETs if UAT Postgres is older (e.g. transaction_timeout).
 ERR_FILE="${TMPDIR:-/tmp}/gemura-uat-pgdump.$$"
+# --clean/--if-exists emits DROP … IF EXISTS before CREATE (fixes duplicate enum/type errors
+# on restore). Do not strip CREATE SCHEMA public — the clean section drops public, so the
+# following CREATE SCHEMA public from the dump is required.
 if ! pg_dump "$LOCAL_DUMP_URL" \
   --schema=public \
   --no-owner \
   --no-acl \
   --no-sync \
+  --clean \
+  --if-exists \
   2> "$ERR_FILE" \
   | sed -E '/^SET transaction_timeout/d' \
-  | sed -E '/^CREATE SCHEMA public;/d' \
   | sed -E '/^\\restrict /d;/^\\unrestrict /d' \
   | sshpass -p "$SERVER_PASS" ssh "${SSH_OPTS[@]}" "$SERVER_USER@$SERVER_IP" \
     "docker exec -i ${REMOTE_PG_CONTAINER} psql -U ${REMOTE_PG_USER} -v ON_ERROR_STOP=1 -d ${REMOTE_DB_NAME}"
