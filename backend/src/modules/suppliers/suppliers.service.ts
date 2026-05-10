@@ -2,7 +2,7 @@ import { Injectable, BadRequestException, ForbiddenException, InternalServerErro
 import { PrismaService } from '../../prisma/prisma.service';
 import { RbacService } from '../rbac/rbac.service';
 import { canonicalPlatformRoleSlug, isPlatformSuperAdminRole } from '../admin/roles-permissions.config';
-import { User, UserAccountType, UserAccountRole, SupplierTransferStatus } from '@prisma/client';
+import { User, UserAccountType, SupplierTransferStatus } from '@prisma/client';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
 import {
@@ -18,7 +18,7 @@ import {
 } from './dto/register-supplier-onboarding.dto';
 import * as bcrypt from 'bcrypt';
 import { randomBytes, randomUUID } from 'crypto';
-import { composeUserFullName } from '../../common/utils/user-name.util';
+import { composeUserFullName, splitIntoFirstLast } from '../../common/utils/user-name.util';
 
 @Injectable()
 export class SuppliersService {
@@ -1013,11 +1013,15 @@ export class SuppliersService {
     const normalizedBankAccountNumber = dto.bank_account_number?.trim() || null;
     const pricePerLiter = Number(dto.price_per_liter);
 
+    const { first_name, last_name } = splitIntoFirstLast(dto.name.trim());
+
     const { newUser, account } = await this.prisma.$transaction(async (tx) => {
       const nu = await tx.user.create({
         data: {
           code: userCode,
-          name: dto.name.trim(),
+          first_name,
+          last_name,
+          name: composeUserFullName(first_name, last_name) || dto.name.trim(),
           phone: normalizedPhone,
           nid: dto.nid,
           address: normalizedAddress,
@@ -1050,7 +1054,7 @@ export class SuppliersService {
           user_id: nu.id,
           account_id: acc.id,
           /** Use supplier (same as /suppliers/create) — "owner" is reserved for MCC org admins in the web app. */
-          role: UserAccountRole.supplier,
+          role: 'supplier',
           status: 'active',
           created_by: agentUser.id,
         },

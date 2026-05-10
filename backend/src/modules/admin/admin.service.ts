@@ -1735,63 +1735,6 @@ export class AdminService {
       };
     }
 
-    if (resource === 'members') {
-      const userAnd: Prisma.UserWhereInput[] = [];
-      const q = filters.search?.trim();
-      if (q) {
-        userAnd.push({
-          OR: [
-            { name: { contains: q, mode: 'insensitive' } },
-            { email: { contains: q, mode: 'insensitive' } },
-            { phone: { contains: q } },
-          ],
-        });
-      }
-      if (filters.status?.trim()) {
-        userAnd.push({ status: filters.status.trim() });
-      }
-
-      const rows = await this.prisma.userAccount.findMany({
-        where: {
-          account_id: opAccountId,
-          status: 'active',
-          ...(userAnd.length ? { user: { AND: userAnd } } : {}),
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-              status: true,
-            },
-          },
-          account: { select: { id: true, code: true, name: true } },
-        },
-        orderBy: { created_at: 'desc' },
-        take: 1000,
-      });
-
-      const data = rows.map((ua) => ({
-        id: ua.user?.id ?? ua.id,
-        name: ua.user?.name ?? null,
-        email: ua.user?.email ?? null,
-        phone: ua.user?.phone ?? null,
-        account: ua.account ? { id: ua.account.id, code: ua.account.code, name: ua.account.name } : null,
-        role: ua.role,
-        relationship_status: ua.status,
-        status: ua.user?.status ?? ua.status,
-      }));
-
-      return {
-        code: 200,
-        status: 'success',
-        message: 'User business records retrieved successfully.',
-        data,
-      };
-    }
-
     if (resource === 'farms') {
       const farms = await this.prisma.farm.findMany({
         where: { account_id: opAccountId },

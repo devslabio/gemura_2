@@ -32,6 +32,7 @@ import {
   faRightFromBracket,
   faChartBar,
   faUserFriends,
+  faIdCard,
 } from '@/app/components/Icon';
 
 /** Account types that see user/operations menu (filtered by role + permissions) */
