@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useRef } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth';
 import { isBusinessAccount } from '@/lib/config/nav.config';
