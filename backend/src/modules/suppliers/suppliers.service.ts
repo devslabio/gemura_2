@@ -760,6 +760,96 @@ export class SuppliersService {
     };
   }
 
+  /**
+   * Milk onboarding JSON for a supplier tenant account linked to the caller’s MCC.
+   */
+  async getSupplierOnboardingByAccount(user: User, supplierAccountId: string) {
+    if (!user.default_account_id) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'No valid default account found. Please set a default account.',
+      });
+    }
+
+    const customerAccountId = user.default_account_id;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(supplierAccountId)) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Invalid supplier account ID format. Must be a valid UUID.',
+      });
+    }
+
+    const supplierAccount = await this.prisma.account.findUnique({
+      where: { id: supplierAccountId },
+      include: {
+        user_accounts: {
+          where: { status: 'active' },
+          include: { user: true },
+          take: 1,
+        },
+      },
+    });
+
+    if (!supplierAccount) {
+      throw new BadRequestException({
+        code: 404,
+        status: 'error',
+        message: 'Supplier account not found.',
+      });
+    }
+
+    const relationship = await this.prisma.supplierCustomer.findFirst({
+      where: {
+        supplier_account_id: supplierAccount.id,
+        customer_account_id: customerAccountId,
+      },
+    });
+
+    if (!relationship) {
+      throw new BadRequestException({
+        code: 404,
+        status: 'error',
+        message: 'Supplier relationship not found.',
+      });
+    }
+
+    const supplierUser = supplierAccount.user_accounts[0]?.user;
+    if (!supplierUser) {
+      return {
+        code: 200,
+        status: 'success',
+        message: 'No user linked to this supplier account.',
+        data: { onboarding: null, updated_at: null },
+      };
+    }
+
+    const row = await this.prisma.supplierMilkOnboarding.findUnique({
+      where: { user_id: supplierUser.id },
+    });
+
+    if (!row) {
+      return {
+        code: 200,
+        status: 'success',
+        message: 'No onboarding record.',
+        data: { onboarding: null, updated_at: null },
+      };
+    }
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'OK',
+      data: {
+        onboarding: row.payload,
+        updated_at: row.updated_at.toISOString(),
+      },
+    };
+  }
+
   async updateSupplier(user: User, updateDto: UpdateSupplierDto) {
     if (!user.default_account_id) {
       throw new BadRequestException({

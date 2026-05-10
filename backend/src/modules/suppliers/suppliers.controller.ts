@@ -334,6 +334,19 @@ export class SuppliersController {
     return this.suppliersService.getAllSuppliers(user, accountId);
   }
 
+  /** Declared before `by-id/:id` so `:id` does not greedily swallow `…/onboarding`. */
+  @Get('by-id/:id/onboarding')
+  @RequirePermission('view_suppliers')
+  @ApiOperation({
+    summary: 'Get stored milk onboarding for a supplier (by tenant account UUID)',
+    description:
+      'Returns the SupplierMilkOnboarding payload for the user linked to the supplier account when the supplier is linked to the caller\'s default (MCC) account.',
+  })
+  @ApiParam({ name: 'id', description: 'Supplier account ID (UUID)', type: String })
+  async getSupplierOnboardingByAccount(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.suppliersService.getSupplierOnboardingByAccount(user, id);
+  }
+
   @Get('by-id/:id')
   @RequirePermission('view_suppliers')
   @ApiOperation({
