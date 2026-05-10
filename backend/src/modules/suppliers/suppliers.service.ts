@@ -726,6 +726,21 @@ export class SuppliersService {
 
     const supplierUser = supplierAccount.user_accounts[0]?.user;
 
+    const milkOnboardingRow =
+      relationship && supplierUser
+        ? await this.prisma.supplierMilkOnboarding.findUnique({
+            where: { user_id: supplierUser.id },
+          })
+        : null;
+
+    const milk_onboarding =
+      relationship && supplierUser
+        ? {
+            onboarding: milkOnboardingRow?.payload ?? null,
+            updated_at: milkOnboardingRow?.updated_at?.toISOString() ?? null,
+          }
+        : null;
+
     return {
       code: 200,
       status: 'success',
@@ -756,6 +771,7 @@ export class SuppliersService {
             updated_at: relationship.updated_at,
           } : null,
         },
+        milk_onboarding,
       },
     };
   }
