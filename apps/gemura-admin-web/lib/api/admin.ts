@@ -517,14 +517,7 @@ export interface UpdatePlatformRolePayload {
 
 export type UserActivityMetric = 'suppliers' | 'customers' | 'sales' | 'collections' | 'farms' | 'accounts' | 'members';
 
-export type UserBusinessResource =
-  | 'collections'
-  | 'sales'
-  | 'suppliers'
-  | 'customers'
-  | 'farms'
-  | 'accounts'
-  | 'members';
+export type UserBusinessResource = 'collections' | 'sales' | 'suppliers' | 'customers' | 'farms' | 'accounts' | 'members';
 
 export interface OnboardingOperationalConfigData {
   submission_id: string;
@@ -812,6 +805,76 @@ export const adminApi = {
     return apiClient.get('/admin/onboarding-submissions', { params });
   },
 
+  listSupplierMilkOnboardingMccOptions: async (
+    accountId?: string,
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: { mcc_accounts: Array<{ id: string; code: string; name: string }> };
+  }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.get('/admin/supplier-milk-onboarding/mcc-filter-options', { params });
+  },
+
+  listSupplierMilkOnboarding: async (
+    page = 1,
+    limit = 20,
+    accountId?: string,
+    opts?: {
+      mcc_account_id?: string;
+      account_type?: 'farmer' | 'supplier';
+      search?: string;
+      created_from?: string;
+      created_to?: string;
+      tz_offset_minutes?: number;
+    },
+  ): Promise<{
+    code: number;
+    status: string;
+    message: string;
+    data: {
+      records: Array<{
+        id: string;
+        user_id: string;
+        mcc_account_id: string | null;
+        created_at: string;
+        updated_at: string;
+        user: {
+          id: string;
+          code: string;
+          name: string;
+          first_name: string;
+          last_name: string;
+          phone: string;
+          account_type: string;
+          supplier_segment: string | null;
+        };
+        linked_supplier_account: { id: string; code: string; name: string } | null;
+        linked_mcc: { id: string; code: string; name: string } | null;
+      }>;
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    };
+  }> => {
+    const params: Record<string, unknown> = { page, limit };
+    if (accountId) params.account_id = accountId;
+    if (opts?.mcc_account_id) params.mcc_account_id = opts.mcc_account_id;
+    if (opts?.account_type) params.account_type = opts.account_type;
+    if (opts?.search) params.search = opts.search;
+    if (opts?.created_from) params.created_from = opts.created_from;
+    if (opts?.created_to) params.created_to = opts.created_to;
+    if (typeof opts?.tz_offset_minutes === 'number') params.tz_offset_minutes = opts.tz_offset_minutes;
+    return apiClient.get('/admin/supplier-milk-onboarding', { params });
+  },
+
+  getSupplierMilkOnboarding: async (
+    recordId: string,
+    accountId?: string,
+  ): Promise<{ code: number; status: string; message: string; data: Record<string, unknown> }> => {
+    const params = accountId ? { account_id: accountId } : {};
+    return apiClient.get(`/admin/supplier-milk-onboarding/${recordId}`, { params });
+  },
+
   /**
    * Full CSV: DB columns, location labels, flattened wizard (wizard_*) and gs_response_* columns.
    * Same `review_status` filter as the list; omit for all statuses.
@@ -847,7 +910,6 @@ export const adminApi = {
     if (typeof tzOffsetMinutes === 'number') params.tz_offset_minutes = tzOffsetMinutes;
     return apiClient.getBlob('/admin/onboarding-submissions/export-xlsx', { params });
   },
-
   getOnboardingSubmission: async (submissionId: string, accountId?: string): Promise<{ code: number; data: Record<string, unknown> }> => {
     const params = accountId ? { account_id: accountId } : {};
     return apiClient.get(`/admin/onboarding-submissions/${submissionId}`, { params });
