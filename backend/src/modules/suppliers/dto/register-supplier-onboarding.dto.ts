@@ -107,6 +107,73 @@ export class UpdateSupplierMilkOnboardingDto {
   draft: Record<string, unknown>;
 }
 
+/** Persist full onboarding JSON for an existing supplier user (no new login). */
+export class UpsertSupplierMilkOnboardingDto {
+  @ApiProperty({ description: 'MCC (customer) account id for this supplier relationship' })
+  @IsUUID()
+  mcc_account_id: string;
+
+  @ApiProperty({ description: 'Full buildOnboardingPayload object from the web app' })
+  @IsObject()
+  onboarding: Record<string, unknown>;
+
+  @ApiProperty({ enum: ['farmer', 'supplier'] })
+  @IsIn(['farmer', 'supplier'])
+  account_type: 'farmer' | 'supplier';
+
+  @ApiPropertyOptional({ enum: ['direct_farmer', 'farmer_collector', 'pure_collector'] })
+  @IsOptional()
+  @IsIn(['direct_farmer', 'farmer_collector', 'pure_collector'])
+  supplier_segment?: string;
+
+  @ApiProperty({ example: 390 })
+  @Type(() => Number)
+  @IsNumber({}, { message: 'Price per liter must be a number' })
+  @Min(0.01, { message: 'Price per liter must be greater than 0' })
+  price_per_liter: number;
+
+  @ApiProperty({ description: 'National ID — 16 digits, starts with 1', example: '1199887766554433' })
+  @Transform(({ value }) => (typeof value === 'string' ? value.replace(/\D/g, '') : value))
+  @IsString()
+  @Length(16, 16, { message: 'National ID must be exactly 16 digits' })
+  @Matches(/^1[0-9]{15}$/, { message: 'National ID must be 16 digits and start with 1' })
+  nid: string;
+
+  @ApiPropertyOptional()
+  @Transform(({ value }) => trimOrUndef(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(500, { message: 'Address is too long' })
+  address?: string;
+
+  @ApiPropertyOptional()
+  @Transform(({ value }) => trimOrUndef(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(120, { message: 'Bank name must be at most 120 characters' })
+  bank_name?: string;
+
+  @ApiPropertyOptional()
+  @Transform(({ value }) => trimOrUndef(value))
+  @ValidateIf((_o, v) => typeof v === 'string' && v.trim().length > 0)
+  @IsOptional()
+  @IsString()
+  @MinLength(5, { message: 'Bank account number looks too short' })
+  @MaxLength(64, { message: 'Bank account number must be at most 64 characters' })
+  bank_account_number?: string;
+
+  @ApiPropertyOptional({ description: 'Sync display name on the linked user and tenant account' })
+  @Transform(({ value }) => trimOrUndef(value))
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+}
+
 export class CreateManagedFarmDto {
   @ApiProperty()
   @IsString()

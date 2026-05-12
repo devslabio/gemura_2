@@ -36,9 +36,39 @@ export interface RegisterFromOnboardingResponse {
   };
 }
 
+export interface UpsertSupplierMilkOnboardingBody {
+  mcc_account_id: string;
+  account_type: 'farmer' | 'supplier';
+  supplier_segment?: SupplierSegment;
+  onboarding: Record<string, unknown>;
+  price_per_liter: number;
+  nid: string;
+  address?: string;
+  bank_name?: string;
+  bank_account_number?: string;
+  name?: string;
+  email?: string;
+}
+
+export interface UpsertSupplierMilkOnboardingResponse {
+  code: number;
+  status?: string;
+  message?: string;
+  data?: {
+    onboarding?: Record<string, unknown>;
+    updated_at?: string;
+  };
+}
+
 export const supplierOnboardingApi = {
   register: (body: RegisterFromOnboardingBody) =>
     apiClient.post<RegisterFromOnboardingResponse>('/suppliers/onboarding/register', body),
+
+  saveForSupplierAccount: (supplierAccountId: string, body: UpsertSupplierMilkOnboardingBody) =>
+    apiClient.put<UpsertSupplierMilkOnboardingResponse>(
+      `/suppliers/by-id/${supplierAccountId}/onboarding`,
+      body,
+    ),
 
   /** Current user’s stored onboarding (draft + agent fields) for profile / completion % */
   getMy: async (): Promise<{

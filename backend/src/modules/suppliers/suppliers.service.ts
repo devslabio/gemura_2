@@ -15,6 +15,7 @@ import {
   CreateManagedProductionDto,
   CreateManagedTransferDto,
   SubmitManagedTransferDto,
+  UpsertSupplierMilkOnboardingDto,
 } from './dto/register-supplier-onboarding.dto';
 import * as bcrypt from 'bcrypt';
 import { randomBytes, randomUUID } from 'crypto';
@@ -690,12 +691,15 @@ export class SuppliersService {
             user: {
               select: {
                 id: true,
+                first_name: true,
+                last_name: true,
                 name: true,
                 phone: true,
                 email: true,
                 nid: true,
                 address: true,
                 account_type: true,
+                supplier_segment: true,
               },
             },
           },
@@ -756,12 +760,15 @@ export class SuppliersService {
           status: supplierAccount.status,
           user: supplierUser ? {
             id: supplierUser.id,
+            first_name: supplierUser.first_name,
+            last_name: supplierUser.last_name,
             name: supplierUser.name,
             phone: supplierUser.phone,
             email: supplierUser.email,
             nid: supplierUser.nid,
             address: supplierUser.address,
             account_type: supplierUser.account_type,
+            supplier_segment: supplierUser.supplier_segment,
           } : null,
           relationship: relationship ? {
             price_per_liter: Number(relationship.price_per_liter),
@@ -862,6 +869,180 @@ export class SuppliersService {
       data: {
         onboarding: row.payload,
         updated_at: row.updated_at.toISOString(),
+      },
+    };
+  }
+
+  /**
+   * Store or replace milk onboarding for an existing supplier linked to the caller’s MCC.
+   */
+  async upsertSupplierMilkOnboardingForAccount(
+    agentUser: User,
+    supplierAccountId: string,
+    dto: UpsertSupplierMilkOnboardingDto,
+  ) {
+    await this.assertUserCanActForMcc(agentUser, dto.mcc_account_id);
+
+    if (!agentUser.default_account_id) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'No valid default account found. Please set a default account.',
+      });
+    }
+
+    const customerAccountId = agentUser.default_account_id;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(supplierAccountId)) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Invalid supplier account ID format. Must be a valid UUID.',
+      });
+    }
+
+    const supplierAccount = await this.prisma.account.findUnique({
+      where: { id: supplierAccountId },
+      include: {
+        user_accounts: {
+          where: { status: 'active' },
+          include: { user: true },
+          take: 1,
+        },
+      },
+    });
+
+    if (!supplierAccount) {
+      throw new BadRequestException({
+        code: 404,
+        status: 'error',
+        message: 'Supplier account not found.',
+      });
+    }
+
+    const relationship = await this.prisma.supplierCustomer.findFirst({
+      where: {
+        supplier_account_id: supplierAccount.id,
+        customer_account_id: customerAccountId,
+      },
+    });
+
+    if (!relationship) {
+      throw new BadRequestException({
+        code: 404,
+        status: 'error',
+        message: 'Supplier relationship not found.',
+      });
+    }
+
+    const supplierUser = supplierAccount.user_accounts[0]?.user;
+    if (!supplierUser) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'No user linked to this supplier account. Onboarding requires an existing login.',
+      });
+    }
+
+    if (dto.account_type === 'supplier' && !dto.supplier_segment) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'supplier_segment is required for milk collectors (farmer_collector or pure_collector).',
+      });
+    }
+
+    const appAccountType: UserAccountType =
+      dto.account_type === 'farmer' ? UserAccountType.farmer : UserAccountType.supplier;
+    const segment: string | null =
+      dto.account_type === 'farmer'
+        ? (dto.supplier_segment || 'direct_farmer')
+        : (dto.supplier_segment ?? null);
+
+    const normalizedAddress = dto.address?.trim() || null;
+    const normalizedBankName = dto.bank_name?.trim() || null;
+    const normalizedBankAccountNumber = dto.bank_account_number?.trim() || null;
+    const pricePerLiter = Number(dto.price_per_liter);
+    const normalizedEmail = dto.email?.toLowerCase().trim() || null;
+    const normalizedName = dto.name?.trim() || null;
+
+    if (normalizedEmail) {
+      const existingEmail = await this.prisma.user.findFirst({
+        where: { email: normalizedEmail, NOT: { id: supplierUser.id } },
+      });
+      if (existingEmail) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Email already exists.',
+        });
+      }
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const onboardingRow = await tx.supplierMilkOnboarding.upsert({
+        where: { user_id: supplierUser.id },
+        create: {
+          user_id: supplierUser.id,
+          payload: dto.onboarding as object,
+          mcc_account_id: dto.mcc_account_id,
+        },
+        update: {
+          payload: dto.onboarding as object,
+          mcc_account_id: dto.mcc_account_id,
+        },
+      });
+
+      const userUpdate: {
+        nid: string;
+        address: string | null;
+        account_type: UserAccountType;
+        supplier_segment: string | null;
+        email?: string | null;
+        first_name?: string;
+        last_name?: string;
+        name?: string;
+      } = {
+        nid: dto.nid,
+        address: normalizedAddress,
+        account_type: appAccountType,
+        supplier_segment: segment,
+      };
+      if (normalizedEmail !== null) {
+        userUpdate.email = normalizedEmail;
+      }
+      if (normalizedName) {
+        const { first_name, last_name } = splitIntoFirstLast(normalizedName);
+        userUpdate.first_name = first_name;
+        userUpdate.last_name = last_name;
+        userUpdate.name = composeUserFullName(first_name, last_name) || normalizedName;
+      }
+      await tx.user.update({ where: { id: supplierUser.id }, data: userUpdate });
+
+      await tx.account.update({
+        where: { id: supplierAccount.id },
+        data: {
+          bank_name: normalizedBankName,
+          bank_account_number: normalizedBankAccountNumber,
+          ...(normalizedName ? { name: normalizedName } : {}),
+        },
+      });
+
+      await tx.supplierCustomer.update({
+        where: { id: relationship.id },
+        data: { price_per_liter: pricePerLiter },
+      });
+
+      return onboardingRow;
+    });
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Supplier onboarding saved.',
+      data: {
+        onboarding: updated.payload,
+        updated_at: updated.updated_at.toISOString(),
       },
     };
   }

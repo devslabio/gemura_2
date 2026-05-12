@@ -39,7 +39,13 @@ import { buildOnboardingPayload, type SupplierOnboardType } from './buildOnboard
 import { useAuthStore } from '@/store/auth';
 import { adminApi } from '@/lib/api/admin';
 import { supplierOnboardingApi } from '@/lib/api/supplierOnboardingApi';
+import type { SupplierDetails } from '@/lib/api/suppliers';
 import type { SupplierSegment } from '@/types';
+import {
+  applyCollectorIdentityFromSupplier,
+  applyFarmerIdentityFromSupplier,
+  buildSupplierCaptureCommercialPrefill,
+} from './supplierCapturePrefill';
 import {
   formatLocationLine,
   normalizeRwandaPhoneDigits,
@@ -129,9 +135,16 @@ function stepTitleCollector(index: number): string {
   return labels[index] ?? '';
 }
 
-export default function SupplierOnboardingModal({ open, onClose, onRegistered }: Props) {
+export default function SupplierOnboardingModal({
+  open,
+  onClose,
+  onRegistered,
+  mode = 'register',
+  captureSupplier = null,
+}: Props) {
   const toast = useToastStore();
   const { currentAccount } = useAuthStore();
+  const isCaptureMode = mode === 'capture';
   const [step, setStep] = useState<'pick' | 'form'>('pick');
   const [supplierType, setSupplierType] = useState<SupplierOnboardType | null>(null);
   const [wizardIndex, setWizardIndex] = useState(0);
@@ -165,6 +178,7 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
   const [stepBlockMessages, setStepBlockMessages] = useState<string[]>([]);
   const [creatingAccount, setCreatingAccount] = useState(false);
   const regPrefillRef = useRef(false);
+  const captureInitRef = useRef(false);
 
   const totalSteps = supplierType === 'farmer' ? FARMER_STEP_COUNT : COLLECTOR_STEP_COUNT;
   const isReviewStep =
@@ -195,7 +209,7 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
   }, [open]);
 
   useEffect(() => {
-    if (!open || typeof window === 'undefined') return;
+    if (!open || isCaptureMode || typeof window === 'undefined') return;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -233,10 +247,10 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
     } catch {
       /* ignore */
     }
-  }, [open]);
+  }, [open, isCaptureMode]);
 
   useEffect(() => {
-    if (!open || typeof window === 'undefined') return;
+    if (!open || isCaptureMode || typeof window === 'undefined') return;
     const t = window.setTimeout(() => {
       try {
         localStorage.setItem(
@@ -273,7 +287,33 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
     regAddress,
     regBankName,
     regBankAccount,
+    isCaptureMode,
   ]);
+
+  useEffect(() => {
+    if (!open) {
+      captureInitRef.current = false;
+      return;
+    }
+    if (!isCaptureMode || !captureSupplier || captureInitRef.current) return;
+    captureInitRef.current = true;
+    const commercial = buildSupplierCaptureCommercialPrefill(captureSupplier);
+    setRegName(commercial.regName);
+    setRegPhone(commercial.regPhone);
+    setRegEmail(commercial.regEmail);
+    setRegPricePerLiter(commercial.regPricePerLiter);
+    setRegNid(commercial.regNid);
+    setRegAddress(commercial.regAddress);
+    setRegBankName(commercial.regBankName);
+    setRegBankAccount(commercial.regBankAccount);
+    setRegPassword('');
+    setRegPassword2('');
+    setSupplierType(null);
+    setFarmer(initialFarmerState());
+    setCollector(initialCollectorState());
+    setStep('pick');
+    setWizardIndex(0);
+  }, [open, isCaptureMode, captureSupplier]);
 
   const districtHint =
     supplierType === 'farmer'
@@ -416,6 +456,13 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
 
   const startWizard = () => {
     if (!supplierType) return;
+    if (isCaptureMode && captureSupplier) {
+      if (supplierType === 'farmer') {
+        setFarmer(applyFarmerIdentityFromSupplier(captureSupplier));
+      } else {
+        setCollector((prev) => applyCollectorIdentityFromSupplier(captureSupplier, prev));
+      }
+    }
     setStepBlockMessages([]);
     setWizardIndex(0);
     setStep('form');
@@ -459,18 +506,21 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
     const onboardingPayload = getOnboardingPayload();
     if (!onboardingPayload) return;
 
-    const { errors, parsed } = validateOnboardingReview({
-      name: regName,
-      phoneRaw: regPhone,
-      emailRaw: regEmail,
-      password: regPassword,
-      password2: regPassword2,
-      pricePerLiterRaw: regPricePerLiter,
-      nidDigits: regNid,
-      addressRaw: regAddress,
-      bankNameRaw: regBankName,
-      bankAccountRaw: regBankAccount,
-    });
+    const { errors, parsed } = validateOnboardingReview(
+      {
+        name: regName,
+        phoneRaw: regPhone,
+        emailRaw: regEmail,
+        password: regPassword,
+        password2: regPassword2,
+        pricePerLiterRaw: regPricePerLiter,
+        nidDigits: regNid,
+        addressRaw: regAddress,
+        bankNameRaw: regBankName,
+        bankAccountRaw: regBankAccount,
+      },
+      isCaptureMode ? { skipPassword: true } : undefined,
+    );
 
     setReviewFieldErrors(errors);
     if (!parsed) {
@@ -503,6 +553,36 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
 
     setCreatingAccount(true);
     try {
+      if (isCaptureMode) {
+        const supplierAccountId = captureSupplier?.account_id;
+        if (!supplierAccountId) {
+          toast.error('Missing supplier account. Refresh the page and try again.');
+          return;
+        }
+        const res = await supplierOnboardingApi.saveForSupplierAccount(supplierAccountId, {
+          mcc_account_id: mccId,
+          account_type: accountType,
+          supplier_segment: accountType === 'supplier' ? supplierSegment : undefined,
+          onboarding: onboardingPayload as unknown as Record<string, unknown>,
+          price_per_liter: parsed.price_per_liter,
+          nid: parsed.nid,
+          address: parsed.address,
+          bank_name: parsed.bank_name,
+          bank_account_number: parsed.bank_account_number,
+          name: parsed.name,
+          email: parsed.email,
+        });
+        if (res.code === 200) {
+          toast.success(res.message || 'Supplier onboarding saved.');
+          onRegistered?.();
+          resetAll();
+          onClose();
+          return;
+        }
+        toast.error(res.message || 'Could not save onboarding.');
+        return;
+      }
+
       const res = await supplierOnboardingApi.register({
         mcc_account_id: mccId,
         name: parsed.name,
@@ -638,7 +718,11 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
     <Modal
       open={open}
       onClose={handleClose}
-      title="Onboard new supplier"
+      title={
+        isCaptureMode
+          ? `Complete onboarding${captureSupplier?.name ? ` — ${captureSupplier.name}` : ''}`
+          : 'Onboard new supplier'
+      }
       maxWidth="max-w-6xl"
       footer={
         step === 'form' && supplierType ? (
@@ -662,22 +746,30 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
               </button>
             ) : (
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveDraft}
-                  disabled={creatingAccount}
-                  className="inline-flex items-center justify-center gap-2 min-h-[48px] px-4 rounded-sm font-medium border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  <Icon icon={faFloppyDisk} size="sm" />
-                  Save draft only
-                </button>
+                {!isCaptureMode ? (
+                  <button
+                    type="button"
+                    onClick={handleSaveDraft}
+                    disabled={creatingAccount}
+                    className="inline-flex items-center justify-center gap-2 min-h-[48px] px-4 rounded-sm font-medium border border-slate-300 bg-white text-slate-800 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <Icon icon={faFloppyDisk} size="sm" />
+                    Save draft only
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   onClick={handleCreateAccount}
                   disabled={creatingAccount}
                   className="inline-flex items-center justify-center gap-2 min-h-[48px] px-6 rounded-sm font-medium text-white border border-[#004AAD] bg-[#004AAD] hover:bg-[#052A54] disabled:opacity-50"
                 >
-                  {creatingAccount ? 'Creating…' : 'Create account & finish'}
+                  {creatingAccount
+                    ? isCaptureMode
+                      ? 'Saving…'
+                      : 'Creating…'
+                    : isCaptureMode
+                      ? 'Save onboarding'
+                      : 'Create account & finish'}
                 </button>
               </div>
             )}
@@ -705,7 +797,9 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
         {step === 'pick' && (
           <div className="space-y-4">
             <p className="text-sm text-slate-700">
-              Select supplier type, then continue through the guided steps (Back / Next).
+              {isCaptureMode
+                ? 'Choose the supplier type for this onboarding. Your selection is saved on the supplier profile when you finish.'
+                : 'Select supplier type, then continue through the guided steps (Back / Next).'}
             </p>
             <div className="grid sm:grid-cols-2 gap-4">
               <button
@@ -905,9 +999,11 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
               <>
                 <WizardStepPanel
                   id="review-registration"
-                  title="Finalize Gemura registration"
+                  title={isCaptureMode ? 'Confirm profile & commercial details' : 'Finalize Gemura registration'}
                   subtitle={
-                    supplierType === 'collector' && collector.collectorKind
+                    isCaptureMode
+                      ? 'Update contact and payout fields where needed. Login already exists — no new password.'
+                      : supplierType === 'collector' && collector.collectorKind
                       ? `${MILK_COLLECTOR_KIND[collector.collectorKind].label} — sign-in, price, and payout for this MCC.`
                       : supplierType === 'collector'
                         ? 'Complete login and commercial fields. Collector type is set on the first screen.'
@@ -918,10 +1014,12 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
                     <div className="rounded-sm border border-slate-200/90 bg-slate-50/70 p-4 sm:p-5 space-y-4 shadow-sm shadow-slate-900/[0.03]">
                       <div>
                         <h4 className="text-xs font-bold uppercase tracking-wider text-[#052A54] border-b border-slate-200/90 pb-2">
-                          Gemura login
+                          {isCaptureMode ? 'Supplier profile' : 'Gemura login'}
                         </h4>
                         <p className="text-[13px] text-slate-600 mt-2 leading-snug">
-                          Phone and password are used on the public login page. Email is optional.
+                          {isCaptureMode
+                            ? 'Name, phone, and email are synced to the existing supplier account.'
+                            : 'Phone and password are used on the public login page. Email is optional.'}
                         </p>
                       </div>
 
@@ -991,6 +1089,8 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
                             <p className="text-xs text-red-600 font-medium">{reviewFieldErrors.regEmail}</p>
                           )}
                         </div>
+                        {!isCaptureMode ? (
+                        <>
                         <div className="space-y-1">
                           <FieldLabel htmlFor="oreg-pw">Password (min 6)</FieldLabel>
                           <input
@@ -1033,6 +1133,8 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
                             <p className="text-xs text-red-600 font-medium">{reviewFieldErrors.regPassword2}</p>
                           )}
                         </div>
+                        </>
+                        ) : null}
                       </div>
                     </div>
 

@@ -8,6 +8,7 @@ import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import { suppliersApi, SupplierDetails } from '@/lib/api/suppliers';
 import { DetailPageSkeleton } from '@/app/components/SkeletonLoader';
 import Modal from '@/app/components/Modal';
+import SupplierOnboardingModal from '../onboarding/SupplierOnboardingModal';
 import {
   FarmerOnboardingPreview,
   CollectorOnboardingPreview,
@@ -38,7 +39,8 @@ export default function SupplierDetailsPage() {
   const [error, setError] = useState('');
   const [supplier, setSupplier] = useState<SupplierDetails | null>(null);
 
-  const [onboardingModalOpen, setOnboardingModalOpen] = useState(false);
+  const [onboardingResultsOpen, setOnboardingResultsOpen] = useState(false);
+  const [captureOnboardingOpen, setCaptureOnboardingOpen] = useState(false);
   const [supplierPayloadHasMilkOnboardingKey, setSupplierPayloadHasMilkOnboardingKey] = useState(false);
   const [onboardingRecord, setOnboardingRecord] = useState<Record<string, unknown> | null>(null);
   const [onboardingUpdatedAt, setOnboardingUpdatedAt] = useState<string | null>(null);
@@ -80,8 +82,17 @@ export default function SupplierDetailsPage() {
     }
   };
 
-  const openOnboardingModal = () => {
-    setOnboardingModalOpen(true);
+  const hasStoredOnboarding = onboardingRecord != null;
+  const canCompleteOnboarding = supplierCrud.create || supplierCrud.update;
+
+  const openOnboardingAction = () => {
+    if (hasStoredOnboarding) {
+      setOnboardingResultsOpen(true);
+      return;
+    }
+    if (canCompleteOnboarding) {
+      setCaptureOnboardingOpen(true);
+    }
   };
 
   const formatCurrency = (amount: number) => {
@@ -142,10 +153,11 @@ export default function SupplierDetailsPage() {
           <h1 className="text-2xl font-bold text-gray-900">{supplier?.name || 'Supplier Details'}</h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {(hasPermission('view_suppliers') || isAdmin()) && (
-            <button type="button" onClick={openOnboardingModal} className="btn btn-secondary whitespace-nowrap">
+          {(hasPermission('view_suppliers') || isAdmin()) &&
+            (hasStoredOnboarding || canCompleteOnboarding) && (
+            <button type="button" onClick={openOnboardingAction} className="btn btn-secondary whitespace-nowrap">
               <Icon icon={faClipboardList} size="sm" className="mr-2" />
-              Onboarding results
+              {hasStoredOnboarding ? 'Onboarding results' : 'Complete onboarding'}
             </button>
           )}
           {supplierCrud.update ? (
@@ -326,14 +338,15 @@ export default function SupplierDetailsPage() {
             <div className="bg-white border border-gray-200 rounded-sm p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
               <div className="space-y-2">
-                {(hasPermission('view_suppliers') || isAdmin()) && (
+                {(hasPermission('view_suppliers') || isAdmin()) &&
+                  (hasStoredOnboarding || canCompleteOnboarding) && (
                   <button
                     type="button"
-                    onClick={openOnboardingModal}
+                    onClick={openOnboardingAction}
                     className="btn btn-secondary w-full justify-center"
                   >
                     <Icon icon={faClipboardList} size="sm" className="mr-2" />
-                    Onboarding results
+                    {hasStoredOnboarding ? 'Onboarding results' : 'Complete onboarding'}
                   </button>
                 )}
                 <Link href="/suppliers" className="btn btn-secondary w-full justify-center">
@@ -346,10 +359,10 @@ export default function SupplierDetailsPage() {
         </div>
       )}
 
-      {supplier && onboardingModalOpen ? (
+      {supplier && onboardingResultsOpen ? (
             <Modal
-              open={onboardingModalOpen}
-              onClose={() => setOnboardingModalOpen(false)}
+              open={onboardingResultsOpen}
+              onClose={() => setOnboardingResultsOpen(false)}
               title={`Onboarding — ${supplier.name}`}
               maxWidth="max-w-5xl"
             >
@@ -394,6 +407,18 @@ export default function SupplierDetailsPage() {
                 </div>
               )}
             </Modal>
+      ) : null}
+
+      {supplier && captureOnboardingOpen ? (
+        <SupplierOnboardingModal
+          open={captureOnboardingOpen}
+          onClose={() => setCaptureOnboardingOpen(false)}
+          mode="capture"
+          captureSupplier={supplier}
+          onRegistered={() => {
+            void loadSupplier();
+          }}
+        />
       ) : null}
     </div>
   );

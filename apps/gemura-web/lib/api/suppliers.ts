@@ -41,6 +41,7 @@ export interface SupplierDetails {
     nid?: string;
     address?: string;
     account_type: string;
+    supplier_segment?: string | null;
   };
   relationship: {
     price_per_liter: number;

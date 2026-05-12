@@ -55,11 +55,15 @@ export interface OnboardingReviewParsed {
 /**
  * Validates review-step fields for registration. Returns a map fieldKey → message (stable keys for inputs).
  */
-export function validateOnboardingReview(input: OnboardingReviewInput): {
+export function validateOnboardingReview(
+  input: OnboardingReviewInput,
+  options?: { skipPassword?: boolean },
+): {
   errors: Record<string, string>;
   parsed: OnboardingReviewParsed | null;
 } {
   const errors: Record<string, string> = {};
+  const skipPassword = options?.skipPassword === true;
   const name = input.name.trim();
   const phone = normalizeRwandaPhoneDigits(input.phoneRaw);
   const emailT = input.emailRaw.trim().toLowerCase();
@@ -72,8 +76,10 @@ export function validateOnboardingReview(input: OnboardingReviewInput): {
     errors.regPhone = 'Phone must be Rwandan format (250XXXXXXXXX). You can paste 078… and we normalize it.';
   }
   if (emailT && !SIMPLE_EMAIL.test(emailT)) errors.regEmail = 'Invalid email format.';
-  if (input.password.length < 6) errors.regPassword = 'Password must be at least 6 characters.';
-  if (input.password !== input.password2) errors.regPassword2 = 'Passwords do not match.';
+  if (!skipPassword) {
+    if (input.password.length < 6) errors.regPassword = 'Password must be at least 6 characters.';
+    if (input.password !== input.password2) errors.regPassword2 = 'Passwords do not match.';
+  }
 
   const price = Number.parseFloat(input.pricePerLiterRaw.replace(',', '.'));
   if (!Number.isFinite(price) || price <= 0) {

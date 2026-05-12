@@ -13,6 +13,7 @@ import { BulkCreateSuppliersDto } from './dto/bulk-create-suppliers.dto';
 import {
   RegisterSupplierOnboardingDto,
   UpdateSupplierMilkOnboardingDto,
+  UpsertSupplierMilkOnboardingDto,
   CreateManagedFarmDto,
   UpdateManagedFarmDto,
   DeleteManagedFarmDto,
@@ -345,6 +346,23 @@ export class SuppliersController {
   @ApiParam({ name: 'id', description: 'Supplier account ID (UUID)', type: String })
   async getSupplierOnboardingByAccount(@CurrentUser() user: User, @Param('id') id: string) {
     return this.suppliersService.getSupplierOnboardingByAccount(user, id);
+  }
+
+  @Put('by-id/:id/onboarding')
+  @RequireAnyPermission(['create_suppliers', 'update_suppliers'])
+  @ApiOperation({
+    summary: 'Create or replace milk onboarding for an existing supplier',
+    description:
+      'Persists the full onboarding wizard payload for a supplier already linked to the caller’s MCC. Does not create a new login.',
+  })
+  @ApiParam({ name: 'id', description: 'Supplier account ID (UUID)', type: String })
+  @ApiBody({ type: UpsertSupplierMilkOnboardingDto })
+  async upsertSupplierMilkOnboardingForAccount(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() body: UpsertSupplierMilkOnboardingDto,
+  ) {
+    return this.suppliersService.upsertSupplierMilkOnboardingForAccount(user, id, body);
   }
 
   @Get('by-id/:id')
