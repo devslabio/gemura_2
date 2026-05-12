@@ -91,12 +91,20 @@ export interface SuppliersResponse {
   data: Supplier[];
 }
 
+/** Returned with supplier detail when the MCC has an active relationship and a linked supplier user */
+export interface SupplierMilkOnboardingBundle {
+  onboarding: Record<string, unknown> | null;
+  updated_at: string | null;
+}
+
 export interface SupplierResponse {
   code: number;
   status: string;
   message: string;
   data: {
     supplier: SupplierDetails;
+    /** Present on newer APIs; omit on older backends */
+    milk_onboarding?: SupplierMilkOnboardingBundle | null;
   };
 }
 

@@ -16,6 +16,7 @@ import {
   OPERATIONS_NAV_GROUP_ORDER,
   EXTERNAL_SUPPLIER_NAV_ITEMS,
   EXTERNAL_CUSTOMER_NAV_ITEMS,
+  EXTERNAL_FARMER_NAV_ITEMS,
   EXTERNAL_NAV_GROUP_ORDER,
   buildNavSidebarGroups,
   isBusinessAccount,
@@ -106,20 +107,32 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     if (user) {
       setUserName(`${user.firstName} ${user.lastName}`);
       setUserEmail(user.email);
-      setUserRole(getRoleLabel(currentAccount?.role));
+      setUserRole(getRoleLabel(currentAccount?.role, currentAccount?.account_type));
     }
   }, [user, currentAccount]);
 
   // Build grouped sidebar nav (section titles + flat links; no collapsible submenus).
   const navGroups = useMemo((): NavSidebarGroup[] => {
     const items: NavItem[] = [];
-    const preferOperationsSidebar = FORCE_OPERATIONS_DASHBOARD && isBusinessAccount(accountType);
+
+    // Milk farmer / supplier / customer: never MCC admin UI (UserAccount.role may still be "owner" on their tenant).
+    if (isExternalSupplier(accountType) || isExternalCustomer(accountType)) {
+      if (isExternalSupplier(accountType)) {
+        EXTERNAL_SUPPLIER_NAV_ITEMS.forEach((item) => items.push(item));
+      } else if ((accountType || '').toLowerCase() === 'farmer') {
+        EXTERNAL_FARMER_NAV_ITEMS.forEach((item) => items.push(item));
+      } else {
+        EXTERNAL_CUSTOMER_NAV_ITEMS.forEach((item) => items.push(item));
+      }
+      return buildNavSidebarGroups(items, EXTERNAL_NAV_GROUP_ORDER);
+    }
 
     const showAdminDashboard = canViewDashboard() || isAdmin();
     const showAdminUsers = canManageUsers() || isAdmin();
     // Owner/admin on a farm/business account use the operations app; do not trap them in admin-portal-only nav.
     const useOperationsNavForAdminRole =
       isBusinessAccount(accountType) && isAdminRole(role);
+    const preferOperationsSidebar = FORCE_OPERATIONS_DASHBOARD && isBusinessAccount(accountType);
 
     const shouldUseAdminPortal =
       isAdminRole(role) &&
@@ -193,18 +206,6 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
         items.push(item);
       });
       return buildNavSidebarGroups(items, OPERATIONS_NAV_GROUP_ORDER);
-    }
-
-    // External: supplier account
-    if (isExternalSupplier(accountType)) {
-      EXTERNAL_SUPPLIER_NAV_ITEMS.forEach((item) => items.push(item));
-      return buildNavSidebarGroups(items, EXTERNAL_NAV_GROUP_ORDER);
-    }
-
-    // External: customer / farmer
-    if (isExternalCustomer(accountType)) {
-      EXTERNAL_CUSTOMER_NAV_ITEMS.forEach((item) => items.push(item));
-      return buildNavSidebarGroups(items, EXTERNAL_NAV_GROUP_ORDER);
     }
 
     // Fallback: business account type, unknown role — show operations by permissions

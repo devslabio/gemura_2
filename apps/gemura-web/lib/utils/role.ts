@@ -13,8 +13,18 @@ const ROLE_LABELS: Record<string, string> = {
   customer: 'Customer',
 };
 
-export function getRoleLabel(role?: string | null): string {
-  const normalized = (role || '').trim().toLowerCase();
-  if (!normalized) return 'User';
-  return ROLE_LABELS[normalized] || normalized.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+/**
+ * @param accountType From UserAccount / login (e.g. farmer, supplier, mcc) — distinguishes org owner from milk farmer.
+ */
+export function getRoleLabel(role?: string | null, accountType?: string | null): string {
+  const at = (accountType || '').trim().toLowerCase();
+  const r = (role || '').trim().toLowerCase();
+  // “owner” on a farmer/supplier/customer login is tenant ownership, not MCC admin — show the business type.
+  if (r === 'owner' && (at === 'farmer' || at === 'supplier' || at === 'customer')) {
+    if (at === 'farmer') return 'Farmer';
+    if (at === 'supplier') return 'Milk supplier';
+    return 'Customer';
+  }
+  if (!r) return 'User';
+  return ROLE_LABELS[r] || r.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }

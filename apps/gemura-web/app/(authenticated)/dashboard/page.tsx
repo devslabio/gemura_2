@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth';
+import { isBusinessAccount } from '@/lib/config/nav.config';
+import ExternalUserDashboard from './supplier/ExternalUserDashboard';
 import { usePermission } from '@/hooks/usePermission';
 import { statsApi, OverviewResponse } from '@/lib/api/stats';
 import { accountingApi } from '@/lib/api/accounting';
@@ -98,7 +100,7 @@ function getPeriodRange(period: PeriodKey, customFrom?: string, customTo?: strin
   return { date_from: toYYYYMMDD(start), date_to: toYYYYMMDD(end) };
 }
 
-export default function Dashboard() {
+function BusinessDashboard() {
   const { currentAccount } = useAuthStore();
   const { hasPermission, hasAnyPermission } = usePermission();
   const accountType = currentAccount?.account_type ?? '';
@@ -274,8 +276,7 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, [accountType, currentAccount?.account_id, dateRange.date_from, dateRange.date_to, refreshKey]);
-
-  // MCC manager panel data — shown on Overview for manager roles.
+  // MCC manager panel data — shown on Overview for manager roles (loaded when operations dashboard tab applies).
   useEffect(() => {
     if (!showMccOpsDashboard || !currentAccount?.account_id) {
       return;
@@ -1705,4 +1706,20 @@ export default function Dashboard() {
       </Modal>
     </div>
   );
+}
+
+export default function Dashboard() {
+  const { currentAccount } = useAuthStore();
+  const accountTypeLower = (currentAccount?.account_type ?? '').toLowerCase();
+
+  if (!isBusinessAccount(accountTypeLower)) {
+    return (
+      <ExternalUserDashboard
+        currentAccount={currentAccount}
+        accountTypeLower={accountTypeLower}
+      />
+    );
+  }
+
+  return <BusinessDashboard />;
 }

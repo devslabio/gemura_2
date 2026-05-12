@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { Fragment, useEffect, useMemo, useState, useCallback } from 'react';
 import { useAuthStore } from '@/store/auth';
 import { usePermission } from '@/hooks/usePermission';
 import Icon, {
@@ -37,7 +37,12 @@ import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 
 type NavSection = { kind: 'section'; label: string };
 type NavLink = { kind: 'link'; href: string; label: string; icon: IconDefinition; badge?: number };
-type NavEntry = NavSection | NavLink;
+type NavNestedGroup = {
+  kind: 'nested_group';
+  parent: { href: string; label: string; icon: IconDefinition; badge?: number };
+  children: Array<{ href: string; label: string; icon: IconDefinition }>;
+};
+type NavEntry = NavSection | NavLink | NavNestedGroup;
 
 interface SidebarProps {
   isOpen: boolean;
@@ -180,11 +185,14 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
       entries.push({ kind: 'section', label: 'Administration' });
       entries.push({ kind: 'link', href: '/admin/users', label: 'Users', icon: faUsers });
       entries.push({
-        kind: 'link',
-        href: '/admin/onboarding',
-        label: 'MCC onboarding',
-        icon: faClipboardList,
-        badge: onboardingPending > 0 ? onboardingPending : undefined,
+        kind: 'nested_group',
+        parent: {
+          href: '/admin/onboarding',
+          label: 'MCC onboarding',
+          icon: faClipboardList,
+          badge: onboardingPending > 0 ? onboardingPending : undefined,
+        },
+        children: [{ href: '/admin/onboarding/suppliers', label: 'Suppliers onboarding', icon: faTruck }],
       });
       entries.push({ kind: 'link', href: '/admin/roles', label: 'Roles', icon: faUserShield });
       entries.push({ kind: 'link', href: '/admin/permissions', label: 'Permissions', icon: faLock });
@@ -208,6 +216,14 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     if (!href) return false;
     if (href === '/admin/dashboard') {
       return pathname === '/admin/dashboard' || pathname.startsWith('/admin/dashboard/');
+    }
+    if (href === '/admin/onboarding') {
+      if (!pathname || pathname.startsWith('/admin/onboarding/suppliers')) return false;
+      if (pathname === '/admin/onboarding') return true;
+      return /^\/admin\/onboarding\/[^/]+$/.test(pathname);
+    }
+    if (href === '/admin/onboarding/suppliers') {
+      return Boolean(pathname && (pathname === href || pathname.startsWith(`${href}/`)));
     }
     return pathname === href || pathname.startsWith(`${href}/`);
   };
@@ -336,6 +352,66 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
                   <li key={`section-${entry.label}-${idx}`} className="mt-3 mb-1 first:mt-0 px-5 md:px-7">
                     <span className="text-[10px] font-semibold uppercase tracking-wider text-white/40">{entry.label}</span>
                   </li>
+                );
+              }
+
+              if (entry.kind === 'nested_group') {
+                const parentActive = linkIsActive(entry.parent.href);
+                const rowClass = (active: boolean, padded?: boolean) => `
+                flex items-center gap-3 min-h-[44px] px-4 py-3 sm:px-5 md:px-7 w-full text-left
+                transition-all duration-200
+                ${collapsed ? 'justify-center px-3' : ''}
+                ${padded ? 'pl-11' : ''}
+                ${
+                  active
+                    ? 'bg-[#031a3a] text-white border-l-4 border-white/30'
+                    : 'text-gray-300 hover:bg-[#031a3a] hover:text-white active:bg-[#031a3a]'
+                }
+              `;
+                return (
+                  <Fragment key={`nested-${entry.parent.href}`}>
+                    <li className="my-0.5">
+                      <Link
+                        href={entry.parent.href}
+                        onClick={handleLinkClick}
+                        className={rowClass(parentActive)}
+                        title={collapsed ? entry.parent.label : undefined}
+                      >
+                        <Icon icon={entry.parent.icon} className={parentActive ? 'text-white' : 'text-gray-300'} size="sm" />
+                        {!collapsed && (
+                          <span className="text-sm font-medium flex-1 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-2 min-w-0">
+                            {entry.parent.label}
+                            {entry.parent.badge != null && entry.parent.badge > 0 && (
+                              <span className="shrink-0 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-amber-400 text-[#052a54] text-xs font-bold">
+                                {entry.parent.badge > 99 ? '99+' : entry.parent.badge}
+                              </span>
+                            )}
+                          </span>
+                        )}
+                        {!collapsed && <span className="w-3 shrink-0" aria-hidden="true" />}
+                      </Link>
+                    </li>
+                    {!collapsed &&
+                      entry.children.map((child) => {
+                        const childActive = linkIsActive(child.href);
+                        return (
+                          <li key={child.href} className="my-0.5 ml-4 sm:ml-5 border-l border-white/15 pl-1">
+                            <Link
+                              href={child.href}
+                              onClick={handleLinkClick}
+                              className={rowClass(childActive, true)}
+                              title={child.label}
+                            >
+                              <Icon icon={child.icon} className={childActive ? 'text-white' : 'text-gray-300'} size="sm" />
+                              <span className="text-sm font-medium flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
+                                {child.label}
+                              </span>
+                              <span className="w-3 shrink-0" aria-hidden="true" />
+                            </Link>
+                          </li>
+                        );
+                      })}
+                  </Fragment>
                 );
               }
 

@@ -14,7 +14,8 @@ import { ListPageSkeleton } from '@/app/components/SkeletonLoader';
 import Modal from '@/app/components/Modal';
 import BulkImportModal from '@/app/components/BulkImportModal';
 import CreateSupplierForm from './CreateSupplierForm';
-import Icon, { faPlus, faEye, faCheckCircle, faBuilding, faPhone, faDollarSign, faFile } from '@/app/components/Icon';
+import SupplierOnboardingModal from './onboarding/SupplierOnboardingModal';
+import Icon, { faPlus, faEye, faCheckCircle, faBuilding, faPhone, faDollarSign, faFile, faUserPlus } from '@/app/components/Icon';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -39,6 +40,7 @@ export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [error, setError] = useState('');
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [onboardModalOpen, setOnboardModalOpen] = useState(false);
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -237,6 +239,14 @@ export default function SuppliersPage() {
             >
               Download template
             </a>
+            <button
+              type="button"
+              onClick={() => setOnboardModalOpen(true)}
+              className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 text-sm font-medium text-white bg-amber-700 hover:bg-amber-800 rounded border border-amber-800 transition-colors"
+            >
+              <Icon icon={faUserPlus} size="sm" />
+              Onboard new supplier
+            </button>
             <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
               <Icon icon={faPlus} size="sm" className="mr-2" />
               Add Supplier
@@ -288,6 +298,12 @@ export default function SuppliersPage() {
           bank_account_number: row.bank_account_number || undefined,
         })}
         onSuccess={loadSuppliers}
+      />
+
+      <SupplierOnboardingModal
+        open={onboardModalOpen}
+        onClose={() => setOnboardModalOpen(false)}
+        onRegistered={() => loadSuppliers()}
       />
 
       <Modal open={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Add Supplier" maxWidth="max-w-3xl">

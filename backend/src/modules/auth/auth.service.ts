@@ -95,7 +95,8 @@ export class AuthService {
         account_id: ua.account!.id,
         account_code: ua.account!.code,
         account_name: ua.account!.name,
-        account_type: ua.account!.type,
+        /** App routing (farmer, supplier, mcc): use the user’s type, not Account.type (tenant). */
+        account_type: String(user.account_type),
         account_status: ua.account!.status,
         account_created_at: ua.account!.created_at,
         role: ua.role,
@@ -107,6 +108,7 @@ export class AuthService {
         user_account_status: ua.status,
         access_granted_at: ua.created_at,
         is_default: user.default_account_id === ua.account!.id,
+        supplier_segment: user.supplier_segment ?? null,
       })),
     );
 
@@ -185,6 +187,7 @@ export class AuthService {
           email: user.email,
           phone: user.phone,
           account_type: user.account_type,
+          supplier_segment: user.supplier_segment ?? null,
           status: user.status,
           token: authToken,
           role: defaultAccount?.role ?? '',

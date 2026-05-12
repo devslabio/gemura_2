@@ -74,6 +74,13 @@ enum MilkSaleStatus {
   deleted
 }
 
+enum SupplierTransferStatus {
+  submitted
+  accepted
+  partially_accepted
+  rejected
+}
+
 /// Gate arrival classification (§12.2).
 enum MccDeliverySourceType {
   direct
@@ -317,60 +324,61 @@ model Account {
   updated_at          DateTime      @updatedAt @map("updated_at")
   created_by          String?       @map("created_by") @db.Uuid
   updated_by          String?       @map("updated_by") @db.Uuid
-
-  // Relations
-  parent                         Account?                  @relation("AccountParent", fields: [parent_id], references: [id], onDelete: SetNull)
-  children                       Account[]                 @relation("AccountParent")
-  user_accounts                  UserAccount[]
-  account_memberships            AccountMembership[]
-  suppliers                      SupplierCustomer[]        @relation("SupplierAccount")
-  customers                      SupplierCustomer[]        @relation("CustomerAccount")
-  milk_sales_supplier            MilkSale[]                @relation("MilkSaleSupplier")
-  milk_sales_customer            MilkSale[]                @relation("MilkSaleCustomer")
-  wallets                        Wallet[]
-  orders                         Order[]
-  payroll_suppliers              PayrollSupplier[]         @relation("PayrollSupplierAccount")
-  payroll_payslips               PayrollPayslip[]          @relation("PayrollPayslipSupplier")
-  products                       Product[]                 @relation("ProductAccount")
-  default_account_users          User[]                    @relation("UserDefaultAccount")
-  inventory_sales_buyer          InventorySale[]           @relation("InventorySaleBuyer") // Used for both buyer tracking and supplier debt tracking
-  loans_lent                     Loan[]                    @relation("LoanLender")
-  loans_borrowed                 Loan[]                    @relation("LoanBorrower")
-  charges                        Charge[]                  @relation("ChargeCustomerAccount")
-  charge_supplier_links          ChargeSupplier[]          @relation("ChargeSupplierAccount")
-  charge_applications_supplier   ChargeApplication[]       @relation("ChargeApplicationSupplier")
-  payroll_runs                   PayrollRun[]              @relation("PayrollRunAccount")
-  created_by_user                User?                     @relation("AccountCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
-  updated_by_user                User?                     @relation("AccountUpdatedBy", fields: [updated_by], references: [id], onDelete: SetNull)
-  api_keys                       ApiKey[]
-  animals                        Animal[]                  @relation("AnimalAccount")
-  farms                          Farm[]                    @relation("FarmAccount")
-  milk_productions               MilkProduction[]          @relation("MilkProductionAccount")
-  poultry_flocks                 PoultryFlock[]
-  pig_batches                    PigBatch[]
-  pig_farrowings                 PigFarrowing[]
-  mcc_onboarding_linked          MccOnboardingSubmission[] @relation("MccOnboardingLinkedAccount")
-  mcc_gate_deliveries_as_mcc     MccGateDelivery[]         @relation("MccGateDeliveryMccAccount")
-  mcc_gate_deliveries_as_source  MccGateDelivery[]         @relation("MccGateDeliverySourceAccount")
-  mcc_milk_manifests_as_mcc      MccMilkManifest[]         @relation("MccManifestMccAccount")
-  mcc_milk_manifests_as_umucunda MccMilkManifest[]         @relation("MccManifestUmucundaSupplier")
-  mcc_manifest_lines_as_farmer   MccManifestLine[]         @relation("MccManifestLineFarmerSupplier")
-  mcc_credit_events_farmer       MccCreditEvent[]          @relation("MccCreditEventFarmer")
-  mcc_credit_events_as_mcc       MccCreditEvent[]          @relation("MccCreditEventMccAccount")
-  mcc_staff_shifts               MccStaffShift[]           @relation("MccStaffShiftMccAccount")
-  mcc_operational_profile        MccOperationalProfile?
-  mcc_cooling_tank_profiles      MccCoolingTankProfile[]
-  mcc_facility_snapshot          MccFacilitySnapshot?
-  user_accounts_umucunda_scope   UserAccount[]             @relation("UserAccountUmucundaSupplierScope")
   /// Finest admin location (typically village) for MCC/tenant placement; used for regional supervision.
   operational_location_id String?   @map("operational_location_id") @db.Uuid
-  operational_location    Location? @relation("AccountOperationalLocation", fields: [operational_location_id], references: [id], onDelete: SetNull)
   /// Denormalized district (from path of operational_location_id) for filtering and supervisor scope matching.
-  operational_district_id String? @map("operational_district_id") @db.Uuid
-  operational_district    Location? @relation("AccountOperationalDistrict", fields: [operational_district_id], references: [id], onDelete: SetNull)
+  operational_district_id String?   @map("operational_district_id") @db.Uuid
   /// Platform user with `regional_supervisor` role responsible for this account (admin-assigned).
   regional_supervisor_user_id String? @map("regional_supervisor_user_id") @db.Uuid
-  regional_supervisor         User?   @relation("AccountRegionalSupervisor", fields: [regional_supervisor_user_id], references: [id], onDelete: SetNull)
+
+  // Relations
+  parent                Account?            @relation("AccountParent", fields: [parent_id], references: [id], onDelete: SetNull)
+  children              Account[]           @relation("AccountParent")
+  user_accounts         UserAccount[]
+  account_memberships   AccountMembership[]
+  suppliers             SupplierCustomer[]  @relation("SupplierAccount")
+  customers             SupplierCustomer[]  @relation("CustomerAccount")
+  milk_sales_supplier   MilkSale[]          @relation("MilkSaleSupplier")
+  milk_sales_customer   MilkSale[]          @relation("MilkSaleCustomer")
+  wallets               Wallet[]
+  orders                Order[]
+  payroll_suppliers     PayrollSupplier[]   @relation("PayrollSupplierAccount")
+  payroll_payslips      PayrollPayslip[]    @relation("PayrollPayslipSupplier")
+  products              Product[]           @relation("ProductAccount")
+  default_account_users User[]              @relation("UserDefaultAccount")
+  inventory_sales_buyer InventorySale[]     @relation("InventorySaleBuyer") // Used for both buyer tracking and supplier debt tracking
+  loans_lent            Loan[]             @relation("LoanLender")
+  loans_borrowed        Loan[]             @relation("LoanBorrower")
+  charges               Charge[]           @relation("ChargeCustomerAccount")
+  charge_supplier_links ChargeSupplier[]   @relation("ChargeSupplierAccount")
+  charge_applications_supplier ChargeApplication[] @relation("ChargeApplicationSupplier")
+  payroll_runs         PayrollRun[]        @relation("PayrollRunAccount")
+  created_by_user       User?               @relation("AccountCreatedBy", fields: [created_by], references: [id], onDelete: SetNull)
+  updated_by_user       User?               @relation("AccountUpdatedBy", fields: [updated_by], references: [id], onDelete: SetNull)
+  api_keys              ApiKey[]
+  animals               Animal[]            @relation("AnimalAccount")
+  farms                 Farm[]              @relation("FarmAccount")
+  milk_productions      MilkProduction[]    @relation("MilkProductionAccount")
+  poultry_flocks        PoultryFlock[]
+  pig_batches           PigBatch[]
+  pig_farrowings        PigFarrowing[]
+  mcc_onboarding_linked MccOnboardingSubmission[] @relation("MccOnboardingLinkedAccount")
+  supplier_transfers    SupplierTransfer[] @relation("MccSupplierTransfers")
+  mcc_gate_deliveries_as_mcc         MccGateDelivery[]               @relation("MccGateDeliveryMccAccount")
+  mcc_gate_deliveries_as_source      MccGateDelivery[]               @relation("MccGateDeliverySourceAccount")
+  mcc_milk_manifests_as_mcc          MccMilkManifest[]               @relation("MccManifestMccAccount")
+  mcc_milk_manifests_as_umucunda     MccMilkManifest[]               @relation("MccManifestUmucundaSupplier")
+  mcc_manifest_lines_as_farmer       MccManifestLine[]               @relation("MccManifestLineFarmerSupplier")
+  mcc_credit_events_farmer           MccCreditEvent[]               @relation("MccCreditEventFarmer")
+  mcc_credit_events_as_mcc           MccCreditEvent[]               @relation("MccCreditEventMccAccount")
+  mcc_staff_shifts                   MccStaffShift[]                @relation("MccStaffShiftMccAccount")
+  mcc_operational_profile            MccOperationalProfile?
+  mcc_cooling_tank_profiles          MccCoolingTankProfile[]
+  mcc_facility_snapshot              MccFacilitySnapshot?
+  operational_location               Location?           @relation("AccountOperationalLocation", fields: [operational_location_id], references: [id], onDelete: SetNull)
+  operational_district               Location?           @relation("AccountOperationalDistrict", fields: [operational_district_id], references: [id], onDelete: SetNull)
+  regional_supervisor                User?               @relation("AccountRegionalSupervisor", fields: [regional_supervisor_user_id], references: [id], onDelete: SetNull)
+  user_accounts_umucunda_scope       UserAccount[]                  @relation("UserAccountUmucundaSupplierScope")
 
   @@index([code])
   @@index([type])
@@ -424,6 +432,11 @@ model User {
   total_points         Int              @default(0) @map("total_points")
   available_points     Int              @default(0) @map("available_points")
   registration_type    RegistrationType @default(self) @map("registration_type")
+  /**
+   * Milk supply segment for supplier/farmer app: direct_farmer | farmer_collector | pure_collector
+   * (mirrors gemura-web UserAccount.supplier_segment).
+   */
+  supplier_segment     String?          @map("supplier_segment") @db.VarChar(32)
   immis_member_id      Int?             @unique @map("immis_member_id")
   immis_linked_at      DateTime?        @map("immis_linked_at")
   created_at           DateTime         @default(now()) @map("created_at")
@@ -462,6 +475,8 @@ model User {
   user_referrals_referred      UserReferral[]            @relation("UserReferred")
   user_rewards                 UserReward[]
   user_onboardings             UserOnboarding[]
+  supplier_milk_onboarding     SupplierMilkOnboarding?
+  supplier_transfers           SupplierTransfer[] @relation("SupplierTransfers")
   mcc_onboarding_reviews       MccOnboardingSubmission[] @relation("MccOnboardingReviewedBy")
   mcc_onboarding_linked        MccOnboardingSubmission[] @relation("MccOnboardingLinkedUser")
   inventory_sales_created      InventorySale[]           @relation("InventorySaleCreatedBy")
@@ -632,13 +647,14 @@ model MilkSale {
   updated_by           String?        @map("updated_by") @db.Uuid
 
   // Relations
-  supplier_account  Account          @relation("MilkSaleSupplier", fields: [supplier_account_id], references: [id], onDelete: Restrict)
-  customer_account  Account          @relation("MilkSaleCustomer", fields: [customer_account_id], references: [id], onDelete: Restrict)
-  recorded_by_user  User             @relation("MilkSaleRecordedBy", fields: [recorded_by], references: [id], onDelete: Restrict)
-  mcc_gate_delivery MccGateDelivery? @relation("MilkSaleGateDelivery", fields: [mcc_gate_delivery_id], references: [id], onDelete: SetNull)
-  mcc_manifest_line MccManifestLine? @relation("MilkSaleManifestLine", fields: [mcc_manifest_line_id], references: [id], onDelete: SetNull)
-  animal            Animal?          @relation(fields: [animal_id], references: [id], onDelete: SetNull)
-  milk_production   MilkProduction?  @relation(fields: [milk_production_id], references: [id], onDelete: SetNull)
+  supplier_account    Account             @relation("MilkSaleSupplier", fields: [supplier_account_id], references: [id], onDelete: Restrict)
+  customer_account    Account             @relation("MilkSaleCustomer", fields: [customer_account_id], references: [id], onDelete: Restrict)
+  recorded_by_user    User                @relation("MilkSaleRecordedBy", fields: [recorded_by], references: [id], onDelete: Restrict)
+  mcc_gate_delivery   MccGateDelivery?    @relation("MilkSaleGateDelivery", fields: [mcc_gate_delivery_id], references: [id], onDelete: SetNull)
+  mcc_manifest_line   MccManifestLine?    @relation("MilkSaleManifestLine", fields: [mcc_manifest_line_id], references: [id], onDelete: SetNull)
+  animal              Animal?             @relation(fields: [animal_id], references: [id], onDelete: SetNull)
+  milk_production     MilkProduction?     @relation(fields: [milk_production_id], references: [id], onDelete: SetNull)
+  supplier_transfers  SupplierTransfer[]
 
   @@index([supplier_account_id])
   @@index([customer_account_id])
@@ -1272,6 +1288,52 @@ model UserOnboarding {
   @@index([user_id])
   @@index([step])
   @@map("user_onboardings")
+}
+
+/** JSON payload from MCC “onboard new supplier” wizard; one row per app user. */
+model SupplierMilkOnboarding {
+  id             String   @id @default(uuid()) @db.Uuid
+  user_id        String   @unique @map("user_id") @db.Uuid
+  payload        Json
+  mcc_account_id String?  @map("mcc_account_id") @db.Uuid
+  created_at     DateTime @default(now()) @map("created_at")
+  updated_at     DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([mcc_account_id])
+  @@map("supplier_milk_onboardings")
+}
+
+/** Transfer manifest from farmer/collector to MCC for milk delivery */
+model SupplierTransfer {
+  id                    String                 @id @default(uuid()) @db.Uuid
+  supplier_user_id      String                 @map("supplier_user_id") @db.Uuid
+  mcc_account_id        String                 @map("mcc_account_id") @db.Uuid
+  own_liters            Decimal                @map("own_liters") @db.Decimal(10, 2)
+  external_liters       Decimal                @map("external_liters") @db.Decimal(10, 2)
+  total_liters          Decimal                @map("total_liters") @db.Decimal(10, 2)
+  status                SupplierTransferStatus @default(submitted)
+  rejection_reason      String?                @map("rejection_reason")
+  accepted_liters       Decimal?               @map("accepted_liters") @db.Decimal(10, 2)
+  rejected_liters       Decimal?               @map("rejected_liters") @db.Decimal(10, 2)
+  milk_sale_id          String?                @map("milk_sale_id") @db.Uuid
+  notes                 String?
+  supplier_notes        String?                @map("supplier_notes")
+  submitted_at          DateTime               @map("submitted_at")
+  processed_at          DateTime?              @map("processed_at")
+  processed_by          String?                @map("processed_by") @db.Uuid
+  created_at            DateTime               @default(now()) @map("created_at")
+  updated_at            DateTime               @updatedAt @map("updated_at")
+
+  supplier   User         @relation("SupplierTransfers", fields: [supplier_user_id], references: [id], onDelete: Cascade)
+  mccAccount Account      @relation("MccSupplierTransfers", fields: [mcc_account_id], references: [id], onDelete: Cascade)
+  milkSale   MilkSale?    @relation(fields: [milk_sale_id], references: [id], onDelete: SetNull)
+
+  @@index([mcc_account_id, status])
+  @@index([supplier_user_id])
+  @@index([submitted_at])
+  @@map("supplier_transfers")
 }
 
 model MccOnboardingSubmission {

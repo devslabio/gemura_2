@@ -2,12 +2,23 @@ import { Injectable, BadRequestException, ForbiddenException, InternalServerErro
 import { PrismaService } from '../../prisma/prisma.service';
 import { RbacService } from '../rbac/rbac.service';
 import { canonicalPlatformRoleSlug, isPlatformSuperAdminRole } from '../admin/roles-permissions.config';
-import { User } from '@prisma/client';
+import { User, UserAccountType, SupplierTransferStatus } from '@prisma/client';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
+import {
+  RegisterSupplierOnboardingDto,
+  UpdateSupplierMilkOnboardingDto,
+  CreateManagedFarmDto,
+  UpdateManagedFarmDto,
+  DeleteManagedFarmDto,
+  CreateManagedCollectionDto,
+  CreateManagedProductionDto,
+  CreateManagedTransferDto,
+  SubmitManagedTransferDto,
+} from './dto/register-supplier-onboarding.dto';
 import * as bcrypt from 'bcrypt';
-import { randomBytes } from 'crypto';
-import { composeUserFullName } from '../../common/utils/user-name.util';
+import { randomBytes, randomUUID } from 'crypto';
+import { composeUserFullName, splitIntoFirstLast } from '../../common/utils/user-name.util';
 
 @Injectable()
 export class SuppliersService {
@@ -715,6 +726,21 @@ export class SuppliersService {
 
     const supplierUser = supplierAccount.user_accounts[0]?.user;
 
+    const milkOnboardingRow =
+      relationship && supplierUser
+        ? await this.prisma.supplierMilkOnboarding.findUnique({
+            where: { user_id: supplierUser.id },
+          })
+        : null;
+
+    const milk_onboarding =
+      relationship && supplierUser
+        ? {
+            onboarding: milkOnboardingRow?.payload ?? null,
+            updated_at: milkOnboardingRow?.updated_at?.toISOString() ?? null,
+          }
+        : null;
+
     return {
       code: 200,
       status: 'success',
@@ -745,6 +771,97 @@ export class SuppliersService {
             updated_at: relationship.updated_at,
           } : null,
         },
+        milk_onboarding,
+      },
+    };
+  }
+
+  /**
+   * Milk onboarding JSON for a supplier tenant account linked to the caller’s MCC.
+   */
+  async getSupplierOnboardingByAccount(user: User, supplierAccountId: string) {
+    if (!user.default_account_id) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'No valid default account found. Please set a default account.',
+      });
+    }
+
+    const customerAccountId = user.default_account_id;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(supplierAccountId)) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Invalid supplier account ID format. Must be a valid UUID.',
+      });
+    }
+
+    const supplierAccount = await this.prisma.account.findUnique({
+      where: { id: supplierAccountId },
+      include: {
+        user_accounts: {
+          where: { status: 'active' },
+          include: { user: true },
+          take: 1,
+        },
+      },
+    });
+
+    if (!supplierAccount) {
+      throw new BadRequestException({
+        code: 404,
+        status: 'error',
+        message: 'Supplier account not found.',
+      });
+    }
+
+    const relationship = await this.prisma.supplierCustomer.findFirst({
+      where: {
+        supplier_account_id: supplierAccount.id,
+        customer_account_id: customerAccountId,
+      },
+    });
+
+    if (!relationship) {
+      throw new BadRequestException({
+        code: 404,
+        status: 'error',
+        message: 'Supplier relationship not found.',
+      });
+    }
+
+    const supplierUser = supplierAccount.user_accounts[0]?.user;
+    if (!supplierUser) {
+      return {
+        code: 200,
+        status: 'success',
+        message: 'No user linked to this supplier account.',
+        data: { onboarding: null, updated_at: null },
+      };
+    }
+
+    const row = await this.prisma.supplierMilkOnboarding.findUnique({
+      where: { user_id: supplierUser.id },
+    });
+
+    if (!row) {
+      return {
+        code: 200,
+        status: 'success',
+        message: 'No onboarding record.',
+        data: { onboarding: null, updated_at: null },
+      };
+    }
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'OK',
+      data: {
+        onboarding: row.payload,
+        updated_at: row.updated_at.toISOString(),
       },
     };
   }
@@ -929,6 +1046,587 @@ export class SuppliersService {
       status: 'success',
       message: 'Supplier relationship deleted successfully.',
     };
+  }
+
+  private async assertUserCanActForMcc(user: User, mccAccountId: string): Promise<void> {
+    if (user.default_account_id === mccAccountId) {
+      return;
+    }
+    const ua = await this.prisma.userAccount.findFirst({
+      where: { user_id: user.id, account_id: mccAccountId, status: 'active' },
+    });
+    if (ua) {
+      return;
+    }
+    throw new ForbiddenException({
+      code: 403,
+      status: 'error',
+      message: 'Not allowed to onboard suppliers for this MCC account.',
+    });
+  }
+
+  /**
+   * MCC user completes the “onboard new supplier” wizard: create login + account + MCC link + store onboarding JSON.
+   */
+  async registerFromOnboarding(agentUser: User, dto: RegisterSupplierOnboardingDto) {
+    await this.assertUserCanActForMcc(agentUser, dto.mcc_account_id);
+
+    if (dto.account_type === 'supplier' && !dto.supplier_segment) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'supplier_segment is required for milk collectors (farmer_collector or pure_collector).',
+      });
+    }
+
+    const normalizedPhone = dto.phone.replace(/\D/g, '');
+
+    if (dto.email) {
+      const e = await this.prisma.user.findFirst({ where: { email: dto.email.toLowerCase().trim() } });
+      if (e) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: 'Email already exists.',
+        });
+      }
+    }
+
+    const existingPhone = await this.prisma.user.findFirst({ where: { phone: normalizedPhone } });
+    if (existingPhone) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Phone number already registered.',
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const userCode = `U_${randomBytes(3).toString('hex').toUpperCase()}`;
+    const accountCode = `A_${randomBytes(3).toString('hex').toUpperCase()}`;
+    const walletCode = `W_${randomBytes(3).toString('hex').toUpperCase()}`;
+    const token = randomBytes(32).toString('hex');
+
+    const appAccountType: UserAccountType =
+      dto.account_type === 'farmer' ? UserAccountType.farmer : UserAccountType.supplier;
+    const segment: string | null =
+      dto.account_type === 'farmer'
+        ? (dto.supplier_segment || 'direct_farmer')
+        : (dto.supplier_segment ?? null);
+
+    const normalizedAddress = dto.address?.trim() || null;
+    const normalizedBankName = dto.bank_name?.trim() || null;
+    const normalizedBankAccountNumber = dto.bank_account_number?.trim() || null;
+    const pricePerLiter = Number(dto.price_per_liter);
+
+    const { first_name, last_name } = splitIntoFirstLast(dto.name.trim());
+
+    const { newUser, account } = await this.prisma.$transaction(async (tx) => {
+      const nu = await tx.user.create({
+        data: {
+          code: userCode,
+          first_name,
+          last_name,
+          name: composeUserFullName(first_name, last_name) || dto.name.trim(),
+          phone: normalizedPhone,
+          nid: dto.nid,
+          address: normalizedAddress,
+          email: dto.email?.toLowerCase().trim() || null,
+          password_hash: passwordHash,
+          token,
+          status: 'active',
+          account_type: appAccountType,
+          supplier_segment: segment,
+          registration_type: 'onboarded',
+          default_account_id: null,
+          created_by: agentUser.id,
+        },
+      });
+
+      const acc = await tx.account.create({
+        data: {
+          code: accountCode,
+          name: dto.name.trim(),
+          bank_name: normalizedBankName,
+          bank_account_number: normalizedBankAccountNumber,
+          type: 'tenant',
+          status: 'active',
+          created_by: agentUser.id,
+        },
+      });
+
+      await tx.userAccount.create({
+        data: {
+          user_id: nu.id,
+          account_id: acc.id,
+          /** Use supplier (same as /suppliers/create) — "owner" is reserved for MCC org admins in the web app. */
+          role: 'supplier',
+          status: 'active',
+          created_by: agentUser.id,
+        },
+      });
+
+      await tx.user.update({ where: { id: nu.id }, data: { default_account_id: acc.id } });
+
+      await tx.wallet.create({
+        data: {
+          code: walletCode,
+          account_id: acc.id,
+          type: 'regular',
+          is_default: true,
+          balance: 0,
+          currency: 'RWF',
+          status: 'active',
+          created_by: agentUser.id,
+        },
+      });
+
+      await tx.supplierCustomer.create({
+        data: {
+          supplier_account_id: acc.id,
+          customer_account_id: dto.mcc_account_id,
+          price_per_liter: pricePerLiter,
+          relationship_status: 'active',
+          created_by: agentUser.id,
+        },
+      });
+
+      await tx.supplierMilkOnboarding.create({
+        data: {
+          user_id: nu.id,
+          payload: dto.onboarding as object,
+          mcc_account_id: dto.mcc_account_id,
+        },
+      });
+
+      return { newUser: nu, account: acc };
+    });
+
+    return {
+      code: 201,
+      status: 'success',
+      message: 'Supplier account created. They can sign in with phone and password.',
+      data: {
+        user_id: newUser.id,
+        account_id: account.id,
+      },
+    };
+  }
+
+  async getMyOnboarding(user: User) {
+    const row = await this.prisma.supplierMilkOnboarding.findUnique({
+      where: { user_id: user.id },
+    });
+    if (!row) {
+      return {
+        code: 200,
+        status: 'success',
+        message: 'No onboarding record.',
+        data: { onboarding: null, updated_at: null },
+      };
+    }
+    return {
+      code: 200,
+      status: 'success',
+      message: 'OK',
+      data: {
+        onboarding: row.payload,
+        updated_at: row.updated_at,
+      },
+    };
+  }
+
+  async putMyOnboarding(user: User, dto: UpdateSupplierMilkOnboardingDto) {
+    const row = await this.prisma.supplierMilkOnboarding.findUnique({
+      where: { user_id: user.id },
+    });
+    if (!row) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'No onboarding record to update. Complete MCC onboarding first.',
+      });
+    }
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const currentDraft = (typeof payload.draft === 'object' && payload.draft) ? (payload.draft as Record<string, unknown>) : {};
+    const nextPayload = {
+      ...payload,
+      draft: { ...currentDraft, ...dto.draft },
+    };
+    const updated = await this.prisma.supplierMilkOnboarding.update({
+      where: { user_id: user.id },
+      data: { payload: nextPayload as object },
+    });
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Onboarding draft updated.',
+      data: { onboarding: updated.payload, updated_at: updated.updated_at },
+    };
+  }
+
+  private async getOpsRowOrThrow(userId: string) {
+    const row = await this.prisma.supplierMilkOnboarding.findUnique({
+      where: { user_id: userId },
+    });
+    if (!row) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'No onboarding record found. Please complete onboarding first.',
+      });
+    }
+    return row;
+  }
+
+  private getOpsState(payload: Record<string, unknown>) {
+    const mg = (payload.management ?? {}) as Record<string, unknown>;
+    const farms = Array.isArray(mg.farms) ? mg.farms : [];
+    const collections = Array.isArray(mg.collections) ? mg.collections : [];
+    const production = Array.isArray(mg.production) ? mg.production : [];
+    const transfers = Array.isArray(mg.transfers) ? mg.transfers : [];
+    return { farms, collections, production, transfers };
+  }
+
+  private async saveOpsState(
+    userId: string,
+    payload: Record<string, unknown>,
+    state: { farms: unknown[]; collections: unknown[]; production: unknown[]; transfers: unknown[] },
+  ) {
+    const nextPayload = {
+      ...payload,
+      management: {
+        ...((payload.management as Record<string, unknown>) || {}),
+        farms: state.farms,
+        collections: state.collections,
+        production: state.production,
+        transfers: state.transfers,
+      },
+    };
+    return this.prisma.supplierMilkOnboarding.update({
+      where: { user_id: userId },
+      data: { payload: nextPayload as object },
+    });
+  }
+
+  async getOpsSummary(user: User) {
+    const row = await this.getOpsRowOrThrow(user.id);
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const { farms, collections, production, transfers } = this.getOpsState(payload);
+
+    const ownCollected = collections
+      .filter((c) => (c as { source_type?: string }).source_type === 'own_farm')
+      .reduce((a, c) => a + (Number((c as { liters?: number }).liters) || 0), 0);
+    const externalCollected = collections
+      .filter((c) => (c as { source_type?: string }).source_type === 'external_farm')
+      .reduce((a, c) => a + (Number((c as { liters?: number }).liters) || 0), 0);
+    const totalCollected = ownCollected + externalCollected;
+    const totalProduction = production.reduce((a, p) => a + (Number((p as { liters?: number }).liters) || 0), 0);
+    const pendingTransfers = transfers.filter((t) => (t as { status?: string }).status !== 'submitted').length;
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'OK',
+      data: {
+        farms_total: farms.length,
+        own_collected_liters: ownCollected,
+        external_collected_liters: externalCollected,
+        total_collected_liters: totalCollected,
+        own_production_liters: totalProduction,
+        pending_transfers: pendingTransfers,
+      },
+    };
+  }
+
+  async getMyFarms(user: User) {
+    const row = await this.getOpsRowOrThrow(user.id);
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const { farms } = this.getOpsState(payload);
+    return { code: 200, status: 'success', message: 'OK', data: farms };
+  }
+
+  async createMyFarm(user: User, dto: CreateManagedFarmDto) {
+    const row = await this.getOpsRowOrThrow(user.id);
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const state = this.getOpsState(payload);
+    const now = new Date().toISOString();
+    const farm = {
+      id: randomUUID(),
+      name: dto.name.trim(),
+      location: dto.location?.trim() || '',
+      status: dto.status || 'active',
+      created_at: now,
+      updated_at: now,
+    };
+    state.farms.push(farm);
+    await this.saveOpsState(user.id, payload, state);
+    return { code: 201, status: 'success', message: 'Farm added.', data: farm };
+  }
+
+  async updateMyFarm(user: User, dto: UpdateManagedFarmDto) {
+    const row = await this.getOpsRowOrThrow(user.id);
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const state = this.getOpsState(payload);
+    const idx = state.farms.findIndex((f) => (f as { id?: string }).id === dto.id);
+    if (idx < 0) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'Farm not found.' });
+    }
+    const prev = state.farms[idx] as Record<string, unknown>;
+    state.farms[idx] = {
+      ...prev,
+      ...(dto.name != null ? { name: dto.name.trim() } : {}),
+      ...(dto.location != null ? { location: dto.location.trim() } : {}),
+      ...(dto.status != null ? { status: dto.status } : {}),
+      updated_at: new Date().toISOString(),
+    };
+    await this.saveOpsState(user.id, payload, state);
+    return { code: 200, status: 'success', message: 'Farm updated.', data: state.farms[idx] };
+  }
+
+  async deleteMyFarm(user: User, dto: DeleteManagedFarmDto) {
+    const row = await this.getOpsRowOrThrow(user.id);
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const state = this.getOpsState(payload);
+    const next = state.farms.filter((f) => (f as { id?: string }).id !== dto.id);
+    if (next.length === state.farms.length) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'Farm not found.' });
+    }
+    state.farms = next;
+    await this.saveOpsState(user.id, payload, state);
+    return { code: 200, status: 'success', message: 'Farm removed.' };
+  }
+
+  async getMyCollections(user: User) {
+    const row = await this.getOpsRowOrThrow(user.id);
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const { collections } = this.getOpsState(payload);
+    return { code: 200, status: 'success', message: 'OK', data: collections };
+  }
+
+  async createMyCollection(user: User, dto: CreateManagedCollectionDto) {
+    const row = await this.getOpsRowOrThrow(user.id);
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const state = this.getOpsState(payload);
+    const now = new Date().toISOString();
+    const collection = {
+      id: randomUUID(),
+      farm_id: dto.farm_id,
+      farm_name: dto.farm_name || '',
+      source_type: dto.source_type,
+      liters: Number(dto.liters) || 0,
+      quality_grade: dto.quality_grade || '',
+      notes: dto.notes || '',
+      status: 'recorded',
+      transferred: false,
+      collected_at: dto.collected_at,
+      created_at: now,
+      updated_at: now,
+    };
+    state.collections.push(collection);
+    await this.saveOpsState(user.id, payload, state);
+    return { code: 201, status: 'success', message: 'Collection added.', data: collection };
+  }
+
+  async getMyProduction(user: User) {
+    const row = await this.getOpsRowOrThrow(user.id);
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const { production } = this.getOpsState(payload);
+    return { code: 200, status: 'success', message: 'OK', data: production };
+  }
+
+  async createMyProduction(user: User, dto: CreateManagedProductionDto) {
+    const row = await this.getOpsRowOrThrow(user.id);
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const state = this.getOpsState(payload);
+    const now = new Date().toISOString();
+    const prod = {
+      id: randomUUID(),
+      liters: Number(dto.liters) || 0,
+      produced_at: dto.produced_at,
+      notes: dto.notes || '',
+      created_at: now,
+      updated_at: now,
+    };
+    state.production.push(prod);
+    await this.saveOpsState(user.id, payload, state);
+    return { code: 201, status: 'success', message: 'Production added.', data: prod };
+  }
+
+  async getMyTransfers(user: User) {
+    const row = await this.getOpsRowOrThrow(user.id);
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const state = this.getOpsState(payload);
+    const { transfers } = state;
+
+    // Auto-sync submitted transfers that don't have db_transfer_id
+    const mccAccountId = row.mcc_account_id;
+    let needsSave = false;
+    for (let i = 0; i < transfers.length; i++) {
+      const t = transfers[i] as Record<string, unknown>;
+      if (t.status === 'submitted' && !t.db_transfer_id && mccAccountId) {
+        const dbTransfer = await this.prisma.supplierTransfer.create({
+          data: {
+            supplier_user_id: user.id,
+            mcc_account_id: mccAccountId,
+            own_liters: Number(t.own_liters) || 0,
+            external_liters: Number(t.external_liters) || 0,
+            total_liters: Number(t.total_liters) || 0,
+            status: SupplierTransferStatus.submitted,
+            supplier_notes: String(t.notes || ''),
+            submitted_at: t.submitted_at ? new Date(t.submitted_at as string) : new Date(),
+          },
+        });
+        transfers[i] = { ...t, db_transfer_id: dbTransfer.id };
+        needsSave = true;
+      }
+    }
+    if (needsSave) {
+      await this.saveOpsState(user.id, payload, state);
+    }
+
+    // Fetch database transfer records to get MCC processing status
+    const dbTransfers = await this.prisma.supplierTransfer.findMany({
+      where: { supplier_user_id: user.id },
+      orderBy: { submitted_at: 'desc' },
+    });
+
+    // Create a map of db transfers by ID for quick lookup
+    const dbTransferMap = new Map(dbTransfers.map((t) => [t.id, t]));
+
+    // Merge JSON transfers with database status
+    const enrichedTransfers = transfers.map((t) => {
+      const jsonTransfer = t as Record<string, unknown>;
+      const dbId = jsonTransfer.db_transfer_id as string | undefined;
+      if (dbId && dbTransferMap.has(dbId)) {
+        const dbRecord = dbTransferMap.get(dbId)!;
+        return {
+          ...jsonTransfer,
+          mcc_status: dbRecord.status,
+          mcc_rejection_reason: dbRecord.rejection_reason,
+          mcc_accepted_liters: dbRecord.accepted_liters ? Number(dbRecord.accepted_liters) : null,
+          mcc_rejected_liters: dbRecord.rejected_liters ? Number(dbRecord.rejected_liters) : null,
+          mcc_processed_at: dbRecord.processed_at?.toISOString() || null,
+          mcc_notes: dbRecord.notes,
+        };
+      }
+      return jsonTransfer;
+    });
+
+    return { code: 200, status: 'success', message: 'OK', data: enrichedTransfers };
+  }
+
+  async createMyTransfer(user: User, dto: CreateManagedTransferDto) {
+    const row = await this.getOpsRowOrThrow(user.id);
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const state = this.getOpsState(payload);
+    const selected = state.collections.filter((c) => {
+      const cc = c as { id?: string; transferred?: boolean };
+      if (cc.transferred) return false;
+      if (!dto.collection_ids?.length) return true;
+      return dto.collection_ids.includes(cc.id || '');
+    });
+    if (selected.length === 0) {
+      throw new BadRequestException({ code: 400, status: 'error', message: 'No eligible collections to transfer.' });
+    }
+    const own = selected
+      .filter((c) => (c as { source_type?: string }).source_type === 'own_farm')
+      .reduce((a, c) => a + (Number((c as { liters?: number }).liters) || 0), 0);
+    const external = selected
+      .filter((c) => (c as { source_type?: string }).source_type === 'external_farm')
+      .reduce((a, c) => a + (Number((c as { liters?: number }).liters) || 0), 0);
+    const now = new Date().toISOString();
+    const transfer = {
+      id: randomUUID(),
+      mcc_account_id: row.mcc_account_id,
+      collection_ids: selected.map((c) => (c as { id: string }).id),
+      own_liters: own,
+      external_liters: external,
+      total_liters: own + external,
+      notes: dto.notes || '',
+      status: 'draft',
+      created_at: now,
+      updated_at: now,
+      submitted_at: null,
+    };
+    state.transfers.push(transfer);
+    await this.saveOpsState(user.id, payload, state);
+    return { code: 201, status: 'success', message: 'Transfer manifest created.', data: transfer };
+  }
+
+  async submitMyTransfer(user: User, dto: SubmitManagedTransferDto) {
+    const row = await this.getOpsRowOrThrow(user.id);
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const state = this.getOpsState(payload);
+    const idx = state.transfers.findIndex((t) => (t as { id?: string }).id === dto.id);
+    if (idx < 0) {
+      throw new NotFoundException({ code: 404, status: 'error', message: 'Transfer not found.' });
+    }
+    const now = new Date().toISOString();
+    const transfer = state.transfers[idx] as Record<string, unknown>;
+    
+    // If already submitted but missing db_transfer_id, sync to database
+    if (transfer.status === 'submitted' && !transfer.db_transfer_id) {
+      const mccAccountId = row.mcc_account_id;
+      if (mccAccountId) {
+        const dbTransfer = await this.prisma.supplierTransfer.create({
+          data: {
+            supplier_user_id: user.id,
+            mcc_account_id: mccAccountId,
+            own_liters: Number(transfer.own_liters) || 0,
+            external_liters: Number(transfer.external_liters) || 0,
+            total_liters: Number(transfer.total_liters) || 0,
+            status: SupplierTransferStatus.submitted,
+            supplier_notes: String(transfer.notes || ''),
+            submitted_at: transfer.submitted_at ? new Date(transfer.submitted_at as string) : new Date(),
+          },
+        });
+        state.transfers[idx] = { ...transfer, db_transfer_id: dbTransfer.id };
+        await this.saveOpsState(user.id, payload, state);
+        return { code: 200, status: 'success', message: 'Transfer synced to MCC.', data: state.transfers[idx] };
+      }
+    }
+    
+    if (transfer.status === 'submitted') {
+      return { code: 200, status: 'success', message: 'Transfer already submitted.', data: transfer };
+    }
+    const lineIds = Array.isArray(transfer.collection_ids) ? (transfer.collection_ids as string[]) : [];
+    state.collections = state.collections.map((c) => {
+      const cc = c as Record<string, unknown>;
+      if (lineIds.includes(String(cc.id || ''))) {
+        return { ...cc, transferred: true, updated_at: now };
+      }
+      return cc;
+    });
+
+    // Create a SupplierTransfer record in the database for MCC to process
+    const mccAccountId = row.mcc_account_id;
+    if (!mccAccountId) {
+      throw new BadRequestException({ code: 400, status: 'error', message: 'No MCC account linked to this supplier.' });
+    }
+
+    const dbTransfer = await this.prisma.supplierTransfer.create({
+      data: {
+        supplier_user_id: user.id,
+        mcc_account_id: mccAccountId,
+        own_liters: Number(transfer.own_liters) || 0,
+        external_liters: Number(transfer.external_liters) || 0,
+        total_liters: Number(transfer.total_liters) || 0,
+        status: SupplierTransferStatus.submitted,
+        supplier_notes: String(transfer.notes || ''),
+        submitted_at: new Date(),
+      },
+    });
+
+    state.transfers[idx] = {
+      ...transfer,
+      status: 'submitted',
+      submitted_at: now,
+      updated_at: now,
+      db_transfer_id: dbTransfer.id,
+    };
+    await this.saveOpsState(user.id, payload, state);
+    return { code: 200, status: 'success', message: 'Transfer submitted to MCC.', data: state.transfers[idx] };
   }
 }
 

@@ -45,6 +45,7 @@ import { ImmisModule } from './modules/immis/immis.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { RbacModule } from './modules/rbac/rbac.module';
 import { PublicAnalyticsModule } from './modules/public-analytics/public-analytics.module';
+import { TransfersModule } from './modules/transfers/transfers.module';
 import { SupervisorModule } from './modules/supervisor/supervisor.module';
 import { AppController } from './app.controller';
 
@@ -105,6 +106,7 @@ import { AppController } from './app.controller';
     AdminModule,
     SupervisorModule,
     PublicAnalyticsModule,
+    TransfersModule,
   ],
 })
 export class AppModule {}

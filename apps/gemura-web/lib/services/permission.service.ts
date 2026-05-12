@@ -1,8 +1,15 @@
 import { useAuthStore } from '@/store/auth';
+import { isExternalCustomer, isExternalSupplier } from '@/lib/config/nav.config';
 import { isPlatformSuperAdminRole, platformRolesMatch } from '@/lib/utils/platform-rbac';
 
 export interface Permission {
   [key: string]: boolean;
+}
+
+/** Milk app “external” accounts: must not inherit MCC owner/admin powers from UserAccount.role. */
+function isExternalMilkAccount(accountType: string | undefined): boolean {
+  const t = (accountType || '').toLowerCase();
+  return isExternalSupplier(t) || isExternalCustomer(t);
 }
 
 export class PermissionService {
@@ -20,9 +27,13 @@ export class PermissionService {
       return false;
     }
 
-    // System admin tier and admin receive full checks (matches backend RBAC).
-    if (isPlatformSuperAdminRole(currentAccount.role)) {
-      return true;
+    const role = this.normalizeRole(currentAccount.role);
+
+    // Platform admin tier + managers: full bypass on tenant accounts only (not external farmer/customer/supplier portals).
+    if (!isExternalMilkAccount(currentAccount.account_type)) {
+      if (isPlatformSuperAdminRole(currentAccount.role) || role === 'manager') {
+        return true;
+      }
     }
 
     const permissions = currentAccount.permissions;
@@ -63,11 +74,13 @@ export class PermissionService {
   }
 
   /**
-   * Platform super-admin tier (`system_admin`, legacy `owner`) or `admin` role — client-side permission bypass.
+   * Platform super-admin tier (`system_admin`, legacy `owner`) or `admin` — excluding external milk portals.
    */
   static isSuperAdminOrAdmin(): boolean {
     const { currentAccount } = useAuthStore.getState();
-    return isPlatformSuperAdminRole(currentAccount?.role);
+    if (!currentAccount) return false;
+    if (isExternalMilkAccount(currentAccount.account_type)) return false;
+    return isPlatformSuperAdminRole(currentAccount.role);
   }
 
   /** @deprecated Prefer {@link isSuperAdminOrAdmin}; identical behavior. */

@@ -33,6 +33,9 @@ export class AccountDto {
 
   @ApiProperty()
   is_default: boolean;
+
+  @ApiProperty({ required: false, nullable: true })
+  supplier_segment?: string | null;
 }
 
 export class UserDto {
@@ -56,6 +59,9 @@ export class UserDto {
 
   @ApiProperty()
   account_type: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  supplier_segment?: string | null;
 
   @ApiProperty()
   status: string;
