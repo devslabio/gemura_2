@@ -1236,6 +1236,83 @@ export class SuppliersService {
     };
   }
 
+  /** Linked MCC (customer) account for this supplier’s default tenant account, when any. */
+  private async resolveLinkedMccForSupplierUser(user: User): Promise<string | null> {
+    const supplierAccountId = user.default_account_id;
+    if (!supplierAccountId) return null;
+    const rel = await this.prisma.supplierCustomer.findFirst({
+      where: {
+        supplier_account_id: supplierAccountId,
+        relationship_status: 'active',
+      },
+      select: { customer_account_id: true },
+    });
+    return rel?.customer_account_id ?? null;
+  }
+
+  /**
+   * Farmer / milk supplier starts (or resumes) self-service milk onboarding JSON.
+   * Creates `supplier_milk_onboardings` when missing; idempotent when a row already exists.
+   */
+  async initMyMilkOnboarding(user: User) {
+    const at = user.account_type;
+    if (at !== UserAccountType.farmer && at !== UserAccountType.supplier) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Milk onboarding is only available for farmer or supplier accounts.',
+      });
+    }
+
+    const existing = await this.prisma.supplierMilkOnboarding.findUnique({
+      where: { user_id: user.id },
+    });
+    if (existing) {
+      return {
+        code: 200,
+        status: 'success',
+        message: 'Onboarding record already exists.',
+        data: { onboarding: existing.payload as object, updated_at: existing.updated_at },
+      };
+    }
+
+    let supplier_type: 'farmer' | 'collector' = 'farmer';
+    let collector_kind: string | undefined;
+    if (at === UserAccountType.supplier) {
+      const seg = (user.supplier_segment || '').toString().toLowerCase();
+      if (seg === 'farmer_collector' || seg === 'pure_collector') {
+        supplier_type = 'collector';
+        collector_kind = seg;
+      } else {
+        supplier_type = 'farmer';
+      }
+    }
+
+    const mccId = await this.resolveLinkedMccForSupplierUser(user);
+    const payload: Record<string, unknown> = {
+      supplier_type,
+      gps: null,
+      nid_photo_meta: null,
+      draft: {},
+      ...(supplier_type === 'collector' && collector_kind ? { collector_kind } : {}),
+    };
+
+    const row = await this.prisma.supplierMilkOnboarding.create({
+      data: {
+        user_id: user.id,
+        mcc_account_id: mccId,
+        payload: payload as object,
+      },
+    });
+
+    return {
+      code: 201,
+      status: 'success',
+      message: 'Onboarding started.',
+      data: { onboarding: row.payload as object, updated_at: row.updated_at },
+    };
+  }
+
   async putMyOnboarding(user: User, dto: UpdateSupplierMilkOnboardingDto) {
     const row = await this.prisma.supplierMilkOnboarding.findUnique({
       where: { user_id: user.id },
@@ -1244,11 +1321,34 @@ export class SuppliersService {
       throw new NotFoundException({
         code: 404,
         status: 'error',
-        message: 'No onboarding record to update. Complete MCC onboarding first.',
+        message: 'No onboarding record to update. Start milk onboarding from Settings first.',
       });
     }
+
+    if (dto.onboarding && typeof dto.onboarding === 'object') {
+      const updated = await this.prisma.supplierMilkOnboarding.update({
+        where: { user_id: user.id },
+        data: { payload: dto.onboarding as object },
+      });
+      return {
+        code: 200,
+        status: 'success',
+        message: 'Onboarding saved.',
+        data: { onboarding: updated.payload, updated_at: updated.updated_at },
+      };
+    }
+
+    if (!dto.draft || typeof dto.draft !== 'object') {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Provide either `onboarding` (full document) or `draft` (partial draft merge).',
+      });
+    }
+
     const payload = (row.payload || {}) as Record<string, unknown>;
-    const currentDraft = (typeof payload.draft === 'object' && payload.draft) ? (payload.draft as Record<string, unknown>) : {};
+    const currentDraft =
+      typeof payload.draft === 'object' && payload.draft ? (payload.draft as Record<string, unknown>) : {};
     const nextPayload = {
       ...payload,
       draft: { ...currentDraft, ...dto.draft },

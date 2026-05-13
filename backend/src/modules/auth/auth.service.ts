@@ -20,6 +20,26 @@ import { RbacService } from '../rbac/rbac.service';
 import { canonicalPlatformRoleSlug } from '../admin/roles-permissions.config';
 import { composeUserFullName } from '../../common/utils/user-name.util';
 
+/**
+ * DB stores Rwanda mobiles as 25078… (digits only). Users often type 078… or 78….
+ * Returns unique digit-only variants to try in Prisma lookups.
+ */
+function rwandaPhoneLookupVariants(digitsOnly: string): string[] {
+  const d = digitsOnly.replace(/\D/g, '');
+  const variants = new Set<string>();
+  if (!d) return [];
+  variants.add(d);
+  // Local 10-digit e.g. 0788409034 → 250788409034
+  if (d.length === 10 && d.startsWith('0')) {
+    variants.add(`250${d.slice(1)}`);
+  }
+  // 9 digits starting with 7 (national significant number without trunk 0)
+  if (d.length === 9 && d.startsWith('7')) {
+    variants.add(`250${d}`);
+  }
+  return [...variants];
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -42,16 +62,22 @@ export class AuthService {
 
     // Determine if identifier is email or phone
     const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
-    const field = isEmail ? 'email' : 'phone';
-    const value = isEmail ? identifier.toLowerCase() : identifier.replace(/\D/g, '');
+    const value = isEmail ? identifier.toLowerCase().trim() : identifier.replace(/\D/g, '');
 
-    // Find user (phone numbers should be unique now)
-    const user = await this.prisma.user.findFirst({
-      where: {
-        [field]: value,
-        status: 'active',
-      },
-    });
+    // Find user (phone numbers should be unique now; accept 078… and 25078… for Rwanda)
+    const user = isEmail
+      ? await this.prisma.user.findFirst({
+          where: {
+            status: 'active',
+            email: { equals: value, mode: 'insensitive' },
+          },
+        })
+      : await this.prisma.user.findFirst({
+          where: {
+            status: 'active',
+            OR: rwandaPhoneLookupVariants(value).map((phone) => ({ phone })),
+          },
+        });
 
     if (!user) {
       throw new NotFoundException({
@@ -561,17 +587,27 @@ export class AuthService {
       });
     }
 
-    // Find user
-    const where: any = {};
-    if (phone) {
-      where.phone = phone.replace(/\D/g, '');
-    }
-    if (email) {
-      where.email = email.toLowerCase().trim();
+    const phoneDigits = phone ? phone.replace(/\D/g, '') : '';
+    const emailNorm = email ? email.toLowerCase().trim() : '';
+
+    let userWhere:
+      | { OR?: Array<{ phone: string } | { email: { equals: string; mode: 'insensitive' } }> }
+      | { email: { equals: string; mode: 'insensitive' } };
+    if (phoneDigits && emailNorm) {
+      userWhere = {
+        OR: [
+          ...rwandaPhoneLookupVariants(phoneDigits).map((p) => ({ phone: p })),
+          { email: { equals: emailNorm, mode: 'insensitive' } },
+        ],
+      };
+    } else if (phoneDigits) {
+      userWhere = { OR: rwandaPhoneLookupVariants(phoneDigits).map((p) => ({ phone: p })) };
+    } else {
+      userWhere = { email: { equals: emailNorm, mode: 'insensitive' } };
     }
 
     const user = await this.prisma.user.findFirst({
-      where: phone && email ? { OR: [{ phone: where.phone }, { email: where.email }] } : where,
+      where: userWhere,
       select: {
         id: true,
         legacy_id: true,

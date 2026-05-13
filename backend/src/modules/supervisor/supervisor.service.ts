@@ -134,20 +134,26 @@ export class SupervisorService {
     opts: { district_location_id?: string; region_id?: string },
   ) {
     const districtIds = await this.effectiveDistrictIds(user.id, opts);
+    const emptySummaryData = () => ({
+      mcc_count: 0,
+      members: 0,
+      suppliers: 0,
+      customers: 0,
+      farms: 0,
+      sales: 0,
+      collections: 0,
+      manifest_acceptance_pct: null as number | null,
+      quality_test_rejection_pct: null as number | null,
+      avg_tank_utilization_pct: null as number | null,
+      open_staff_shifts: 0,
+    });
+
     if (districtIds.length === 0) {
       return {
         code: 200,
         status: 'success',
         message: 'Summary retrieved.',
-        data: {
-          mcc_count: 0,
-          members: 0,
-          suppliers: 0,
-          customers: 0,
-          farms: 0,
-          sales: 0,
-          collections: 0,
-        },
+        data: emptySummaryData(),
       };
     }
 
@@ -164,15 +170,7 @@ export class SupervisorService {
         code: 200,
         status: 'success',
         message: 'Summary retrieved.',
-        data: {
-          mcc_count: 0,
-          members: 0,
-          suppliers: 0,
-          customers: 0,
-          farms: 0,
-          sales: 0,
-          collections: 0,
-        },
+        data: emptySummaryData(),
       };
     }
 
@@ -183,6 +181,10 @@ export class SupervisorService {
       salesBySupplierAccount,
       collectionsByCustomerAccount,
       farmsByAccount,
+      manifestByStatus,
+      testByOutcome,
+      tankAvg,
+      openStaffShifts,
     ] = await Promise.all([
       this.prisma.userAccount.groupBy({
         by: ['account_id'],
@@ -214,12 +216,53 @@ export class SupervisorService {
         where: { account_id: { in: accountIds } },
         _count: true,
       }),
+      this.prisma.mccMilkManifest.groupBy({
+        by: ['status'],
+        where: {
+          mcc_account_id: { in: accountIds },
+          status: { in: ['accepted', 'rejected'] },
+        },
+        _count: true,
+      }),
+      this.prisma.mccMilkTestResult.groupBy({
+        by: ['outcome'],
+        where: {
+          outcome: { in: ['accepted', 'rejected'] },
+          gate_delivery: { mcc_account_id: { in: accountIds } },
+        },
+        _count: true,
+      }),
+      this.prisma.mccFacilitySnapshot.aggregate({
+        where: { account_id: { in: accountIds }, tank_used_pct: { not: null } },
+        _avg: { tank_used_pct: true },
+      }),
+      this.prisma.mccStaffShift.count({
+        where: { mcc_account_id: { in: accountIds }, ended_at: null },
+      }),
     ]);
 
     const normalize = (row: { _count?: number | { _all?: number } }) =>
       typeof row._count === 'number' ? row._count : row._count?._all ?? 0;
 
     const sum = (rows: Array<{ _count?: number | { _all?: number } }>) => rows.reduce((acc, r) => acc + normalize(r), 0);
+
+    const mAccepted = normalize(manifestByStatus.find((r) => r.status === 'accepted') ?? {});
+    const mRejected = normalize(manifestByStatus.find((r) => r.status === 'rejected') ?? {});
+    const manifestDenom = mAccepted + mRejected;
+    const manifest_acceptance_pct =
+      manifestDenom > 0 ? Math.round((mAccepted / manifestDenom) * 1000) / 10 : null;
+
+    const testAcceptedRow = testByOutcome.find((r) => r.outcome === 'accepted');
+    const testRejectedRow = testByOutcome.find((r) => r.outcome === 'rejected');
+    const testAcceptedN = normalize(testAcceptedRow ?? {});
+    const testRejectedN = normalize(testRejectedRow ?? {});
+    const testDenom = testAcceptedN + testRejectedN;
+    const quality_test_rejection_pct =
+      testDenom > 0 ? Math.round((testRejectedN / testDenom) * 1000) / 10 : null;
+
+    const rawTankAvg = tankAvg._avg.tank_used_pct;
+    const avg_tank_utilization_pct =
+      rawTankAvg != null ? Math.round(Number(rawTankAvg.toString()) * 10) / 10 : null;
 
     return {
       code: 200,
@@ -233,6 +276,10 @@ export class SupervisorService {
         farms: sum(farmsByAccount),
         sales: sum(salesBySupplierAccount),
         collections: sum(collectionsByCustomerAccount),
+        manifest_acceptance_pct,
+        quality_test_rejection_pct,
+        avg_tank_utilization_pct,
+        open_staff_shifts: openStaffShifts,
       },
     };
   }

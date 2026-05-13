@@ -50,6 +50,14 @@ export type SupervisorSummaryResponse = {
     farms: number;
     sales: number;
     collections: number;
+    /** % accepted among manifests with status accepted or rejected (null if none). */
+    manifest_acceptance_pct: number | null;
+    /** % rejected among gate milk tests with outcome accepted or rejected (null if none). */
+    quality_test_rejection_pct: number | null;
+    /** Mean `tank_used_pct` from facility snapshots (null if no snapshots). */
+    avg_tank_utilization_pct: number | null;
+    /** Staff shifts with no `ended_at` (open gate shifts). */
+    open_staff_shifts: number;
   };
 };
 

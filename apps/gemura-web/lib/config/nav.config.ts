@@ -13,7 +13,6 @@ import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import {
   faHome,
   faUsers,
-  faCog,
   faReceipt,
   faBox,
   faBuilding,
@@ -32,7 +31,6 @@ import {
   faRightFromBracket,
   faChartBar,
   faUserFriends,
-  faIdCard,
 } from '@/app/components/Icon';
 
 /** Account types that see user/operations menu (filtered by role + permissions) */
@@ -149,7 +147,6 @@ export const MEMBERS_NAV_PERMISSIONS: readonly string[] = [
 export const ADMIN_NAV_ITEMS: NavItem[] = [
   { icon: faHome, label: 'Dashboard', href: '/admin/dashboard', section: 'admin', navGroup: 'Administration' },
   { icon: faUsers, label: 'Users', href: '/admin/users', section: 'admin', navGroup: 'Administration' },
-  { icon: faCog, label: 'Settings', href: '/settings', section: 'admin', navGroup: 'Administration' },
 ];
 
 export const ADMIN_NAV_GROUP_ORDER = ['Administration'] as const;
@@ -267,11 +264,10 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
   { icon: faHandHoldingDollar, label: 'Loans', href: '/loans', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
   { icon: faChartLine, label: 'Finance', href: '/finance', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
   { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
-  { icon: faCog, label: 'Settings', href: '/settings', section: 'operations', navGroup: 'System' },
 ];
 
 /**
- * External (supplier account): Dashboard, Accounts, Settings.
+ * External (supplier account): Dashboard, supplier tools, Accounts.
  */
 export const EXTERNAL_SUPPLIER_NAV_ITEMS: NavItem[] = [
   { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'external_supplier', navGroup: 'Account' },
@@ -279,21 +275,17 @@ export const EXTERNAL_SUPPLIER_NAV_ITEMS: NavItem[] = [
   { icon: faClipboardList, label: 'Collections', href: '/supplier/collections', section: 'external_supplier', navGroup: 'Supplier' },
   { icon: faChartLine, label: 'Production', href: '/supplier/production', section: 'external_supplier', navGroup: 'Supplier' },
   { icon: faReceipt, label: 'Transfers', href: '/supplier/transfers', section: 'external_supplier', navGroup: 'Supplier' },
-  { icon: faIdCard, label: 'Profile', href: '/profile', section: 'external_supplier', navGroup: 'Account' },
   { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'external_supplier', navGroup: 'Account' },
-  { icon: faCog, label: 'Settings', href: '/settings', section: 'external_supplier', navGroup: 'Account' },
 ];
 
 export const EXTERNAL_NAV_GROUP_ORDER = ['Account', 'Supplier', 'Farmer'] as const;
 
 /**
- * External (customer / farmer): Dashboard, Accounts, Settings.
+ * External (customer / farmer): Dashboard, Accounts.
  */
 export const EXTERNAL_CUSTOMER_NAV_ITEMS: NavItem[] = [
   { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'external_customer', navGroup: 'Account' },
-  { icon: faIdCard, label: 'Profile', href: '/profile', section: 'external_customer', navGroup: 'Account' },
   { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'external_customer', navGroup: 'Account' },
-  { icon: faCog, label: 'Settings', href: '/settings', section: 'external_customer', navGroup: 'Account' },
 ];
 
 /** External farmer (direct or farmer-collector) tools */
@@ -303,9 +295,7 @@ export const EXTERNAL_FARMER_NAV_ITEMS: NavItem[] = [
   { icon: faClipboardList, label: 'Collections', href: '/supplier/collections', section: 'external_customer', navGroup: 'Farmer' },
   { icon: faChartLine, label: 'Production', href: '/supplier/production', section: 'external_customer', navGroup: 'Farmer' },
   { icon: faReceipt, label: 'Transfers', href: '/supplier/transfers', section: 'external_customer', navGroup: 'Farmer' },
-  { icon: faIdCard, label: 'Profile', href: '/profile', section: 'external_customer', navGroup: 'Account' },
   { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'external_customer', navGroup: 'Account' },
-  { icon: faCog, label: 'Settings', href: '/settings', section: 'external_customer', navGroup: 'Account' },
 ];
 
 export function isBusinessAccount(accountType: string): boolean {

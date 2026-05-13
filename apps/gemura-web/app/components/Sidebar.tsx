@@ -170,7 +170,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
       if (role === 'accountant') {
         OPERATIONS_NAV_ITEMS.forEach((item) => {
           if (!includeOperationsNavItem(item)) return;
-          if (item.href === '/accounts' || item.href === '/settings') return;
+          if (item.href === '/accounts') return;
           if (!navItemAllowed(item)) return;
           items.push(item);
         });
@@ -200,7 +200,6 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     if (isAdminRole(role) && isBusinessAccount(accountType)) {
       OPERATIONS_NAV_ITEMS.forEach((item) => {
         if (!includeOperationsNavItem(item)) return;
-        if (item.href === '/settings' && (role === 'collector' || role === 'agent' || role === 'veterinary_officer' || role === 'casual_laborer' || role === 'accountant')) return;
         if (item.href === '/accounts' && role === 'accountant') return;
         if (!navItemAllowed(item)) return;
         items.push(item);
@@ -212,7 +211,6 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     if (isBusinessAccount(accountType)) {
       OPERATIONS_NAV_ITEMS.forEach((item) => {
         if (!includeOperationsNavItem(item)) return;
-        if (item.href === '/settings' && (role === 'collector' || role === 'agent' || role === 'veterinary_officer' || role === 'casual_laborer' || role === 'accountant')) return;
         if (item.href === '/accounts' && role === 'accountant') return;
         if (!isAdmin() && !navItemAllowed(item)) return;
         items.push(item);
@@ -221,10 +219,13 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     }
 
     // Last resort: minimal menu
-    items.push(
-      { icon: ADMIN_NAV_ITEMS[0].icon, label: 'Dashboard', href: '/dashboard', section: 'admin', navGroup: 'General' },
-      { icon: ADMIN_NAV_ITEMS[2].icon, label: 'Settings', href: '/settings', section: 'admin', navGroup: 'General' },
-    );
+    items.push({
+      icon: ADMIN_NAV_ITEMS[0].icon,
+      label: 'Dashboard',
+      href: '/dashboard',
+      section: 'admin',
+      navGroup: 'General',
+    });
     return buildNavSidebarGroups(items, ['General']);
   }, [
     role,

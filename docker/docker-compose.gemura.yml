@@ -34,7 +34,7 @@ services:
           psql -h devslab-postgres -p 5432 -U devslab_admin -d gemura_db -f prisma/migrations/20260104_change_payroll_to_suppliers/migration.sql 2>&1 || echo 'Migration may already be applied'
         fi &&
         echo 'Starting application...' &&
-        node dist/src/main.js
+        node dist/main.js
       "
 
   # Frontend Web App (Next.js) - talks to prod backend via NEXT_PUBLIC_API_URL (set at build)

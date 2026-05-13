@@ -17,6 +17,7 @@ import {
   wizardNativeSelectClass,
 } from './formPrimitives';
 import { P } from './fieldPlaceholders';
+import { RwandaLocationFields } from './RwandaLocationFields';
 
 function toggleCreditIntent(prev: string[], key: string, on: boolean, max = 2): string[] {
   if (on) {
@@ -39,6 +40,9 @@ function creditTierSatisfied(c: CollectorFormState): boolean {
 }
 
 export function computeCollectorProgress(c: CollectorFormState): number {
+  if (!c?.c1 || !c?.c2 || !c?.workforceC || !c?.financeC || !c?.goalsC || !c?.agentCollector) {
+    return 0;
+  }
   const checks = [
     c.collectorKind !== '',
     !!c.c1.surname.trim(),
@@ -57,6 +61,7 @@ export function computeCollectorProgress(c: CollectorFormState): number {
 }
 
 export function collectorRiskFlags(c: CollectorFormState): string[] {
+  if (!c?.c2) return [];
   const t = Number(c.c2.transitMin);
   const msgs: string[] = [];
   if (!Number.isNaN(t) && t > 90) {
@@ -66,9 +71,10 @@ export function collectorRiskFlags(c: CollectorFormState): string[] {
 }
 
 export function rosterSummary(c: CollectorFormState) {
-  const total = c.roster.length;
-  const reg = c.roster.filter((r) => r.registration === 'registered').length;
-  const notReg = c.roster.filter((r) => r.registration === 'not_registered').length;
+  const roster = Array.isArray(c?.roster) ? c.roster : [];
+  const total = roster.length;
+  const reg = roster.filter((r) => r.registration === 'registered').length;
+  const notReg = roster.filter((r) => r.registration === 'not_registered').length;
   return { total, reg, notReg };
 }
 
@@ -127,8 +133,8 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             : 'Identity, location, linked MCC, business type'
         }
       >
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
             <FieldLabel htmlFor="csur">Surname</FieldLabel>
             <TextInput
               id="csur"
@@ -137,7 +143,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               onChange={(e) => setC((p) => ({ ...p, c1: { ...p.c1, surname: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="cfirst">First name</FieldLabel>
             <TextInput
               id="cfirst"
@@ -146,7 +152,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               onChange={(e) => setC((p) => ({ ...p, c1: { ...p.c1, firstName: e.target.value } }))}
             />
           </div>
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-2 space-y-1">
             <FieldLabel htmlFor="cother" optional>
               Other names
             </FieldLabel>
@@ -157,7 +163,32 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               onChange={(e) => setC((p) => ({ ...p, c1: { ...p.c1, otherNames: e.target.value } }))}
             />
           </div>
-          <div>
+          <RwandaLocationFields
+            idPrefix="c1"
+            names={{
+              province: c.c1.province,
+              district: c.c1.district,
+              sector: c.c1.sector,
+              cell: c.c1.cell,
+              village: c.c1.village,
+            }}
+            locationVillageId={c.c1.locationVillageId}
+            onUpdate={(next) =>
+              setC((p) => ({
+                ...p,
+                c1: {
+                  ...p.c1,
+                  province: next.province,
+                  district: next.district,
+                  sector: next.sector,
+                  cell: next.cell,
+                  village: next.village,
+                  locationVillageId: next.locationVillageId,
+                },
+              }))
+            }
+          />
+          <div className="space-y-1">
             <FieldLabel htmlFor="cphone">Primary phone (wallet login)</FieldLabel>
             <TextInput
               id="cphone"
@@ -167,7 +198,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               onChange={(e) => setC((p) => ({ ...p, c1: { ...p.c1, primaryPhone: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="cwa" optional>
               WhatsApp
             </FieldLabel>
@@ -179,7 +210,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               onChange={(e) => setC((p) => ({ ...p, c1: { ...p.c1, whatsapp: e.target.value } }))}
             />
           </div>
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-2 space-y-2">
             <FieldLabel htmlFor="cnid">National ID number</FieldLabel>
             <TextInput
               id="cnid"
@@ -196,52 +227,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             />
             <Hint>Photo capture below; NID parsing on sync.</Hint>
           </div>
-          <div>
-            <FieldLabel htmlFor="cprov">Province</FieldLabel>
-            <TextInput
-              id="cprov"
-              value={c.c1.province}
-              placeholder={P.province}
-              onChange={(e) => setC((p) => ({ ...p, c1: { ...p.c1, province: e.target.value } }))}
-            />
-          </div>
-          <div>
-            <FieldLabel htmlFor="cdist">District</FieldLabel>
-            <TextInput
-              id="cdist"
-              value={c.c1.district}
-              placeholder={P.district}
-              onChange={(e) => setC((p) => ({ ...p, c1: { ...p.c1, district: e.target.value } }))}
-            />
-          </div>
-          <div>
-            <FieldLabel htmlFor="csec">Sector</FieldLabel>
-            <TextInput
-              id="csec"
-              value={c.c1.sector}
-              placeholder={P.sector}
-              onChange={(e) => setC((p) => ({ ...p, c1: { ...p.c1, sector: e.target.value } }))}
-            />
-          </div>
-          <div>
-            <FieldLabel htmlFor="ccell">Cell</FieldLabel>
-            <TextInput
-              id="ccell"
-              value={c.c1.cell}
-              placeholder={P.cell}
-              onChange={(e) => setC((p) => ({ ...p, c1: { ...p.c1, cell: e.target.value } }))}
-            />
-          </div>
-          <div>
-            <FieldLabel htmlFor="cvill">Village</FieldLabel>
-            <TextInput
-              id="cvill"
-              value={c.c1.village}
-              placeholder={P.village}
-              onChange={(e) => setC((p) => ({ ...p, c1: { ...p.c1, village: e.target.value } }))}
-            />
-          </div>
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-2 space-y-1">
             <FieldLabel htmlFor="cmcc">Linked MCC</FieldLabel>
             <select
               id="cmcc"
@@ -257,7 +243,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               ))}
             </select>
             {showMccOther && (
-              <div className="mt-2">
+              <div className="mt-2 space-y-1">
                 <FieldLabel htmlFor="cmcco">Specify MCC</FieldLabel>
                 <TextInput
                   id="cmcco"
@@ -323,8 +309,8 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             manifest will split the collected portion.
           </Hint>
         )}
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
             <FieldLabel htmlFor="c2sec">Collection area — sector</FieldLabel>
             <TextInput
               id="c2sec"
@@ -333,7 +319,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               onChange={(e) => setC((p) => ({ ...p, c2: { ...p.c2, sector: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="c2cells">Collection area — cells</FieldLabel>
             <TextInput
               id="c2cells"
@@ -342,7 +328,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               onChange={(e) => setC((p) => ({ ...p, c2: { ...p.c2, cells: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="crad">Approx. collection radius (km)</FieldLabel>
             <TextInput
               id="crad"
@@ -352,7 +338,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               onChange={(e) => setC((p) => ({ ...p, c2: { ...p.c2, radiusKm: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="cfarms">
               {c.collectorKind === 'pure_collector' ? 'Farms you collect from (count)' : 'Farms on route (count)'}
             </FieldLabel>
@@ -377,8 +363,8 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             { value: '7', label: 'Every day' },
           ]}
         />
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
             <FieldLabel htmlFor="cpk">
               {c.collectorKind === 'pure_collector'
                 ? 'Peak season — total collected (L/day)'
@@ -392,7 +378,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               onChange={(e) => setC((p) => ({ ...p, c2: { ...p.c2, peakL: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="clow">
               {c.collectorKind === 'pure_collector'
                 ? 'Low season — total collected (L/day)'
@@ -428,7 +414,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
           }
         />
         {c.c2.transport.includes('other_tr') && (
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="trot">Other transport</FieldLabel>
             <TextInput
               id="trot"
@@ -449,7 +435,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
           ]}
         />
         {showCooling && (
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="coold">Type and capacity</FieldLabel>
             <TextInput
               id="coold"
@@ -459,7 +445,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             />
           </div>
         )}
-        <div>
+        <div className="space-y-1">
           <FieldLabel htmlFor="trn">Avg transit time — first farm to MCC (minutes)</FieldLabel>
           <TextInput
             id="trn"
@@ -494,7 +480,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
           }
         />
         {destOtherMcc && (
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="omccn">Other MCC name</FieldLabel>
             <TextInput
               id="omccn"
@@ -621,8 +607,8 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
         subtitle="Collector and helpers — reporting counts"
       >
         <Hint>Include collector and hired helpers. Same VIBE logic as farmer Section 6.</Hint>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
             <FieldLabel htmlFor="wtotc">Total workers incl. collector (C45)</FieldLabel>
             <TextInput
               id="wtotc"
@@ -632,7 +618,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               onChange={(e) => setC((p) => ({ ...p, workforceC: { ...p.workforceC, total: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="wwomc">Women (C46)</FieldLabel>
             <TextInput
               id="wwomc"
@@ -642,7 +628,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               onChange={(e) => setC((p) => ({ ...p, workforceC: { ...p.workforceC, women: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="w18c">Aged 18–35 (C48)</FieldLabel>
             <TextInput
               id="w18c"
@@ -652,7 +638,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               onChange={(e) => setC((p) => ({ ...p, workforceC: { ...p.workforceC, aged1835: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="wwy18c">Women aged 18–35 (C49)</FieldLabel>
             <TextInput
               id="wwy18c"
@@ -662,7 +648,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
               onChange={(e) => setC((p) => ({ ...p, workforceC: { ...p.workforceC, women1835: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="wpwdc">Workers with disability (C51)</FieldLabel>
             <TextInput
               id="wpwdc"
@@ -776,7 +762,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             { value: 'no', label: 'No' },
           ]}
         />
-        <div>
+        <div className="space-y-1">
           <FieldLabel htmlFor="crev">Average annual revenue from collection (RWF) — C75</FieldLabel>
           <TextInput
             id="crev"
@@ -843,7 +829,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             { value: 'gt5', label: 'More than 5' },
           ]}
         />
-        <div>
+        <div className="space-y-1">
           <FieldLabel htmlFor="cmissr" optional>
             Main reason
           </FieldLabel>
@@ -900,7 +886,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             { value: 'not', label: 'Does not qualify' },
           ]}
         />
-        <div>
+        <div className="space-y-1">
           <FieldLabel htmlFor="p4r">Reason</FieldLabel>
           <TextArea
             id="p4r"
@@ -954,7 +940,7 @@ export function CollectorOnboardingPath({ c, setC, onlyStep, districtForRefugeeH
             { value: 'reliable', label: 'Reliable (100+ L/day)' },
           ]}
         />
-        <div>
+        <div className="space-y-1">
           <FieldLabel htmlFor="cagn">Agent notes</FieldLabel>
           <TextArea
             id="cagn"

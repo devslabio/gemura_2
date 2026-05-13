@@ -10,6 +10,8 @@ import {
   faFloppyDisk,
   faCircleInfo as faInfoCircleTemp,
   faCalendarDays,
+  faStar,
+  faCircleXmark as faCircleXmarkIcon,
 } from '@fortawesome/free-solid-svg-icons';
 
 interface IconProps {
@@ -120,3 +122,5 @@ export const faQuestionCircle = faCircleQuestion;
 export const faSave = faFloppyDisk;
 export const faInfoCircle = faInfoCircleTemp;
 export const faCalendarAlt = faCalendarDays;
+export const faTimesCircle = faCircleXmarkIcon;
+export { faCalendarDays, faStar };

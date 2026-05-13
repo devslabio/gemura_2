@@ -40,6 +40,8 @@ export interface FarmerFormState {
     sector: string;
     cell: string;
     village: string;
+    /** Deepest selected village UUID for `/locations/:id/path` reload (Orora-style). */
+    locationVillageId: string;
     primaryPhone: string;
     whatsapp: string;
     nid: string;
@@ -142,6 +144,8 @@ export interface CollectorFormState {
     sector: string;
     cell: string;
     village: string;
+    /** Deepest selected village UUID for `/locations/:id/path` reload (Orora-style). */
+    locationVillageId: string;
     linkedMcc: string;
     linkedMccOther: string;
     ownerDisability: '' | 'yes' | 'no' | 'prefer_not';
@@ -214,6 +218,7 @@ export function initialFarmerState(): FarmerFormState {
       sector: '',
       cell: '',
       village: '',
+      locationVillageId: '',
       primaryPhone: '',
       whatsapp: '',
       nid: '',
@@ -317,6 +322,7 @@ export function initialCollectorState(): CollectorFormState {
       sector: '',
       cell: '',
       village: '',
+      locationVillageId: '',
       linkedMcc: '',
       linkedMccOther: '',
       ownerDisability: '',

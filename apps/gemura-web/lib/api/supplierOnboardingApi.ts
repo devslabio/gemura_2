@@ -36,20 +36,27 @@ export interface RegisterFromOnboardingResponse {
   };
 }
 
+export type MyOnboardingApiResponse = {
+  code: number;
+  message?: string;
+  data?: {
+    onboarding: Record<string, unknown> | null;
+    updated_at?: string | null;
+  };
+};
+
 export const supplierOnboardingApi = {
   register: (body: RegisterFromOnboardingBody) =>
     apiClient.post<RegisterFromOnboardingResponse>('/suppliers/onboarding/register', body),
 
   /** Current user’s stored onboarding (draft + agent fields) for profile / completion % */
-  getMy: async (): Promise<{
-    code: number;
-    message?: string;
-    data?: { onboarding: Record<string, unknown>; updated_at?: string } | null;
-  }> => {
-    return apiClient.get('/suppliers/my-onboarding');
-  },
+  getMy: () => apiClient.get<MyOnboardingApiResponse>('/suppliers/my-onboarding'),
 
-  /** Optional: supplier updates their own draft */
-  putMy: async (payload: { draft: Record<string, unknown> }) =>
-    apiClient.put<{ code: number; message?: string }>('/suppliers/my-onboarding', payload),
+  /** Farmer/supplier: create supplier_milk_onboardings row when missing (idempotent). */
+  initMyOnboarding: () =>
+    apiClient.post<MyOnboardingApiResponse>('/suppliers/my-onboarding/init'),
+
+  /** Merge `draft` into payload, or replace entire payload with `onboarding`. */
+  putMy: (payload: { draft?: Record<string, unknown>; onboarding?: Record<string, unknown> }) =>
+    apiClient.put<MyOnboardingApiResponse>('/suppliers/my-onboarding', payload),
 };

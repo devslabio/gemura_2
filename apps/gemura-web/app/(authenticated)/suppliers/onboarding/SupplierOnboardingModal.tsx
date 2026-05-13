@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { AxiosError } from 'axios';
 import Modal from '@/app/components/Modal';
 import Icon, { faTruck, faWarehouse, faUserPlus, faArrowLeft, faArrowRight, faFloppyDisk } from '@/app/components/Icon';
@@ -13,7 +13,9 @@ import {
   MILK_COLLECTOR_KIND,
   type CollectorFormState,
   type FarmerFormState,
+  type MilkCollectorKind,
 } from './model';
+import { mergeFarmerDraft, mergeCollectorDraft } from './mergeOnboardingDraft';
 import {
   FieldLabel,
   ProgressBar,
@@ -66,6 +68,8 @@ interface Props {
   onClose: () => void;
   /** Called after a successful onboarding registration (refresh lists, etc.). */
   onRegistered?: () => void;
+  /** Supplier/farmer completes their own milk onboarding (saved to supplier_milk_onboardings). */
+  selfService?: boolean;
 }
 
 function tryCaptureGps(
@@ -129,7 +133,12 @@ function stepTitleCollector(index: number): string {
   return labels[index] ?? '';
 }
 
-export default function SupplierOnboardingModal({ open, onClose, onRegistered }: Props) {
+export default function SupplierOnboardingModal({
+  open,
+  onClose,
+  onRegistered,
+  selfService = false,
+}: Props) {
   const toast = useToastStore();
   const { currentAccount } = useAuthStore();
   const [step, setStep] = useState<'pick' | 'form'>('pick');
@@ -165,6 +174,17 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
   const [stepBlockMessages, setStepBlockMessages] = useState<string[]>([]);
   const [creatingAccount, setCreatingAccount] = useState(false);
   const regPrefillRef = useRef(false);
+  const [selfHydrating, setSelfHydrating] = useState(false);
+  const [selfLoadError, setSelfLoadError] = useState<string | null>(null);
+
+  /** When browser GPS succeeds, mirror coordinates into the manual fields (editable, persisted in draft). */
+  const applyCapturedGps = useCallback((lat: number, lng: number) => {
+    setGpsLat(lat);
+    setGpsLng(lng);
+    setManualLat(Number(lat).toFixed(5));
+    setManualLng(Number(lng).toFixed(5));
+    setStepBlockMessages([]);
+  }, []);
 
   const totalSteps = supplierType === 'farmer' ? FARMER_STEP_COUNT : COLLECTOR_STEP_COUNT;
   const isReviewStep =
@@ -184,18 +204,91 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
   }, []);
 
   useEffect(() => {
-    if (!open) return;
-    tryCaptureGps(
-      (lat, lng) => {
-        setGpsLat(lat);
-        setGpsLng(lng);
-      },
-      setGpsStatus
-    );
-  }, [open]);
+    if (!open || selfService) return;
+    tryCaptureGps(applyCapturedGps, setGpsStatus);
+  }, [open, selfService, applyCapturedGps]);
+
+  useLayoutEffect(() => {
+    if (open && selfService) {
+      setSelfHydrating(true);
+      setSelfLoadError(null);
+    } else if (!open) {
+      setSelfHydrating(false);
+      setSelfLoadError(null);
+    }
+  }, [open, selfService]);
 
   useEffect(() => {
-    if (!open || typeof window === 'undefined') return;
+    if (!open || !selfService) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const first = await supplierOnboardingApi.getMy();
+        let onboarding = first.data?.onboarding as Record<string, unknown> | null | undefined;
+        if (onboarding == null && !cancelled) {
+          const init = await supplierOnboardingApi.initMyOnboarding();
+          onboarding = init.data?.onboarding as Record<string, unknown> | null | undefined;
+        }
+        if (cancelled || onboarding == null) {
+          if (!cancelled) setSelfLoadError('Could not load or start milk onboarding.');
+          return;
+        }
+        const stRaw = onboarding.supplier_type;
+        const t: SupplierOnboardType = stRaw === 'collector' ? 'collector' : 'farmer';
+        setSupplierType(t);
+        const draft = onboarding.draft;
+        if (t === 'farmer') {
+          setFarmer(mergeFarmerDraft(draft));
+        } else {
+          const ckRaw = onboarding.collector_kind;
+          const ck =
+            typeof ckRaw === 'string' && (ckRaw === 'farmer_collector' || ckRaw === 'pure_collector')
+              ? (ckRaw as MilkCollectorKind)
+              : '';
+          const merged = mergeCollectorDraft(draft);
+          setCollector({ ...merged, collectorKind: ck || merged.collectorKind });
+        }
+        const gps = onboarding.gps as { lat?: number; lng?: number } | null | undefined;
+        if (gps != null && typeof gps.lat === 'number' && typeof gps.lng === 'number') {
+          applyCapturedGps(gps.lat, gps.lng);
+        } else {
+          setGpsLat(undefined);
+          setGpsLng(undefined);
+          setManualLat('');
+          setManualLng('');
+        }
+        const nid = onboarding.nid_photo_meta;
+        if (typeof nid === 'string' && nid.trim()) {
+          setNidFileName(nid.trim());
+          setNidPreview(null);
+        } else if (nid && typeof nid === 'object') {
+          const o = nid as { file_name?: string; thumb_data_url?: string };
+          setNidFileName(o.file_name?.trim() ? o.file_name : null);
+          setNidPreview(typeof o.thumb_data_url === 'string' ? o.thumb_data_url : null);
+        } else {
+          setNidFileName(null);
+          setNidPreview(null);
+        }
+        setStep('form');
+        setWizardIndex(0);
+        setStepBlockMessages([]);
+      } catch (e) {
+        const ax = e as AxiosError;
+        const msg =
+          (ax.response?.data as { message?: string } | undefined)?.message ||
+          'Could not load milk onboarding. Try again or contact support.';
+        if (!cancelled) setSelfLoadError(msg);
+      } finally {
+        if (!cancelled) setSelfHydrating(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, selfService, applyCapturedGps]);
+
+  useEffect(() => {
+    if (!open || selfService || typeof window === 'undefined') return;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -233,10 +326,10 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
     } catch {
       /* ignore */
     }
-  }, [open]);
+  }, [open, selfService]);
 
   useEffect(() => {
-    if (!open || typeof window === 'undefined') return;
+    if (!open || selfService || typeof window === 'undefined') return;
     const t = window.setTimeout(() => {
       try {
         localStorage.setItem(
@@ -273,6 +366,7 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
     regAddress,
     regBankName,
     regBankAccount,
+    selfService,
   ]);
 
   const districtHint =
@@ -316,7 +410,7 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
   }, [supplierType, farmer, collector, gpsLat, gpsLng, manualLat, manualLng, nidFileName]);
 
   useEffect(() => {
-    if (!isReviewStep) {
+    if (!isReviewStep || selfService) {
       regPrefillRef.current = false;
       return;
     }
@@ -354,7 +448,7 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
     setRegPassword('');
     setRegPassword2('');
     setReviewFieldErrors({});
-  }, [isReviewStep, supplierType, farmer, collector]);
+  }, [isReviewStep, selfService, supplierType, farmer, collector]);
 
   const resetAll = useCallback(() => {
     setStep('pick');
@@ -589,9 +683,64 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
     }
   };
 
+  const handleSaveSelfOnboarding = async () => {
+    if (!supplierType) return;
+    if (supplierType === 'collector' && !collector.collectorKind) {
+      toast.error('Collector pathway is not set. Contact support if this persists.');
+      return;
+    }
+    const setupErrs = validateOnboardingSetupStep({
+      gpsLat,
+      gpsLng,
+      manualLat,
+      manualLng,
+    });
+    const errs = [...setupErrs];
+    if (supplierType === 'farmer') {
+      for (let i = 1; i <= 9; i++) {
+        errs.push(...validateFarmerWizardStep(farmerWizardKey(i), farmer));
+      }
+    } else {
+      for (let i = 1; i <= 8; i++) {
+        errs.push(...validateCollectorWizardStep(collectorWizardKey(i), collector));
+      }
+    }
+    if (errs.length > 0) {
+      setStepBlockMessages(errs);
+      toast.error(errs[0] ?? 'Fix the checklist above before saving.');
+      return;
+    }
+    const onboardingPayload = getOnboardingPayload();
+    if (!onboardingPayload) return;
+    setCreatingAccount(true);
+    try {
+      const res = await supplierOnboardingApi.putMy({
+        onboarding: onboardingPayload as unknown as Record<string, unknown>,
+      });
+      if (res.code === 200) {
+        toast.success(res.message || 'Milk onboarding saved.');
+        onRegistered?.();
+        resetAll();
+        onClose();
+        return;
+      }
+      toast.error(res.message || 'Save was not successful.');
+    } catch (err) {
+      const ax = err as AxiosError;
+      const apiMsg = (ax.response?.data as { message?: string } | undefined)?.message;
+      toast.error(apiMsg || 'Could not save onboarding.');
+    } finally {
+      setCreatingAccount(false);
+    }
+  };
+
   const goBack = () => {
     setStepBlockMessages([]);
     if (wizardIndex <= 0) {
+      if (selfService) {
+        onClose();
+        return;
+      }
       setStep('pick');
       return;
     }
@@ -638,7 +787,7 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
     <Modal
       open={open}
       onClose={handleClose}
-      title="Onboard new supplier"
+      title={selfService ? 'Complete milk onboarding' : 'Onboard new supplier'}
       maxWidth="max-w-6xl"
       footer={
         step === 'form' && supplierType ? (
@@ -649,7 +798,7 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
               className="inline-flex items-center justify-center gap-2 min-h-[48px] px-5 rounded-sm border border-slate-300 bg-white text-sm font-medium text-slate-800 hover:bg-slate-50"
             >
               <Icon icon={faArrowLeft} size="sm" />
-              {wizardIndex === 0 ? 'Change type' : 'Back'}
+              {wizardIndex === 0 ? (selfService ? 'Close' : 'Change type') : 'Back'}
             </button>
             {!isReviewStep ? (
               <button
@@ -659,6 +808,15 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
               >
                 Next
                 <Icon icon={faArrowRight} size="sm" />
+              </button>
+            ) : selfService ? (
+              <button
+                type="button"
+                onClick={handleSaveSelfOnboarding}
+                disabled={creatingAccount}
+                className="inline-flex items-center justify-center gap-2 min-h-[48px] px-6 rounded-sm font-medium text-white border border-[#004AAD] bg-[#004AAD] hover:bg-[#052A54] disabled:opacity-50"
+              >
+                {creatingAccount ? 'Saving…' : 'Save to profile'}
               </button>
             ) : (
               <div className="flex flex-wrap items-center justify-end gap-2">
@@ -698,11 +856,28 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
             {online ? 'Online' : 'Offline — draft stored on device'}
           </div>
           <div className="text-slate-600">
-            Auto-save: <span className="font-medium text-slate-900">enabled</span> (local)
+            {selfService ? (
+              <>
+                Auto-save: <span className="font-medium text-slate-900">server</span> (on Save at the last step)
+              </>
+            ) : (
+              <>
+                Auto-save: <span className="font-medium text-slate-900">enabled</span> (local)
+              </>
+            )}
           </div>
         </div>
 
-        {step === 'pick' && (
+        {selfService && selfHydrating && (
+          <div className="py-16 text-center text-slate-600 text-sm">Loading your milk onboarding…</div>
+        )}
+        {selfService && !selfHydrating && selfLoadError && (
+          <div className="rounded-sm border border-red-200 bg-red-50 text-red-900 text-sm px-4 py-3" role="alert">
+            {selfLoadError}
+          </div>
+        )}
+
+        {!selfService && step === 'pick' && (
           <div className="space-y-4">
             <p className="text-sm text-slate-700">
               Select supplier type, then continue through the guided steps (Back / Next).
@@ -793,7 +968,7 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
               />
             </div>
 
-            {stepBlockMessages.length > 0 && !isReviewStep && (
+            {stepBlockMessages.length > 0 && (
               <WizardStepAlert messages={stepBlockMessages} />
             )}
 
@@ -803,18 +978,18 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
                 title="Setup — GPS & National ID"
                 subtitle="Capture location and ID photo before the questionnaire"
               >
-                <div className="rounded-sm border border-slate-200 bg-slate-50/80 p-4 space-y-2">
-                  <p className="text-sm font-medium text-slate-900">GPS</p>
-                  <p className="text-xs text-slate-600" aria-live="polite">
+                <div className="rounded-lg border border-gray-200 bg-gray-50/90 p-4 space-y-3">
+                  <p className="text-sm font-medium text-gray-900">GPS</p>
+                  <p className="text-xs text-gray-600" aria-live="polite">
                     Status: {gpsLabel}
                     {gpsLat != null && gpsLng != null && (
-                      <span className="ml-2 font-mono text-slate-800">
+                      <span className="ml-2 font-mono text-gray-800">
                         {gpsLat.toFixed(5)}, {gpsLng.toFixed(5)}
                       </span>
                     )}
                   </p>
-                  <div className="grid sm:grid-cols-2 gap-3">
-                    <div>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
                       <FieldLabel htmlFor="mlat">Manual latitude</FieldLabel>
                       <input
                         id="mlat"
@@ -828,7 +1003,7 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
                         placeholder={P.lat}
                       />
                     </div>
-                    <div>
+                    <div className="space-y-1">
                       <FieldLabel htmlFor="mlng">Manual longitude</FieldLabel>
                       <input
                         id="mlng"
@@ -845,24 +1020,18 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
                   </div>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-2 min-h-[44px] px-4 rounded-sm border border-slate-300 bg-white text-sm font-medium text-slate-800 hover:bg-slate-50"
-                    onClick={() =>
-                      tryCaptureGps(
-                        (lat, lng) => {
-                          setGpsLat(lat);
-                          setGpsLng(lng);
-                        },
-                        setGpsStatus
-                      )
-                    }
+                    className="inline-flex items-center gap-2 min-h-[44px] px-4 rounded-sm border border-gray-300 bg-white text-sm font-medium text-gray-800 hover:bg-gray-50"
+                    onClick={() => tryCaptureGps(applyCapturedGps, setGpsStatus)}
                   >
                     Retry GPS capture
                   </button>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-slate-900 mb-1">National ID photo</p>
-                  <p className="text-xs text-slate-600 mb-2">
-                    Opens camera on supported devices; stored locally until sync.
+                  <p className="text-sm font-medium text-gray-900 mb-1">National ID photo</p>
+                  <p className="text-xs text-gray-600 mb-2">
+                    {selfService
+                      ? 'Opens camera on supported devices; filename is saved with your milk onboarding when you finish.'
+                      : 'Opens camera on supported devices; stored locally until sync.'}
                   </p>
                   <input
                     type="file"
@@ -876,7 +1045,7 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
                     <img
                       src={nidPreview}
                       alt="NID preview"
-                      className="max-h-44 rounded-sm border border-slate-200 mt-3"
+                      className="max-h-44 rounded-sm border border-gray-200 mt-3"
                     />
                   )}
                 </div>
@@ -905,22 +1074,30 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
               <>
                 <WizardStepPanel
                   id="review-registration"
-                  title="Finalize Gemura registration"
+                  title={selfService ? 'Save milk onboarding' : 'Finalize Gemura registration'}
                   subtitle={
-                    supplierType === 'collector' && collector.collectorKind
-                      ? `${MILK_COLLECTOR_KIND[collector.collectorKind].label} — sign-in, price, and payout for this MCC.`
-                      : supplierType === 'collector'
-                        ? 'Complete login and commercial fields. Collector type is set on the first screen.'
-                        : 'Sign-in credentials plus MCC milk price and payout details.'
+                    selfService
+                      ? 'Confirm the summary below, then save. You can reopen this wizard from Settings later.'
+                      : supplierType === 'collector' && collector.collectorKind
+                        ? `${MILK_COLLECTOR_KIND[collector.collectorKind].label} — sign-in, price, and payout for this MCC.`
+                        : supplierType === 'collector'
+                          ? 'Complete login and commercial fields. Collector type is set on the first screen.'
+                          : 'Sign-in credentials plus MCC milk price and payout details.'
                   }
                 >
+                  {selfService ? (
+                    <p className="text-sm text-gray-600 leading-relaxed m-0">
+                      Check the summary below. When you save, your answers are stored on your Gemura milk onboarding
+                      record. MCC staff normally register new suppliers; here you are only updating your own profile data.
+                    </p>
+                  ) : (
                   <div className="space-y-6">
-                    <div className="rounded-sm border border-slate-200/90 bg-slate-50/70 p-4 sm:p-5 space-y-4 shadow-sm shadow-slate-900/[0.03]">
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 sm:p-5 space-y-4 shadow-sm">
                       <div>
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-[#052A54] border-b border-slate-200/90 pb-2">
+                        <h4 className="text-xs font-bold uppercase tracking-wide text-gray-800 border-b border-gray-200 pb-2">
                           Gemura login
                         </h4>
-                        <p className="text-[13px] text-slate-600 mt-2 leading-snug">
+                        <p className="text-sm text-gray-600 mt-2 leading-snug">
                           Phone and password are used on the public login page. Email is optional.
                         </p>
                       </div>
@@ -1041,7 +1218,7 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
                         <h4 className="text-xs font-bold uppercase tracking-wider text-[#031A3A] border-b border-[#004AAD]/20 pb-2">
                           MCC — commercial &amp; payout
                         </h4>
-                        <p className="text-[13px] text-slate-700 mt-2 leading-snug">
+                        <p className="text-sm text-gray-600 mt-2 leading-snug">
                           Same rules as standalone supplier registration. Numbers only where indicated; prefilled fields can
                           be corrected.
                         </p>
@@ -1173,6 +1350,7 @@ export default function SupplierOnboardingModal({ open, onClose, onRegistered }:
                       </div>
                     </div>
                   </div>
+                  )}
                 </WizardStepPanel>
 
                 {supplierType === 'farmer' ? (

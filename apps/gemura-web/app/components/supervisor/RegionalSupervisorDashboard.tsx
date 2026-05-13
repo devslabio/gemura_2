@@ -220,6 +220,7 @@ function KpiStrip({
   trend,
   icon,
   accent,
+  href,
 }: {
   label: string;
   value: string;
@@ -227,6 +228,8 @@ function KpiStrip({
   trend?: string;
   icon: IconDefinition;
   accent: 'blue' | 'green' | 'amber' | 'red' | 'slate';
+  /** When set, entire tile navigates like manager dashboard KPI tiles. */
+  href?: string;
 }) {
   const map = {
     blue: { bg: '#eff6ff', fg: '#004AAD' },
@@ -236,24 +239,35 @@ function KpiStrip({
     slate: { bg: '#f1f5f9', fg: '#475569' },
   } as const;
   const accentMeta = map[accent];
-  return (
-    <div className="rounded-sm border border-gray-200 bg-white p-4 min-h-[104px] min-w-0 hover:border-gray-300 transition-colors">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-500 truncate">{label}</div>
-          <div className="text-xl sm:text-2xl font-bold tabular-nums text-gray-900 truncate">{value}</div>
-          <div className="mt-1.5 text-xs text-gray-600 line-clamp-2">{sub}</div>
-          {trend ? <div className="mt-1 text-xs font-medium text-emerald-700 truncate">{trend}</div> : null}
-        </div>
-        <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
-          style={{ backgroundColor: accentMeta.bg, color: accentMeta.fg }}
-        >
-          <Icon icon={icon} size="sm" />
-        </div>
+  const shell =
+    'rounded-sm border border-gray-200 bg-white p-4 min-h-[104px] min-w-0 transition-colors hover:border-gray-300';
+  const inner = (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-gray-500 truncate">{label}</div>
+        <div className="text-xl sm:text-2xl font-bold tabular-nums text-gray-900 truncate">{value}</div>
+        <div className="mt-1.5 text-xs text-gray-600 line-clamp-2">{sub}</div>
+        {trend ? <div className="mt-1 text-xs font-medium text-emerald-700 truncate">{trend}</div> : null}
+      </div>
+      <div
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+        style={{ backgroundColor: accentMeta.bg, color: accentMeta.fg }}
+      >
+        <Icon icon={icon} size="sm" />
       </div>
     </div>
   );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className={`block ${shell} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2`}
+      >
+        {inner}
+      </Link>
+    );
+  }
+  return <div className={shell}>{inner}</div>;
 }
 
 function ProgressCell({ pct, color }: { pct: number; color?: 'blue' | 'amber' | 'red' }) {
@@ -285,6 +299,20 @@ export default function RegionalSupervisorDashboard({
   const districtId = searchParams?.get('district_id')?.trim() || '';
   const apiAccountId = useAuthStore((s) => s.currentAccount?.account_id?.trim()) || undefined;
 
+  /** ~30-day window for list pages (sales, collections, gate, manifests, traceability). */
+  const drillDownRange = useMemo(() => {
+    const to = new Date();
+    const from = new Date();
+    from.setUTCDate(from.getUTCDate() - 30);
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    return { from: iso(from), to: iso(to) };
+  }, []);
+
+  const withQuery = (path: string, params: Record<string, string>) => {
+    const q = new URLSearchParams(params).toString();
+    return q ? `${path}?${q}` : path;
+  };
+
   const [scope, setScope] = useState<SupervisorScope | null>(null);
   const [summary, setSummary] = useState<{
     mcc_count: number;
@@ -294,6 +322,10 @@ export default function RegionalSupervisorDashboard({
     farms: number;
     sales: number;
     collections: number;
+    manifest_acceptance_pct: number | null;
+    quality_test_rejection_pct: number | null;
+    avg_tank_utilization_pct: number | null;
+    open_staff_shifts: number;
   } | null>(null);
   const [accounts, setAccounts] = useState<SupervisorAccountRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -392,6 +424,9 @@ export default function RegionalSupervisorDashboard({
     };
   }, [regionId, districtId, apiAccountId]);
 
+  const pctOrDash = (v: number | null | undefined, suffix = '%') =>
+    loading || v == null ? '—' : `${v}${suffix}`;
+
   return (
     <div className="space-y-4">
       {error ? (
@@ -407,6 +442,7 @@ export default function RegionalSupervisorDashboard({
             sub={`${effectiveDistrictCount} districts`}
             icon={faBuilding}
             accent="blue"
+            href="/suppliers"
           />
           <KpiStrip
             label="Members"
@@ -414,6 +450,7 @@ export default function RegionalSupervisorDashboard({
             sub="Active memberships"
             icon={faUserFriends}
             accent="slate"
+            href="/members"
           />
           <KpiStrip
             label="Milk sales (count)"
@@ -421,6 +458,7 @@ export default function RegionalSupervisorDashboard({
             sub="Transactions as supplier"
             icon={faChartLine}
             accent="green"
+            href={withQuery('/sales', { date_from: drillDownRange.from, date_to: drillDownRange.to })}
           />
           <KpiStrip
             label="Milk collections (count)"
@@ -428,11 +466,44 @@ export default function RegionalSupervisorDashboard({
             sub="Transactions as customer"
             icon={faClipboardList}
             accent="blue"
+            href={withQuery('/collections', { date_from: drillDownRange.from, date_to: drillDownRange.to })}
           />
-          <KpiStrip label="Avg manifest compliance" value="—" sub="Mock" icon={faClipboardList} accent="amber" />
-          <KpiStrip label="Avg rejection rate" value="—" sub="Mock" icon={faTriangleExclamation} accent="amber" />
-          <KpiStrip label="Tank utilization" value="—" sub="Mock" icon={faBuilding} accent="amber" />
-          <KpiStrip label="Open field actions" value="—" sub="Mock" icon={faClipboardList} accent="slate" />
+          <KpiStrip
+            label="Manifest acceptance"
+            value={pctOrDash(summary?.manifest_acceptance_pct)}
+            sub="Accepted share of resolved manifests (accepted + rejected)"
+            icon={faClipboardList}
+            accent="blue"
+            href={withQuery('/operations/manifests', { from: drillDownRange.from, to: drillDownRange.to })}
+          />
+          <KpiStrip
+            label="Gate test rejection"
+            value={pctOrDash(summary?.quality_test_rejection_pct)}
+            sub="Rejected share of completed milk tests at gate"
+            icon={faTriangleExclamation}
+            accent="amber"
+            href={withQuery('/operations/traceability', {
+              from: drillDownRange.from,
+              to: drillDownRange.to,
+              outcome: 'rejected',
+            })}
+          />
+          <KpiStrip
+            label="Tank utilization"
+            value={pctOrDash(summary?.avg_tank_utilization_pct)}
+            sub="Mean tank fill % from latest facility snapshots"
+            icon={faBuilding}
+            accent="green"
+            href={withQuery('/operations/gate', { from: drillDownRange.from, to: drillDownRange.to })}
+          />
+          <KpiStrip
+            label="Open gate shifts"
+            value={loading ? '—' : String(summary?.open_staff_shifts ?? 0)}
+            sub="Staff shifts without an end time"
+            icon={faClipboardList}
+            accent="slate"
+            href="/operations/shifts"
+          />
         </div>
       </div>
 
@@ -471,7 +542,14 @@ export default function RegionalSupervisorDashboard({
                     };
                     return (
                     <tr key={row.id} className="hover:bg-gray-50/80">
-                      <td className={`${TD} font-medium whitespace-nowrap`}>{row.name}</td>
+                      <td className={`${TD} font-medium whitespace-nowrap`}>
+                        <Link
+                          href={`/suppliers/${row.id}`}
+                          className="text-[var(--primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] rounded-sm"
+                        >
+                          {row.name}
+                        </Link>
+                      </td>
                       <td className={`${TD} text-right tabular-nums`}>{m.members.toLocaleString()}</td>
                       <td className={`${TD} text-right tabular-nums`}>{m.sales.toLocaleString()}</td>
                       <td className={`${TD} text-right tabular-nums`}>{m.collections.toLocaleString()}</td>

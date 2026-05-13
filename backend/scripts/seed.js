@@ -96,37 +96,15 @@ async function main() {
   console.log('🥛 Creating test suppliers...');
   const suppliers = [
     {
-      name: 'Jean Baptiste Uwimana',
-      phone: '250788111222',
-      email: 'jean@supplier.rw',
+      name: 'Demo Supplier',
+      phone: '250788409034',
+      email: 'supplier@gemura.rw',
       nid: '1198712345678901',
       price_per_liter: 400,
       address: 'Kigali, Gasabo',
       code: 'A_SUP_001',
       user_code: 'USER_SUP_001',
       wallet_code: 'W_SUP_001',
-    },
-    {
-      name: 'Marie Claire Mukamana',
-      phone: '250788333444',
-      email: 'marie@supplier.rw',
-      nid: '1199823456789012',
-      price_per_liter: 390,
-      address: 'Kigali, Kicukiro',
-      code: 'A_SUP_002',
-      user_code: 'USER_SUP_002',
-      wallet_code: 'W_SUP_002',
-    },
-    {
-      name: 'Pierre Nkurunziza',
-      phone: '250788555666',
-      email: 'pierre@supplier.rw',
-      nid: '1198934567890123',
-      price_per_liter: 410,
-      address: 'Kigali, Nyarugenge',
-      code: 'A_SUP_003',
-      user_code: 'USER_SUP_003',
-      wallet_code: 'W_SUP_003',
     },
   ];
 
@@ -209,10 +187,10 @@ async function main() {
   const collections = [
     { supplier_code: 'A_SUP_001', quantity: 150.5, price: 400, date: new Date('2025-01-01 08:00:00'), status: 'accepted' },
     { supplier_code: 'A_SUP_001', quantity: 120.0, price: 400, date: new Date('2025-01-02 08:00:00'), status: 'accepted' },
-    { supplier_code: 'A_SUP_002', quantity: 200.0, price: 390, date: new Date('2025-01-01 08:30:00'), status: 'accepted' },
-    { supplier_code: 'A_SUP_002', quantity: 180.5, price: 390, date: new Date('2025-01-02 08:30:00'), status: 'accepted' },
-    { supplier_code: 'A_SUP_003', quantity: 95.0, price: 410, date: new Date('2025-01-01 09:00:00'), status: 'accepted' },
-    { supplier_code: 'A_SUP_003', quantity: 110.0, price: 410, date: new Date('2025-01-02 09:00:00'), status: 'pending' },
+    { supplier_code: 'A_SUP_001', quantity: 200.0, price: 390, date: new Date('2025-01-01 08:30:00'), status: 'accepted' },
+    { supplier_code: 'A_SUP_001', quantity: 180.5, price: 390, date: new Date('2025-01-02 08:30:00'), status: 'accepted' },
+    { supplier_code: 'A_SUP_001', quantity: 95.0, price: 410, date: new Date('2025-01-01 09:00:00'), status: 'accepted' },
+    { supplier_code: 'A_SUP_001', quantity: 110.0, price: 410, date: new Date('2025-01-02 09:00:00'), status: 'pending' },
   ];
 
   for (const collection of collections) {

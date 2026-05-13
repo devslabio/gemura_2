@@ -273,13 +273,13 @@ async function main() {
   });
   console.log(`✅ Main wallet created: ${mainWallet.code} (Balance: ${mainWallet.balance} RWF)`);
 
-  // 5. Create test supplier accounts and users
+  // 5. Create test supplier accounts and users (same phone convention as Main MCC role demos: 2507884090xx)
   console.log('🥛 Creating test suppliers...');
   const suppliers = [
     {
-      name: 'Jean Baptiste Uwimana',
-      phone: '250788111222',
-      email: 'jean@supplier.rw',
+      name: 'Demo Supplier',
+      phone: '250788409034',
+      email: 'supplier@gemura.rw',
       nid: '1198712345678901',
       price_per_liter: 400,
       address: 'Kigali, Gasabo',
@@ -287,35 +287,13 @@ async function main() {
       user_code: 'USER_SUP_001',
       wallet_code: 'W_SUP_001',
     },
-    {
-      name: 'Marie Claire Mukamana',
-      phone: '250788333444',
-      email: 'marie@supplier.rw',
-      nid: '1199823456789012',
-      price_per_liter: 390,
-      address: 'Kigali, Kicukiro',
-      code: 'A_SUP_002',
-      user_code: 'USER_SUP_002',
-      wallet_code: 'W_SUP_002',
-    },
-    {
-      name: 'Pierre Nkurunziza',
-      phone: '250788555666',
-      email: 'pierre@supplier.rw',
-      nid: '1198934567890123',
-      price_per_liter: 410,
-      address: 'Kigali, Nyarugenge',
-      code: 'A_SUP_003',
-      user_code: 'USER_SUP_003',
-      wallet_code: 'W_SUP_003',
-    },
   ];
 
   for (const supplier of suppliers) {
     // Create supplier account
     const supplierAccount = await prisma.account.upsert({
       where: { code: supplier.code },
-      update: {},
+      update: { name: `${supplier.name} - Supplier`, status: 'active' },
       create: {
         code: supplier.code,
         name: `${supplier.name} - Supplier`,
@@ -324,11 +302,19 @@ async function main() {
       },
     });
 
-    // Create supplier user
+    // Create supplier user (stable user_code; phone/email follow role-demo convention on re-seed)
     const supplierUser = await prisma.user.upsert({
       where: { code: supplier.user_code },
       update: {
+        ...userNameFields(supplier.name),
+        phone: supplier.phone,
+        email: supplier.email,
         password_hash: hashedPassword,
+        account_type: 'supplier',
+        status: 'active',
+        default_account_id: supplierAccount.id,
+        nid: supplier.nid,
+        address: supplier.address,
       },
       create: {
         code: supplier.user_code,
@@ -426,35 +412,35 @@ async function main() {
       status: 'accepted',
     },
     {
-      supplier_code: 'A_SUP_002',
+      supplier_code: 'A_SUP_001',
       quantity: 200.0,
       price: 390,
       date: daysAgo(5, 8, 30),
       status: 'accepted',
     },
     {
-      supplier_code: 'A_SUP_002',
+      supplier_code: 'A_SUP_001',
       quantity: 180.5,
       price: 390,
       date: daysAgo(4, 9, 0),
       status: 'accepted',
     },
     {
-      supplier_code: 'A_SUP_003',
+      supplier_code: 'A_SUP_001',
       quantity: 95.0,
       price: 410,
       date: daysAgo(2, 9, 0),
       status: 'accepted',
     },
     {
-      supplier_code: 'A_SUP_003',
+      supplier_code: 'A_SUP_001',
       quantity: 110.0,
       price: 410,
       date: daysAgo(1, 9, 30),
       status: 'pending',
     },
     {
-      supplier_code: 'A_SUP_002',
+      supplier_code: 'A_SUP_001',
       quantity: 62.0,
       price: 395,
       date: daysAgo(3, 11, 20),
@@ -606,15 +592,16 @@ async function main() {
   console.log('   250788409029 casual_laborer · 250788409030 leadership · 250788409031 regulator');
   console.log('   250788409032 umucunda_a · 250788409033 umucunda_b · 250788409023 accountant');
   console.log('   250788409024 collector · 250788409025 viewer · 250788409026 agent');
+  console.log('👤 supplier role (own tenant + supplierCustomer link to Main MCC; role slug supplier):');
+  console.log('   250788409034 supplier@gemura.rw');
   console.log('👤 regional_supervisor (multi-district):');
   console.log('   250788409050 Kigali · 250788409051 South&West · 250788409052 West&North · 250788409053 East');
-  console.log(`👤 supplier (Jean Baptiste): 250788111222 (+ 250788333444, 250788555666)`);
   console.log(`👤 customer (own account): 250788409027`);
   console.log(`📧 Main email: ${mainUser.email}`);
   console.log(`🎫 Token: ${authToken}`);
   console.log(`💼 Account: ${mainAccount.code}`);
   console.log(`💰 Wallet Balance: ${mainWallet.balance} RWF`);
-  console.log(`🥛 Suppliers: 3`);
+  console.log(`🥛 Suppliers: 1 (demo)`);
   console.log(`📦 Collections: ${collections.length}`);
   console.log(`📦 Products: 3`);
   console.log(`🐄 Animals: ${animalsCreated}`);

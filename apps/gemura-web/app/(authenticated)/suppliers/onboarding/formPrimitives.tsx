@@ -18,16 +18,16 @@ export function ProgressBar({
   const pct = Math.min(100, Math.max(0, Math.round(value)));
   const fp = fieldPercent != null ? Math.min(100, Math.max(0, Math.round(fieldPercent))) : null;
   return (
-    <div className="rounded-sm border border-slate-200/90 bg-gradient-to-r from-slate-50 to-white px-4 py-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-slate-600">
-        <span className="font-medium uppercase tracking-wide text-slate-500">Wizard progress</span>
-        <span className="font-semibold tabular-nums text-slate-900">{pct}%</span>
+    <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-gray-600">
+        <span className="font-medium uppercase tracking-wide text-gray-500">Wizard progress</span>
+        <span className="font-semibold tabular-nums text-gray-900">{pct}%</span>
       </div>
       {stepCurrent != null && stepTotal != null && (
-        <p className="text-sm font-medium text-slate-800 mt-0.5">
+        <p className="text-sm font-medium text-gray-800 mt-0.5">
           Step {stepCurrent} of {stepTotal}
           {fp != null && (
-            <span className="text-slate-500 font-normal">
+            <span className="text-gray-500 font-normal">
               {' '}
               · Required fields: {fp}%
             </span>
@@ -35,7 +35,7 @@ export function ProgressBar({
         </p>
       )}
       <div
-        className="mt-2 h-2.5 rounded-sm bg-slate-200/90 overflow-hidden border border-slate-300/60 box-border"
+        className="mt-2 h-2.5 rounded-sm bg-gray-200 overflow-hidden border border-gray-300 box-border"
         role="progressbar"
         aria-valuenow={pct}
         aria-valuemin={0}
@@ -66,15 +66,15 @@ export function WizardStepPanel({
   return (
     <section
       id={id}
-      className="rounded-sm border border-slate-200/90 bg-white overflow-hidden"
+      className="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden"
     >
-      <header className="bg-[#031A3A] px-5 py-4">
-        <h3 className="text-lg font-semibold tracking-tight !text-white">{title}</h3>
+      <header className="px-5 py-4 border-b border-gray-200 bg-gray-50">
+        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
         {subtitle && (
-          <p className="text-sm mt-1.5 !text-white/90 leading-snug">{subtitle}</p>
+          <p className="text-sm text-gray-600 mt-1 leading-snug">{subtitle}</p>
         )}
       </header>
-      <div className="p-5 sm:p-6 space-y-5 bg-gradient-to-b from-white to-slate-50/40">{children}</div>
+      <div className="p-5 sm:p-6 space-y-6 bg-white">{children}</div>
     </section>
   )
 }
@@ -89,38 +89,35 @@ export function FieldLabel({
   optional?: boolean;
 }) {
   return (
-    <label htmlFor={htmlFor} className="block text-[13px] font-semibold text-slate-800 mb-1.5">
+    <label htmlFor={htmlFor} className="block text-sm font-medium text-gray-700 mb-1">
       {children}
-      {optional && <span className="text-slate-500 font-normal"> (optional)</span>}
+      {optional && <span className="text-gray-500 font-normal"> (optional)</span>}
     </label>
   );
 }
 
-/** Matches Gemura onboarding — reused on review/register screen for visual consistency */
-export const wizardTextInputClass =
-  'w-full min-h-[44px] rounded-sm border bg-white px-3.5 py-2.5 text-[15px] leading-snug text-slate-900 placeholder:text-slate-400 shadow-sm shadow-slate-900/[0.04] border-slate-200/95 focus:border-[#004AAD] focus:outline-none focus:ring-2 focus:ring-[#004AAD]/25 transition-[box-shadow,border-color,background-color] disabled:opacity-55 disabled:cursor-not-allowed';
+/** Same visual language as Settings, members, and other authenticated forms (`globals.css` `.input`). */
+export const wizardTextInputClass = 'input w-full min-h-[44px]';
 
 export function wizardInputWithError(hasError: boolean) {
-  return `${wizardTextInputClass} ${
-    hasError ? 'border-red-400 bg-red-50/80 ring-1 ring-red-200/70 !shadow-red-900/5' : ''
-  }`;
+  return `${wizardTextInputClass}${hasError ? ' input-error' : ''}`;
 }
 
-/** Native `<select>` styling aligned with onboarding text fields */
+/** Native `<select>` — matches `globals.css` `.select`. */
 export function wizardNativeSelectClass() {
-  return `${wizardTextInputClass} cursor-pointer py-2.5`;
+  return 'select w-full min-h-[44px]';
 }
 
 export function WizardStepAlert({ messages }: { messages: string[] | null | undefined }) {
   if (!messages?.length) return null;
   return (
     <div
-      className="rounded-sm border border-red-300/90 bg-gradient-to-b from-red-50 to-red-50/70 px-4 py-3 shadow-sm shadow-red-900/5"
+      className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 shadow-sm"
       role="alert"
       aria-live="polite"
     >
-      <p className="text-[13px] font-semibold text-red-950">Complete the following before continuing</p>
-      <ul className="mt-2 text-sm text-red-900 list-disc pl-5 space-y-1">
+      <p className="text-sm font-semibold text-red-900">Complete the following before continuing</p>
+      <ul className="mt-2 text-sm text-red-800 list-disc pl-5 space-y-1">
         {messages.map((m, i) => (
           <li key={`${i}-${m.slice(0, 24)}`}>{m}</li>
         ))}
@@ -142,7 +139,7 @@ export function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement
   return (
     <textarea
       {...props}
-      className={`${wizardTextInputClass} min-h-[100px] resize-y py-3 ${props.className || ''}`}
+      className={`textarea w-full min-h-[100px] ${props.className || ''}`.trim()}
     />
   );
 }
@@ -165,7 +162,7 @@ export function RadioRow({
   const gid = useId();
   return (
     <fieldset>
-      <legend className="text-[13px] font-semibold text-slate-800 mb-2">{legend}</legend>
+      <legend className="text-sm font-medium text-gray-700 mb-2">{legend}</legend>
       <div className="flex flex-wrap gap-2">
         {options.map((o) => (
           <label
@@ -173,7 +170,7 @@ export function RadioRow({
             className={`inline-flex items-center gap-2 px-3 py-2 rounded-sm border min-h-[44px] cursor-pointer text-sm transition-colors ${
               value === o.value
                 ? 'border-[#004AAD] bg-[#004AAD]/10 text-[#031A3A]'
-                : 'border-slate-200 bg-white hover:border-slate-300 text-slate-800'
+                : 'border-gray-200 bg-white hover:border-gray-300 text-gray-800'
             }`}
           >
             <input
@@ -208,10 +205,10 @@ export function CheckboxRow({
   const atMax = maxSelections != null && selected.length >= maxSelections;
   return (
     <fieldset>
-      <legend className="text-[13px] font-semibold text-slate-800 mb-2">
+      <legend className="text-sm font-medium text-gray-700 mb-2">
         {legend}
         {maxSelections != null && (
-          <span className="text-slate-500 font-normal"> (max {maxSelections})</span>
+          <span className="text-gray-500 font-normal"> (max {maxSelections})</span>
         )}
       </legend>
       <div className="flex flex-wrap gap-2">
@@ -226,7 +223,7 @@ export function CheckboxRow({
               } ${
                 isOn
                   ? 'border-[#004AAD] bg-[#004AAD]/10 text-[#031A3A]'
-                  : 'border-slate-200 bg-white hover:border-slate-300 text-slate-800'
+                  : 'border-gray-200 bg-white hover:border-gray-300 text-gray-800'
               }`}
             >
               <input
@@ -246,7 +243,11 @@ export function CheckboxRow({
 }
 
 export function Hint({ children }: { children: ReactNode }) {
-  return <p className="text-xs text-gray-600 bg-gray-50 border border-gray-100 rounded-sm px-2 py-1.5">{children}</p>;
+  return (
+    <p className="text-xs text-gray-600 mt-1 border border-gray-200 rounded-sm bg-gray-50 px-3 py-2 leading-relaxed">
+      {children}
+    </p>
+  );
 }
 
 export function RiskBanner({ children }: { children: ReactNode }) {
@@ -272,18 +273,18 @@ export function AgentPanel({ title, children }: { title: string; children: React
 /** Key-value row for review step */
 export function ReviewRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:gap-4 py-2.5 border-b border-slate-100 last:border-0 text-sm">
-      <dt className="shrink-0 sm:w-[40%] font-medium text-slate-500">{label}</dt>
-      <dd className="text-slate-900 break-words flex-1">{value === '' || value == null ? '—' : value}</dd>
+    <div className="flex flex-col sm:flex-row sm:gap-4 py-2.5 border-b border-gray-100 last:border-0 text-sm">
+      <dt className="shrink-0 sm:w-[40%] font-medium text-gray-500">{label}</dt>
+      <dd className="text-gray-900 break-words flex-1">{value === '' || value == null ? '—' : value}</dd>
     </div>
   );
 }
 
 export function ReviewSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-sm border border-slate-200 bg-white overflow-hidden">
-      <h4 className="bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-800">{title}</h4>
-      <dl className="px-4 py-2">{children}</dl>
+    <section className="rounded-lg border border-gray-200 bg-white overflow-hidden shadow-sm">
+      <h4 className="bg-gray-50 border-b border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-900">{title}</h4>
+      <dl className="px-4 py-3">{children}</dl>
     </section>
   );
 }
