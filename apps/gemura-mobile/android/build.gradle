@@ -1,10 +1,11 @@
 buildscript {
-    ext.kotlin_version = '1.9.23'
+    ext.kotlin_version = '1.9.24'
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
+        classpath "com.android.tools.build:gradle:8.9.1"
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
@@ -14,6 +15,14 @@ allprojects {
         google()
         mavenCentral()
     }
+
+    configurations.all {
+        resolutionStrategy.eachDependency { details ->
+            if (details.requested.group == 'org.jetbrains.kotlin') {
+                details.useVersion "1.9.24"
+            }
+        }
+    }
 }
 
 rootProject.buildDir = "../build"
@@ -22,6 +31,26 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
+}
+
+// AGP 8+ requires namespace on every Android library (legacy plugins omit it).
+subprojects { subproject ->
+    subproject.pluginManager.withPlugin("com.android.library") {
+        def androidExt = subproject.extensions.findByName("android")
+        if (androidExt != null && androidExt.namespace == null) {
+            def manifestFile = subproject.file("src/main/AndroidManifest.xml")
+            if (manifestFile.exists()) {
+                def manifest = new XmlSlurper().parse(manifestFile)
+                def packageName = manifest.@package?.text()
+                if (packageName) {
+                    androidExt.namespace = packageName
+                }
+            }
+            if (androidExt.namespace == null && subproject.group != null) {
+                androidExt.namespace = subproject.group.toString()
+            }
+        }
+    }
 }
 
 tasks.register("clean", Delete) {
