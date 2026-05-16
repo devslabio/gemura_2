@@ -1,3 +1,4 @@
+import '../utils/json_parse.dart';
 import 'receivable.dart';
 
 class Payable {
@@ -30,18 +31,21 @@ class Payable {
   });
 
   factory Payable.fromJson(Map<String, dynamic> json) {
+    final supplierJson = json['supplier'];
     return Payable(
-      collectionId: json['collection_id'] as String,
-      supplier: SupplierInfo.fromJson(json['supplier'] as Map<String, dynamic>),
-      collectionDate: DateTime.parse(json['collection_date'] as String),
-      quantity: (json['quantity'] as num).toDouble(),
-      unitPrice: (json['unit_price'] as num).toDouble(),
-      totalAmount: (json['total_amount'] as num).toDouble(),
-      amountPaid: (json['amount_paid'] as num).toDouble(),
-      outstanding: (json['outstanding'] as num).toDouble(),
-      paymentStatus: json['payment_status'] as String,
-      daysOutstanding: json['days_outstanding'] as int,
-      agingBucket: json['aging_bucket'] as String,
+      collectionId: json['collection_id']?.toString() ?? '',
+      supplier: supplierJson is Map<String, dynamic>
+          ? SupplierInfo.fromJson(supplierJson)
+          : SupplierInfo(id: '', code: '', name: 'Unknown'),
+      collectionDate: jsonDateTime(json['collection_date']),
+      quantity: jsonDouble(json['quantity']),
+      unitPrice: jsonDouble(json['unit_price']),
+      totalAmount: jsonDouble(json['total_amount']),
+      amountPaid: jsonDouble(json['amount_paid']),
+      outstanding: jsonDouble(json['outstanding']),
+      paymentStatus: json['payment_status']?.toString() ?? 'unpaid',
+      daysOutstanding: jsonInt(json['days_outstanding']),
+      agingBucket: json['aging_bucket']?.toString() ?? 'current',
       notes: json['notes'] as String?,
     );
   }
@@ -83,16 +87,27 @@ class PayablesSummary {
   });
 
   factory PayablesSummary.fromJson(Map<String, dynamic> json) {
+    final bySupplierRaw = json['by_supplier'];
+    final allRaw = json['all_payables'];
+    final agingRaw = json['aging_summary'];
     return PayablesSummary(
-      totalPayables: (json['total_payables'] as num).toDouble(),
-      totalInvoices: json['total_invoices'] as int,
-      bySupplier: (json['by_supplier'] as List<dynamic>)
-          .map((e) => SupplierPayables.fromJson(e as Map<String, dynamic>))
-          .toList(),
-      agingSummary: AgingSummary.fromJson(json['aging_summary'] as Map<String, dynamic>),
-      allPayables: (json['all_payables'] as List<dynamic>)
-          .map((e) => Payable.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      totalPayables: jsonDouble(json['total_payables']),
+      totalInvoices: jsonInt(json['total_invoices']),
+      bySupplier: bySupplierRaw is List
+          ? bySupplierRaw
+              .whereType<Map>()
+              .map((e) => SupplierPayables.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : [],
+      agingSummary: agingRaw is Map<String, dynamic>
+          ? AgingSummary.fromJson(agingRaw)
+          : AgingSummary(current: 0, days31_60: 0, days61_90: 0, days90Plus: 0),
+      allPayables: allRaw is List
+          ? allRaw
+              .whereType<Map>()
+              .map((e) => Payable.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : [],
     );
   }
 }
@@ -111,13 +126,20 @@ class SupplierPayables {
   });
 
   factory SupplierPayables.fromJson(Map<String, dynamic> json) {
+    final invoicesRaw = json['invoices'];
+    final supplierJson = json['supplier'];
     return SupplierPayables(
-      supplier: SupplierInfo.fromJson(json['supplier'] as Map<String, dynamic>),
-      totalOutstanding: (json['total_outstanding'] as num).toDouble(),
-      invoiceCount: json['invoice_count'] as int,
-      invoices: (json['invoices'] as List<dynamic>)
-          .map((e) => Payable.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      supplier: supplierJson is Map<String, dynamic>
+          ? SupplierInfo.fromJson(supplierJson)
+          : SupplierInfo(id: '', code: '', name: 'Unknown'),
+      totalOutstanding: jsonDouble(json['total_outstanding']),
+      invoiceCount: jsonInt(json['invoice_count']),
+      invoices: invoicesRaw is List
+          ? invoicesRaw
+              .whereType<Map>()
+              .map((e) => Payable.fromJson(Map<String, dynamic>.from(e)))
+              .toList()
+          : [],
     );
   }
 }

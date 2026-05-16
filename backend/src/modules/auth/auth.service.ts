@@ -309,7 +309,7 @@ export class AuthService {
             },
           });
 
-          const linkSlug = canonicalPlatformRoleSlug((role ?? 'system_admin').trim().slice(0, 64));
+          const linkSlug = canonicalPlatformRoleSlug((role ?? 'manager').trim().slice(0, 64));
           const linkPrId = await this.rbac.resolvePlatformRoleIdFromSlug(linkSlug);
           await tx.userAccount.create({
             data: {
@@ -434,7 +434,7 @@ export class AuthService {
     const walletCode = `W_${Math.random().toString(36).substring(2, 5).toUpperCase()}`;
     const token = `token_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-    const newLinkSlug = canonicalPlatformRoleSlug((role ?? 'system_admin').trim().slice(0, 64));
+    const newLinkSlug = canonicalPlatformRoleSlug((role ?? 'manager').trim().slice(0, 64));
     const newLinkPrId = await this.rbac.resolvePlatformRoleIdFromSlug(newLinkSlug);
 
     // Create user, account, wallet in transaction

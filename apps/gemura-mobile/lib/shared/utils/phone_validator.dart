@@ -64,9 +64,59 @@ class PhoneValidator {
     return formatPhoneNumber(phoneNumber);
   }
 
-  /// Validates phone number for API submission
-  static String? validateForAPI(String? phoneNumber) {
-    return validateRwandanPhone(phoneNumber);
+  static final RegExp _rwApiPhone = RegExp(r'^250[0-9]{9}$');
+  static const int rwandaNationalDigits = 9;
+  static const String rwandaDialCode = '250';
+
+  /// National number only (9 digits), stripping +250 / leading 0 when pasted.
+  static String localDigitsOnly(String phone) {
+    var digits = phone.replaceAll(RegExp(r'[^\d]'), '');
+    if (digits.startsWith(rwandaDialCode) && digits.length >= rwandaNationalDigits + 3) {
+      digits = digits.substring(3);
+    }
+    if (digits.startsWith('0') && digits.length > rwandaNationalDigits) {
+      digits = digits.substring(1);
+    }
+    if (digits.length > rwandaNationalDigits) {
+      digits = digits.substring(digits.length - rwandaNationalDigits);
+    }
+    return digits;
+  }
+
+  /// Digits-only phone for APIs (e.g. 250788123456).
+  static String normalizeForApi(String phone) {
+    final local = localDigitsOnly(phone);
+    if (local.length == rwandaNationalDigits) {
+      return '$rwandaDialCode$local';
+    }
+    return phone.replaceAll(RegExp(r'[^\d]'), '');
+  }
+
+  /// Validates the 9-digit field shown after +250.
+  static String? validateLocalNineDigits(String? phoneNumber) {
+    if (phoneNumber == null || phoneNumber.trim().isEmpty) {
+      return 'Phone number is required';
+    }
+    final local = localDigitsOnly(phoneNumber);
+    if (local.length != rwandaNationalDigits) {
+      return 'Enter $rwandaNationalDigits digits after +250 (e.g. 788123456)';
+    }
+    if (!RegExp(r'^[0-9]+$').hasMatch(local)) {
+      return 'Phone number must contain only digits';
+    }
+    return null;
+  }
+
+  /// Validates full API phone (250 + 9 digits).
+  static String? validateForApi(String? phoneNumber) {
+    if (phoneNumber == null || phoneNumber.trim().isEmpty) {
+      return 'Phone number is required';
+    }
+    final digits = normalizeForApi(phoneNumber);
+    if (!_rwApiPhone.hasMatch(digits)) {
+      return 'Enter $rwandaNationalDigits digits after +250 (e.g. 788123456)';
+    }
+    return null;
   }
 
   /// Validates any international phone number (more flexible)

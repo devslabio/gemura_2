@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:contacts_service/contacts_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/primary_button.dart';
+import '../../../../shared/utils/national_id_validator.dart';
 import '../../../../shared/utils/phone_validator.dart';
-import '../../../../shared/utils/rwandan_phone_input_formatter.dart';
+import '../../../../shared/widgets/phone_input_field.dart';
+import '../../domain/supplier_create_exception.dart';
+import '../../domain/supplier_form_fields.dart';
+import '../../domain/supplier_validation_parser.dart';
 import '../providers/suppliers_provider.dart';
 
 class AddSupplierScreen extends ConsumerStatefulWidget {
@@ -16,6 +21,15 @@ class AddSupplierScreen extends ConsumerStatefulWidget {
 
 class _AddSupplierScreenState extends ConsumerState<AddSupplierScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _scrollController = ScrollController();
+  final _firstNameFieldKey = GlobalKey<FormFieldState<String>>();
+  final _lastNameFieldKey = GlobalKey<FormFieldState<String>>();
+  final _phoneFieldKey = GlobalKey<FormFieldState<String>>();
+  final _phoneInputKey = GlobalKey<PhoneInputFieldState>();
+  final _emailFieldKey = GlobalKey<FormFieldState<String>>();
+  final _addressFieldKey = GlobalKey<FormFieldState<String>>();
+  final _nidFieldKey = GlobalKey<FormFieldState<String>>();
+  final _priceFieldKey = GlobalKey<FormFieldState<String>>();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -25,6 +39,9 @@ class _AddSupplierScreenState extends ConsumerState<AddSupplierScreen> {
   final _pricePerLiterController = TextEditingController();
   
   bool _isSubmitting = false;
+  bool _showFieldValidation = false;
+  String? _formBanner;
+  Map<String, String> _apiFieldErrors = {};
 
   @override
   void dispose() {
@@ -35,7 +52,153 @@ class _AddSupplierScreenState extends ConsumerState<AddSupplierScreen> {
     _addressController.dispose();
     _nidController.dispose();
     _pricePerLiterController.dispose();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _clearApiError(String field) {
+    if (_apiFieldErrors.remove(field) == null) return;
+    setState(() {
+      if (_apiFieldErrors.isEmpty && _formKey.currentState?.validate() == true) {
+        _formBanner = null;
+      }
+    });
+    _formKey.currentState?.validate();
+  }
+
+  String? _validateField(
+    String fieldKey,
+    String? value,
+    String? Function(String?) builtIn,
+  ) {
+    final apiMsg = _apiFieldErrors[fieldKey];
+    if (apiMsg != null && apiMsg.isNotEmpty) return apiMsg;
+    return builtIn(value);
+  }
+
+  String? _validateFirstName(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'First name is required';
+    }
+    return null;
+  }
+
+  String? _validateLastName(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Last name is required';
+    }
+    return null;
+  }
+
+  String? _validateEmail(String? value) {
+    final v = value?.trim() ?? '';
+    if (v.isEmpty) return null;
+    if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(v)) {
+      return 'Enter a valid email address';
+    }
+    return null;
+  }
+
+  String? _validatePrice(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Price per liter is required';
+    }
+    if (double.tryParse(value) == null) {
+      return 'Please enter a valid number';
+    }
+    if (double.parse(value) <= 0) {
+      return 'Price must be greater than 0';
+    }
+    return null;
+  }
+
+  String _missingRequiredSummary() {
+    final missing = <String>[];
+    if (_validateFirstName(_firstNameController.text) != null) {
+      missing.add('First name');
+    }
+    if (_validateLastName(_lastNameController.text) != null) {
+      missing.add('Last name');
+    }
+    if (PhoneValidator.validateLocalNineDigits(_phoneController.text) != null) {
+      missing.add('Phone');
+    }
+    if (NationalIdValidator.validate(_nidController.text) != null) {
+      missing.add('National ID');
+    }
+    if (_validatePrice(_pricePerLiterController.text) != null) {
+      missing.add('Price per liter');
+    }
+    if (missing.isEmpty) {
+      return 'Please fix the highlighted fields below.';
+    }
+    return 'Required: ${missing.join(', ')}';
+  }
+
+  void _scrollToFirstError() {
+    final keys = [
+      _firstNameFieldKey,
+      _lastNameFieldKey,
+      _phoneFieldKey,
+      _emailFieldKey,
+      _addressFieldKey,
+      _nidFieldKey,
+      _priceFieldKey,
+    ];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final key in keys) {
+        final field = key.currentState;
+        if (field != null && field.hasError) {
+          final ctx = field.context;
+          if (ctx.mounted) {
+            Scrollable.ensureVisible(
+              ctx,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              alignment: 0.2,
+            );
+          }
+          break;
+        }
+      }
+    });
+  }
+
+  InputDecoration _fieldDecoration({
+    required String hintText,
+    required IconData icon,
+    int? maxLength,
+  }) {
+    return InputDecoration(
+      hintText: hintText,
+      prefixIcon: Icon(icon),
+      hintStyle: AppTheme.hintText,
+      counterText: maxLength != null ? '' : null,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
+        borderSide: BorderSide(
+          color: AppTheme.thinBorderColor,
+          width: AppTheme.thinBorderWidth,
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
+        borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
+        borderSide: const BorderSide(color: AppTheme.errorColor, width: 1.5),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
+        borderSide: const BorderSide(color: AppTheme.errorColor, width: 2),
+      ),
+      filled: true,
+      fillColor: AppTheme.surfaceColor,
+    );
   }
 
   void _applyDisplayNameFromContact(String? display) {
@@ -80,9 +243,10 @@ class _AddSupplierScreenState extends ConsumerState<AddSupplierScreen> {
         );
 
         if (selectedContact != null && selectedContact.phones!.isNotEmpty) {
-          final phone = selectedContact.phones!.first.value ?? '';
           setState(() {
-            _phoneController.text = phone;
+            _phoneInputKey.currentState?.setPhoneFromContact(
+              selectedContact.phones!.first.value ?? '',
+            );
             if (_firstNameController.text.trim().isEmpty &&
                 _lastNameController.text.trim().isEmpty) {
               _applyDisplayNameFromContact(selectedContact.displayName);
@@ -103,18 +267,33 @@ class _AddSupplierScreenState extends ConsumerState<AddSupplierScreen> {
   }
 
   void _saveSupplier() async {
-    if (_formKey.currentState!.validate()) {
+    setState(() {
+      _showFieldValidation = true;
+      _formBanner = null;
+    });
+
+    final valid = _formKey.currentState!.validate();
+    if (!valid) {
       setState(() {
-        _isSubmitting = true;
+        _formBanner = _missingRequiredSummary();
+      });
+      _scrollToFirstError();
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+      _apiFieldErrors = {};
+      _formBanner = null;
       });
 
       try {
         await ref.read(suppliersNotifierProvider.notifier).createSupplier(
           firstName: _firstNameController.text.trim(),
           lastName: _lastNameController.text.trim(),
-          phone: _phoneController.text.trim(),
+        phone: PhoneValidator.normalizeForApi(_phoneController.text),
           email: _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
-          nid: _nidController.text.trim().isEmpty ? null : _nidController.text.trim(),
+        nid: NationalIdValidator.digitsOnly(_nidController.text),
           address: _addressController.text.trim().isEmpty ? null : _addressController.text.trim(),
           pricePerLiter: double.parse(_pricePerLiterController.text),
         );
@@ -128,25 +307,35 @@ class _AddSupplierScreenState extends ConsumerState<AddSupplierScreen> {
               backgroundColor: AppTheme.snackbarSuccessColor,
             ),
           );
-
-          // Navigate back to suppliers list screen
           Navigator.of(context).pop();
         }
+    } on SupplierCreateException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _apiFieldErrors = Map<String, String>.from(error.fieldErrors)
+          ..remove('_form');
+        _formBanner = error.fieldErrors['_form'] ??
+            SupplierValidationParser.summaryMessage(error.fieldErrors);
+      });
+      _formKey.currentState!.validate();
+      _scrollToFirstError();
+      ScaffoldMessenger.of(context).showSnackBar(
+        AppTheme.errorSnackBar(message: error.message),
+      );
       } catch (error) {
-        if (mounted) {
+      if (!mounted) return;
+      final msg = error.toString().replaceFirst(RegExp(r'^Exception:\s*'), '');
+      setState(() {
+        _formBanner = msg;
+      });
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to add supplier: ${error.toString()}'),
-              backgroundColor: AppTheme.snackbarErrorColor,
-            ),
+        AppTheme.errorSnackBar(message: msg),
           );
-        }
       } finally {
         if (mounted) {
           setState(() {
             _isSubmitting = false;
           });
-        }
       }
     }
   }
@@ -164,232 +353,176 @@ class _AddSupplierScreenState extends ConsumerState<AddSupplierScreen> {
       ),
       body: Form(
         key: _formKey,
+        autovalidateMode: _showFieldValidation
+            ? AutovalidateMode.onUserInteraction
+            : AutovalidateMode.disabled,
         child: SingleChildScrollView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(AppTheme.spacing16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-
+              if (_formBanner != null) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppTheme.spacing12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.errorColor.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
+                    border: Border.all(color: AppTheme.errorColor.withValues(alpha: 0.35)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.error_outline, color: AppTheme.errorColor, size: 20),
+                      const SizedBox(width: AppTheme.spacing8),
+                      Expanded(
+                        child: Text(
+                          _formBanner!,
+                          style: AppTheme.bodySmall.copyWith(color: AppTheme.errorColor),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppTheme.spacing12),
+              ],
               TextFormField(
+                key: _firstNameFieldKey,
                 controller: _firstNameController,
                 style: AppTheme.bodyMedium,
-                decoration: InputDecoration(
-                  hintText: 'First name',
-                  prefixIcon: const Icon(Icons.person),
-                  hintStyle: AppTheme.hintText,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                    borderSide: BorderSide(color: AppTheme.thinBorderColor, width: AppTheme.thinBorderWidth),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                    borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
-                  ),
-                  filled: true,
-                  fillColor: AppTheme.surfaceColor,
+                textCapitalization: TextCapitalization.words,
+                decoration: _fieldDecoration(
+                  hintText: 'First name *',
+                  icon: Icons.person,
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'First name is required';
-                  }
-                  return null;
-                },
+                onChanged: (_) => _clearApiError(SupplierFormFields.firstName),
+                validator: (value) => _validateField(
+                  SupplierFormFields.firstName,
+                  value,
+                  _validateFirstName,
+                ),
               ),
               const SizedBox(height: AppTheme.spacing12),
               TextFormField(
+                key: _lastNameFieldKey,
                 controller: _lastNameController,
                 style: AppTheme.bodyMedium,
-                decoration: InputDecoration(
-                  hintText: 'Last name',
-                  prefixIcon: const Icon(Icons.person_outline),
-                  hintStyle: AppTheme.hintText,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                    borderSide: BorderSide(color: AppTheme.thinBorderColor, width: AppTheme.thinBorderWidth),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                    borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
-                  ),
-                  filled: true,
-                  fillColor: AppTheme.surfaceColor,
+                textCapitalization: TextCapitalization.words,
+                decoration: _fieldDecoration(
+                  hintText: 'Last name *',
+                  icon: Icons.person_outline,
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Last name is required';
-                  }
-                  return null;
-                },
+                onChanged: (_) => _clearApiError(SupplierFormFields.lastName),
+                validator: (value) => _validateField(
+                  SupplierFormFields.lastName,
+                  value,
+                  _validateLastName,
+                ),
               ),
               const SizedBox(height: AppTheme.spacing12),
               
-              // Phone number field with contact picker
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
+              PhoneInputField(
+                key: _phoneInputKey,
+                fieldKey: _phoneFieldKey,
                       controller: _phoneController,
-                      style: AppTheme.bodyMedium,
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [
-                        PhoneInputFormatter(),
-                      ],
-                      decoration: InputDecoration(
-                        hintText: '250788123456',
-                        prefixIcon: const Icon(Icons.phone),
-                        hintStyle: AppTheme.hintText,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                          borderSide: BorderSide(color: AppTheme.thinBorderColor, width: AppTheme.thinBorderWidth),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                          borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
-                        ),
-                        filled: true,
-                        fillColor: AppTheme.surfaceColor,
-                      ),
-                      validator: PhoneValidator.validateRwandanPhone,
-                    ),
-                  ),
-                  const SizedBox(width: AppTheme.spacing8),
-                  Container(
-                    height: 56, // Match TextFormField height
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceColor,
-                      borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                      border: Border.all(color: AppTheme.thinBorderColor, width: AppTheme.thinBorderWidth),
-                    ),
-                    child: IconButton(
+                rwandaOnly: true,
+                decoration: _fieldDecoration(
+                  hintText: 'Phone number *',
+                  icon: Icons.phone_outlined,
+                ).copyWith(prefixIcon: null),
+                onChanged: (_) => _clearApiError(SupplierFormFields.phone),
+                validator: (value) => _validateField(
+                  SupplierFormFields.phone,
+                  value,
+                  PhoneValidator.validateLocalNineDigits,
+                ),
+                trailing: IconButton(
                       icon: const Icon(Icons.contacts, color: AppTheme.primaryColor),
                       tooltip: 'Select from contacts',
                       onPressed: _pickContact,
                     ),
-                  ),
-                ],
               ),
               const SizedBox(height: AppTheme.spacing12),
               
               // Email field
               TextFormField(
+                key: _emailFieldKey,
                 controller: _emailController,
                 style: AppTheme.bodyMedium,
                 keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
+                decoration: _fieldDecoration(
                   hintText: 'Email (optional)',
-                  prefixIcon: const Icon(Icons.email),
-                  hintStyle: AppTheme.hintText,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                    borderSide: BorderSide(color: AppTheme.thinBorderColor, width: AppTheme.thinBorderWidth),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                    borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
-                  ),
-                  filled: true,
-                  fillColor: AppTheme.surfaceColor,
+                  icon: Icons.email,
+                ),
+                onChanged: (_) => _clearApiError(SupplierFormFields.email),
+                validator: (value) => _validateField(
+                  SupplierFormFields.email,
+                  value,
+                  _validateEmail,
                 ),
               ),
               const SizedBox(height: AppTheme.spacing12),
               
               // Address field
               TextFormField(
+                key: _addressFieldKey,
                 controller: _addressController,
                 style: AppTheme.bodyMedium,
-                decoration: InputDecoration(
+                decoration: _fieldDecoration(
                   hintText: 'Address (optional)',
-                  prefixIcon: const Icon(Icons.location_on),
-                  hintStyle: AppTheme.hintText,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                    borderSide: BorderSide(color: AppTheme.thinBorderColor, width: AppTheme.thinBorderWidth),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                    borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
-                  ),
-                  filled: true,
-                  fillColor: AppTheme.surfaceColor,
+                  icon: Icons.location_on,
+                ),
+                onChanged: (_) => _clearApiError(SupplierFormFields.address),
+                validator: (value) => _validateField(
+                  SupplierFormFields.address,
+                  value,
+                  (_) => null,
                 ),
               ),
               const SizedBox(height: AppTheme.spacing12),
               
-              // National ID field
+              // National ID field (required by API)
               TextFormField(
+                key: _nidFieldKey,
                 controller: _nidController,
                 style: AppTheme.bodyMedium,
-                decoration: InputDecoration(
-                  hintText: 'National ID (optional)',
-                  prefixIcon: const Icon(Icons.badge),
-                  hintStyle: AppTheme.hintText,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                    borderSide: BorderSide(color: AppTheme.thinBorderColor, width: AppTheme.thinBorderWidth),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                    borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
-                  ),
-                  filled: true,
-                  fillColor: AppTheme.surfaceColor,
+                keyboardType: TextInputType.number,
+                maxLength: 16,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(16),
+                ],
+                decoration: _fieldDecoration(
+                  hintText: 'National ID (16 digits, starts with 1) *',
+                  icon: Icons.badge,
+                  maxLength: 16,
+                ),
+                onChanged: (_) => _clearApiError(SupplierFormFields.nid),
+                validator: (value) => _validateField(
+                  SupplierFormFields.nid,
+                  value,
+                  NationalIdValidator.validate,
                 ),
               ),
               const SizedBox(height: AppTheme.spacing12),
               
               // Price per liter field
               TextFormField(
+                key: _priceFieldKey,
                 controller: _pricePerLiterController,
                 style: AppTheme.bodyMedium,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  hintText: 'Price per liter (RWF)',
-                  prefixIcon: const Icon(Icons.attach_money),
-                  hintStyle: AppTheme.hintText,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                    borderSide: BorderSide(color: AppTheme.thinBorderColor, width: AppTheme.thinBorderWidth),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.borderRadius12),
-                    borderSide: BorderSide(color: AppTheme.primaryColor, width: 2),
-                  ),
-                  filled: true,
-                  fillColor: AppTheme.surfaceColor,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: _fieldDecoration(
+                  hintText: 'Price per liter (RWF) *',
+                  icon: Icons.attach_money,
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Price per liter is required';
-                  }
-                  if (double.tryParse(value) == null) {
-                    return 'Please enter a valid number';
-                  }
-                  if (double.parse(value) <= 0) {
-                    return 'Price must be greater than 0';
-                  }
-                  return null;
-                },
+                onChanged: (_) => _clearApiError(SupplierFormFields.pricePerLiter),
+                validator: (value) => _validateField(
+                  SupplierFormFields.pricePerLiter,
+                  value,
+                  _validatePrice,
+                ),
               ),
               const SizedBox(height: AppTheme.spacing24),
 

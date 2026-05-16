@@ -274,8 +274,24 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
     'view_inventory',
     'manage_inventory',
   ],
-  supplier: [],
-  customer: [],
+  supplier: [
+    'view_sales',
+    'view_collections',
+    'mcc_view_operations',
+    'view_suppliers',
+    'view_customers',
+    'view_inventory',
+    'view_analytics',
+  ],
+  customer: [
+    'view_sales',
+    'view_collections',
+    'mcc_view_operations',
+    'view_suppliers',
+    'view_customers',
+    'view_inventory',
+    'view_analytics',
+  ],
 };
 
 export const ROLE_LABELS: Record<RoleCode, string> = {

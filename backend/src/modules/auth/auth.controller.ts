@@ -114,7 +114,7 @@ export class AuthController {
           password: 'SecurePassword123!',
           account_name: 'My Business Account',
           account_type: 'mcc',
-          role: 'system_admin',
+          role: 'manager',
         },
       },
       existingUser: {

@@ -56,11 +56,13 @@ export const authApi = {
 
   register: async (data: RegisterData): Promise<AuthResponse | ErrorResponse> => {
     return apiClient.post("/auth/register", {
-      name: `${data.firstName} ${data.lastName}`.trim(),
+      first_name: data.firstName.trim(),
+      last_name: data.lastName.trim(),
       email: data.email,
       phone: data.phone,
       password: data.password,
       account_type: "mcc",
+      role: "manager",
     });
   },
 };
