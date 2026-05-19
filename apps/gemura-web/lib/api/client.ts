@@ -5,7 +5,7 @@ import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'ax
  * - In `next dev`, when unset, use same-origin `/api` so `next.config` rewrites proxy to Nest (port 3004).
  * - In production builds, when unset, fall back to the hosted API (set env in real deployments).
  */
-function resolveApiBaseUrl(): string {
+export function getApiBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL;
   }
@@ -15,7 +15,7 @@ function resolveApiBaseUrl(): string {
   return 'http://159.198.65.38:3004/api';
 }
 
-const API_BASE_URL = resolveApiBaseUrl();
+const API_BASE_URL = getApiBaseUrl();
 
 class ApiClient {
   private client: AxiosInstance;

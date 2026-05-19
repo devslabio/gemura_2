@@ -1,28 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { apiClient } from '@/lib/api/client';
 import Icon, { faArrowLeft, faBuilding, faMapPin, faCheckCircle } from '@/app/components/Icon';
+import { getApiBaseUrl } from '@/lib/api/client';
+import { MccOnboardingLocationFields } from './MccOnboardingLocationFields';
 
-type ProvinceDistrictMap = Record<string, string[]>;
-type LocationOption = {
-  id: string;
-  label: string;
-};
-type LocationNode = {
-  id: string;
-  code: string;
-  name: string;
-  location_type: string;
-  parent_id: string | null;
-};
-type LocationsResponse = {
-  code: number;
-  status: string;
-  message?: string;
-  data: LocationNode[];
-};
+const section1ApiBaseUrl = getApiBaseUrl();
 type OnboardingField = {
   key: string;
   label: string;
@@ -30,16 +14,6 @@ type OnboardingField = {
   options?: string[];
   placeholder?: string;
 };
-
-const RWANDA_PROVINCE_DISTRICTS: ProvinceDistrictMap = {
-  Kigali: ['Gasabo', 'Kicukiro', 'Nyarugenge'],
-  Northern: ['Burera', 'Gakenke', 'Gicumbi', 'Musanze', 'Rulindo'],
-  Southern: ['Gisagara', 'Huye', 'Kamonyi', 'Muhanga', 'Nyanza', 'Nyaruguru', 'Ruhango'],
-  Eastern: ['Bugesera', 'Gatsibo', 'Kayonza', 'Kirehe', 'Ngoma', 'Nyagatare', 'Rwamagana'],
-  Western: ['Karongi', 'Ngororero', 'Nyabihu', 'Nyamasheke', 'Rubavu', 'Rusizi', 'Rutsiro'],
-};
-
-const provinces = Object.keys(RWANDA_PROVINCE_DISTRICTS);
 
 const identityFields: OnboardingField[] = [
   { key: 'commonMccName', label: 'B1. MCC name (common/local)' },
@@ -255,30 +229,17 @@ type CompletionCheck = {
 };
 
 const ONBOARDING_DRAFT_KEY = 'gemura-web-onboarding-draft-v1';
+/** Set after a successful submit so the next visit does not restore the old draft. */
+const ONBOARDING_SUBMITTED_KEY = 'gemura-web-onboarding-submitted-v1';
+
+const INITIAL_COOLING_TANKS = [
+  { tankNumber: 'Tank 1', capacityLitres: '', yearOrAge: '', condition: '' },
+  { tankNumber: 'Tank 2', capacityLitres: '', yearOrAge: '', condition: '' },
+  { tankNumber: 'Tank 3', capacityLitres: '', yearOrAge: '', condition: '' },
+];
+
 const TEN_DIGIT_PHONE_REGEX = /^\d{10}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const LOCATION_TYPE_ALIASES: Record<string, string[]> = {
-  DISTRICT: ['DISTRICT', 'DISTRICTS'],
-  SECTOR: ['SECTOR', 'SECTORS'],
-  CELL: ['CELL', 'CELLS'],
-  VILLAGE: ['VILLAGE', 'VILLAGES'],
-};
-
-function buildSectorOptions(district: string): string[] {
-  if (!district) return [];
-  return [`${district} Central`, `${district} East`, `${district} West`];
-}
-
-function buildCellOptions(sector: string): string[] {
-  if (!sector) return [];
-  return [`${sector} Cell A`, `${sector} Cell B`, `${sector} Cell C`];
-}
-
-function buildVillageOptions(cell: string): string[] {
-  if (!cell) return [];
-  return [`${cell} Village 1`, `${cell} Village 2`, `${cell} Village 3`];
-}
-
 export default function BusinessOnboardingPage() {
   const [step, setStep] = useState(1);
   const [identityPage, setIdentityPage] = useState(1);
@@ -308,11 +269,8 @@ export default function BusinessOnboardingPage() {
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [locationError, setLocationError] = useState('');
-  const [coolingTanks, setCoolingTanks] = useState([
-    { tankNumber: 'Tank 1', capacityLitres: '', yearOrAge: '', condition: '' },
-    { tankNumber: 'Tank 2', capacityLitres: '', yearOrAge: '', condition: '' },
-    { tankNumber: 'Tank 3', capacityLitres: '', yearOrAge: '', condition: '' },
-  ]);
+  const [coolingTanks, setCoolingTanks] = useState(INITIAL_COOLING_TANKS);
+  const [locationFormKey, setLocationFormKey] = useState(0);
   const [dailyMilkVolume, setDailyMilkVolume] = useState('');
   const [maxMilkInOneDay, setMaxMilkInOneDay] = useState('');
   const [tankCapacitySufficiency, setTankCapacitySufficiency] = useState('');
@@ -364,32 +322,17 @@ export default function BusinessOnboardingPage() {
   const [submissionCode, setSubmissionCode] = useState('');
   const [isDraftHydrated, setIsDraftHydrated] = useState(false);
   const [didRestoreDraft, setDidRestoreDraft] = useState(false);
-  const [section1ProvinceOptions, setSection1ProvinceOptions] = useState<LocationOption[]>([]);
-  const [section1DistrictOptions, setSection1DistrictOptions] = useState<LocationOption[]>([]);
-  const [section1SectorOptions, setSection1SectorOptions] = useState<LocationOption[]>([]);
-  const [section1CellOptions, setSection1CellOptions] = useState<LocationOption[]>([]);
-  const [section1VillageOptions, setSection1VillageOptions] = useState<LocationOption[]>([]);
   const [section1ProvinceId, setSection1ProvinceId] = useState('');
   const [section1DistrictId, setSection1DistrictId] = useState('');
   const [section1SectorId, setSection1SectorId] = useState('');
   const [section1CellId, setSection1CellId] = useState('');
   const [section1VillageId, setSection1VillageId] = useState('');
-  const [section1LocationSource, setSection1LocationSource] = useState<'api' | 'fallback'>('fallback');
-  const selectedProvinceRef = useRef('');
-  const selectedDistrictRef = useRef('');
-  const selectedSectorRef = useRef('');
-  const selectedCellRef = useRef('');
   const [province, setProvince] = useState('');
   const [district, setDistrict] = useState('');
   const [sector, setSector] = useState('');
   const [cell, setCell] = useState('');
   const [village, setVillage] = useState('');
   const [extraData, setExtraData] = useState<Record<string, string>>({});
-
-  const districtOptions = useMemo(() => (province ? RWANDA_PROVINCE_DISTRICTS[province] || [] : []), [province]);
-  const sectorOptions = useMemo(() => buildSectorOptions(district), [district]);
-  const cellOptions = useMemo(() => buildCellOptions(sector), [sector]);
-  const villageOptions = useMemo(() => buildVillageOptions(cell), [cell]);
 
   const canProceedFromStep1 = Boolean(
     businessName.trim().length > 1 &&
@@ -403,7 +346,6 @@ export default function BusinessOnboardingPage() {
       TEN_DIGIT_PHONE_REGEX.test(managerPhone.trim()) &&
       managerIdNumber.trim().length > 0,
   );
-  const hasLocation = Boolean(province && district && sector && cell && village);
   const identityFieldMap = useMemo(
     () => identityFields.reduce<Record<string, OnboardingField>>((acc, field) => ({ ...acc, [field.key]: field }), {}),
     [],
@@ -411,61 +353,15 @@ export default function BusinessOnboardingPage() {
   const businessProfileKeys = ['commonMccName', 'ruraRabRegistrationNumber', 'mccOperationalStatus', 'mccOperationalNotes'];
   const ownershipKeys = ['operatorManagerName', 'operatorPhone', 'operatorNationalId', 'ownershipStructure', 'ownershipStructureOther', 'ownerPwdStatus'];
 
-  const section1ApiBaseUrl = apiClient.instance.defaults.baseURL || '';
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadProvinces = async () => {
-      try {
-        const response = await fetch(`${section1ApiBaseUrl}/public/locations/provinces`);
-
-        if (!response.ok) {
-          const token = typeof window !== 'undefined' ? localStorage.getItem('gemura-auth-token') : null;
-          const protectedResponse = await fetch(`${section1ApiBaseUrl}/locations/provinces`, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          });
-          if (!protectedResponse.ok) {
-            throw new Error('Unable to load provinces');
-          }
-          const protectedPayload = (await protectedResponse.json()) as LocationsResponse;
-          if (cancelled) return;
-          const protectedOptions = (protectedPayload.data || []).map((item) => ({ id: item.id, label: item.name }));
-          if (protectedOptions.length > 0) {
-            setSection1ProvinceOptions(protectedOptions);
-            setSection1LocationSource('api');
-            return;
-          }
-        }
-
-        const payload = (await response.json()) as LocationsResponse;
-        if (cancelled) return;
-
-        const options = (payload.data || []).map((item) => ({ id: item.id, label: item.name }));
-        if (options.length > 0) {
-          setSection1ProvinceOptions(options);
-          setSection1LocationSource('api');
-          return;
-        }
-      } catch {
-        // Fallback handled below.
-      }
-
-      if (!cancelled) {
-        setSection1ProvinceOptions(Object.keys(RWANDA_PROVINCE_DISTRICTS).map((provinceName) => ({ id: provinceName, label: provinceName })));
-        setSection1LocationSource('fallback');
-        setLocationError('Using the local Rwanda location list until the API is available.');
-      }
-    };
-
-    loadProvinces();
-    return () => {
-      cancelled = true;
-    };
-  }, [section1ApiBaseUrl]);
-
   useEffect(() => {
     if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (sessionStorage.getItem(ONBOARDING_SUBMITTED_KEY)) {
+      sessionStorage.removeItem(ONBOARDING_SUBMITTED_KEY);
+      localStorage.removeItem(ONBOARDING_DRAFT_KEY);
+      setIsDraftHydrated(true);
       return;
     }
 
@@ -594,186 +490,28 @@ export default function BusinessOnboardingPage() {
     }
   }, []);
 
-  const loadSection1Children = async (parentId: string, expectedType?: string): Promise<LocationOption[] | null> => {
-    const normalizeLocationType = (value?: string | null) => value?.trim().toUpperCase().replace(/[\s-]+/g, '_') || '';
-    const allowedTypes = expectedType ? LOCATION_TYPE_ALIASES[expectedType] || [expectedType] : [];
-    const toOptions = (nodes: LocationNode[], strictType: boolean) => {
-      const seenIds = new Set<string>();
-      return (nodes || [])
-        .filter((node) => {
-          if (!node?.id || !node?.name) return false;
-          const nodeParent = node.parent_id ? String(node.parent_id) : '';
-          const parentMatches = !nodeParent || nodeParent === parentId;
-          if (!parentMatches) return false;
-          if (!expectedType || !strictType) return true;
-          const nodeType = normalizeLocationType(node.location_type);
-          return allowedTypes.some((allowedType) => normalizeLocationType(allowedType) === nodeType);
-        })
-        .filter((node) => {
-          const key = String(node.id);
-          if (seenIds.has(key)) return false;
-          seenIds.add(key);
-          return true;
-        })
-        .map((node) => ({ id: String(node.id), label: String(node.name) }));
-    };
-
-    const fetchChildren = async (useProtected: boolean, withTypeFilter: boolean): Promise<LocationOption[] | null> => {
-      let url = `${section1ApiBaseUrl}/${useProtected ? 'locations' : 'public/locations'}?parent_id=${encodeURIComponent(parentId)}`;
-      if (withTypeFilter && expectedType) {
-        url += `&location_type=${encodeURIComponent(expectedType)}`;
-      }
-      const token = typeof window !== 'undefined' ? localStorage.getItem('gemura-auth-token') : null;
-      const response = await fetch(url, {
-        headers: useProtected && token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!response.ok) return null;
-      const payload = (await response.json()) as LocationsResponse;
-      const options = toOptions(payload.data || [], withTypeFilter);
-      return options.length > 0 ? options : null;
-    };
-
-    try {
-      const attempts: Array<[boolean, boolean]> = [
-        [false, true],  // public + expected type
-        [false, false], // public + no type filter
-        [true, true],   // protected + expected type
-        [true, false],  // protected + no type filter
-      ];
-
-      for (const [useProtected, withTypeFilter] of attempts) {
-        const options = await fetchChildren(useProtected, withTypeFilter);
-        if (options && options.length > 0) {
-          setSection1LocationSource('api');
-          setLocationError('');
-          return options;
-        }
-      }
-
-      return null;
-    } catch {
-      return null;
-    }
-  };
-
-  const getOptionLabel = (id: string, options: LocationOption[]) => {
-    return options.find((option) => option.id === id)?.label || id;
-  };
-
-  const handleSection1ProvinceChange = async (provinceId: string) => {
-    selectedProvinceRef.current = provinceId;
-    selectedDistrictRef.current = '';
-    selectedSectorRef.current = '';
-    selectedCellRef.current = '';
-    setSection1ProvinceId(provinceId);
-    setSection1DistrictId('');
-    setSection1SectorId('');
-    setSection1CellId('');
-    setSection1VillageId('');
-    setSection1DistrictOptions([]);
-    setSection1SectorOptions([]);
-    setSection1CellOptions([]);
-    setSection1VillageOptions([]);
-
-    if (section1LocationSource === 'fallback') {
-      const provinceName = section1ProvinceOptions.find((option) => option.id === provinceId)?.label || provinceId;
-      setSection1DistrictOptions((RWANDA_PROVINCE_DISTRICTS[provinceName] || []).map((districtName) => ({ id: districtName, label: districtName })));
-      return;
-    }
-
-    const options = await loadSection1Children(provinceId, 'DISTRICT');
-    if (selectedProvinceRef.current !== provinceId) return;
-    if (options) {
-      setSection1DistrictOptions(options);
-      setLocationError('');
-      return;
-    }
-    setLocationError('Could not load districts for the selected province.');
-  };
-
-  const handleSection1DistrictChange = async (districtId: string) => {
-    selectedDistrictRef.current = districtId;
-    selectedSectorRef.current = '';
-    selectedCellRef.current = '';
-    setSection1DistrictId(districtId);
-    setSection1SectorId('');
-    setSection1CellId('');
-    setSection1VillageId('');
-    setSection1SectorOptions([]);
-    setSection1CellOptions([]);
-    setSection1VillageOptions([]);
-
-    // Try API first
-    const apiOptions = await loadSection1Children(districtId, 'SECTOR');
-    if (selectedDistrictRef.current !== districtId) return;
-    
-    if (apiOptions && apiOptions.length > 0) {
-      setSection1SectorOptions(apiOptions);
-      setLocationError('');
-      return;
-    }
-
-    // Fallback to generic sectors if API fails
-    const districtName = getOptionLabel(districtId, section1DistrictOptions);
-    setSection1SectorOptions(buildSectorOptions(districtName).map((sectorName) => ({ id: sectorName, label: sectorName })));
-    if (!apiOptions) {
-      setLocationError('Note: Using fallback sectors. API returned no data for this district.');
-    }
-  };
-
-  const handleSection1SectorChange = async (sectorId: string) => {
-    selectedSectorRef.current = sectorId;
-    selectedCellRef.current = '';
-    setSection1SectorId(sectorId);
-    setSection1CellId('');
-    setSection1VillageId('');
-    setSection1CellOptions([]);
-    setSection1VillageOptions([]);
-
-    // Try API first
-    const apiOptions = await loadSection1Children(sectorId, 'CELL');
-    if (selectedSectorRef.current !== sectorId) return;
-    
-    if (apiOptions && apiOptions.length > 0) {
-      setSection1CellOptions(apiOptions);
-      setLocationError('');
-      return;
-    }
-
-    // Fallback to generic cells if API fails
-    const sectorName = getOptionLabel(sectorId, section1SectorOptions);
-    setSection1CellOptions(buildCellOptions(sectorName).map((cellName) => ({ id: cellName, label: cellName })));
-    if (!apiOptions) {
-      setLocationError('Note: Using fallback cells. API returned no data for this sector.');
-    }
-  };
-
-  const handleSection1CellChange = async (cellId: string) => {
-    selectedCellRef.current = cellId;
-    setSection1CellId(cellId);
-    setSection1VillageId('');
-    setSection1VillageOptions([]);
-
-    // Try API first
-    const apiOptions = await loadSection1Children(cellId, 'VILLAGE');
-    if (selectedCellRef.current !== cellId) return;
-    
-    if (apiOptions && apiOptions.length > 0) {
-      setSection1VillageOptions(apiOptions);
-      setLocationError('');
-      return;
-    }
-
-    // Fallback to generic villages if API fails
-    const cellName = getOptionLabel(cellId, section1CellOptions);
-    setSection1VillageOptions(buildVillageOptions(cellName).map((villageName) => ({ id: villageName, label: villageName })));
-    if (!apiOptions) {
-      setLocationError('Note: Using fallback villages. API returned no data for this cell.');
-    }
-  };
-
-  const handleSection1VillageChange = (villageId: string) => {
-    setSection1VillageId(villageId);
+  const handleSection1LocationChange = (next: {
+    provinceId: string;
+    districtId: string;
+    sectorId: string;
+    cellId: string;
+    villageId: string;
+    province: string;
+    district: string;
+    sector: string;
+    cell: string;
+    village: string;
+  }) => {
+    setSection1ProvinceId(next.provinceId);
+    setSection1DistrictId(next.districtId);
+    setSection1SectorId(next.sectorId);
+    setSection1CellId(next.cellId);
+    setSection1VillageId(next.villageId);
+    setProvince(next.province);
+    setDistrict(next.district);
+    setSector(next.sector);
+    setCell(next.cell);
+    setVillage(next.village);
   };
 
   const captureCurrentCoordinates = () => {
@@ -935,16 +673,109 @@ export default function BusinessOnboardingPage() {
     return checksForSection.length > 0 && checksForSection.every((check) => check.done);
   });
 
+  const resetOnboardingForm = (options?: { keepStep?: boolean }) => {
+    if (!options?.keepStep) {
+      setStep(1);
+      setIdentityPage(1);
+      setSection2Page(1);
+      setSection3Page(1);
+      setSection4Page(1);
+      setSection5Page(1);
+      setSection6Page(1);
+      setOwnershipPage(1);
+      setMembersPage(1);
+      setEmployeesPage(1);
+      setCapacityPage(1);
+    }
+    setBusinessName('');
+    setCommonName('');
+    setBusinessEmail('');
+    setManagerFirstName('');
+    setManagerLastName('');
+    setManagerPhone('');
+    setManagerIdNumber('');
+    setOwnershipStructure('');
+    setOwnershipOther('');
+    setOperatorDisability('');
+    setOperationalStatus('');
+    setOperationalNotes('');
+    setRegistrationNumber('');
+    setLatitude('');
+    setLongitude('');
+    setLocationError('');
+    setCoolingTanks(INITIAL_COOLING_TANKS.map((tank) => ({ ...tank })));
+    setDailyMilkVolume('');
+    setMaxMilkInOneDay('');
+    setTankCapacitySufficiency('');
+    setInsufficientCapacityPlan('');
+    setPowerSupplySelections([]);
+    setGeneratorCapacityKva('');
+    setMobileConnectivity('');
+    setTotalFarmersSupplying('');
+    setNewFarmersLast3Months('');
+    setMilkTransportersCount('');
+    setAverageDistanceKm('');
+    setFurthestFarmKm('');
+    setEveningMilkPattern('');
+    setNoEveningMilkReason('');
+    setOwnMilkTransportType('');
+    setNoOwnTransportPlan('');
+    setTestingEquipmentSelections([]);
+    setQualityTestsSelections([]);
+    setAverageRejectedPerDayLitres('');
+    setRejectionRatePercent('');
+    setRejectionRankings({});
+    setOtherRejectionReason('');
+    setCorrectiveActionsPlanned('');
+    setStaffTotalIncludingManager('');
+    setStaffWomenCount('');
+    setStaffAged1835('');
+    setStaffWomen1835('');
+    setStaffWithDisability('');
+    setCoopMembersTotal('');
+    setCoopMembersWomen('');
+    setCoopMembersAged1835('');
+    setCoopMembersWomen1835('');
+    setRecordSystem('');
+    setStaffTrainingStatus('');
+    setEmploymentContractsStatus('');
+    setDigitalDeviceAccess([]);
+    setFarmerPaymentMethods([]);
+    setAvgDaysDeliveryToPayment('');
+    setDigitalLedgerWillingness('');
+    setMilkSalesDestinations([]);
+    setMainBuyerName('');
+    setFormalSupplyAgreementDetails('');
+    setAverageAnnualRevenueRwf('');
+    setSection7AgentNotes({});
+    setSection7KeyGaps('');
+    setSection1ProvinceId('');
+    setSection1DistrictId('');
+    setSection1SectorId('');
+    setSection1CellId('');
+    setSection1VillageId('');
+    setProvince('');
+    setDistrict('');
+    setSector('');
+    setCell('');
+    setVillage('');
+    setExtraData({});
+    setSheetSubmitError('');
+    setLocationFormKey((key) => key + 1);
+  };
+
   const clearSavedDraft = () => {
     if (typeof window === 'undefined') {
       return;
     }
     localStorage.removeItem(ONBOARDING_DRAFT_KEY);
+    sessionStorage.removeItem(ONBOARDING_SUBMITTED_KEY);
     setDidRestoreDraft(false);
+    resetOnboardingForm();
   };
 
   useEffect(() => {
-    if (!isDraftHydrated || typeof window === 'undefined') {
+    if (!isDraftHydrated || typeof window === 'undefined' || submissionSuccess) {
       return;
     }
 
@@ -1411,12 +1242,16 @@ export default function BusinessOnboardingPage() {
       }
 
       const result = await response.json();
-      setSubmissionCode(result?.data?.submission_code || 'N/A');
-      setSubmissionSuccess(true);
+      const code = result?.data?.submission_code || 'N/A';
 
       if (typeof window !== 'undefined') {
         localStorage.removeItem(ONBOARDING_DRAFT_KEY);
+        sessionStorage.setItem(ONBOARDING_SUBMITTED_KEY, '1');
       }
+
+      resetOnboardingForm({ keepStep: true });
+      setSubmissionCode(code);
+      setSubmissionSuccess(true);
 
       // Redirect after 3 seconds
       setTimeout(() => {
@@ -1610,94 +1445,18 @@ export default function BusinessOnboardingPage() {
                         <div>
                           <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-700">B2. MCC location</h3>
                           <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2">
-                            <div>
-                              <label htmlFor="section1-province" className="block text-sm font-medium text-gray-700 mb-2">Province</label>
-                              <select
-                                id="section1-province"
-                                className="input w-full py-3 text-base"
-                                value={section1ProvinceId}
-                                onChange={(e) => handleSection1ProvinceChange(e.target.value)}
-                              >
-                                <option value="">Select province</option>
-                                {section1ProvinceOptions.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div>
-                              <label htmlFor="section1-district" className="block text-sm font-medium text-gray-700 mb-2">District</label>
-                              <select
-                                id="section1-district"
-                                className="input w-full py-3 text-base"
-                                value={section1DistrictId}
-                                disabled={!section1ProvinceId}
-                                onChange={(e) => handleSection1DistrictChange(e.target.value)}
-                              >
-                                <option value="">Select district</option>
-                                {section1DistrictOptions.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div>
-                              <label htmlFor="section1-sector" className="block text-sm font-medium text-gray-700 mb-2">Sector</label>
-                              <select
-                                id="section1-sector"
-                                className="input w-full py-3 text-base"
-                                value={section1SectorId}
-                                disabled={!section1DistrictId}
-                                onChange={(e) => handleSection1SectorChange(e.target.value)}
-                              >
-                                <option value="">Select sector</option>
-                                {section1SectorOptions.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div>
-                              <label htmlFor="section1-cell" className="block text-sm font-medium text-gray-700 mb-2">Cell</label>
-                              <select
-                                id="section1-cell"
-                                className="input w-full py-3 text-base"
-                                value={section1CellId}
-                                disabled={!section1SectorId}
-                                onChange={(e) => handleSection1CellChange(e.target.value)}
-                              >
-                                <option value="">Select cell</option>
-                                {section1CellOptions.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <div className="md:col-span-2">
-                              <label htmlFor="section1-village" className="block text-sm font-medium text-gray-700 mb-2">Village</label>
-                              <select
-                                id="section1-village"
-                                className="input w-full py-3 text-base"
-                                value={section1VillageId}
-                                disabled={!section1CellId}
-                                onChange={(e) => handleSection1VillageChange(e.target.value)}
-                              >
-                                <option value="">Select village</option>
-                                {section1VillageOptions.map((option) => (
-                                  <option key={option.id} value={option.id}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                            <MccOnboardingLocationFields
+                              key={locationFormKey}
+                              value={{
+                                provinceId: section1ProvinceId,
+                                districtId: section1DistrictId,
+                                sectorId: section1SectorId,
+                                cellId: section1CellId,
+                                villageId: section1VillageId,
+                              }}
+                              onChange={handleSection1LocationChange}
+                              onError={setLocationError}
+                            />
 
                             <div className="md:col-span-2 rounded-md border border-dashed border-blue-200 bg-white p-4">
                               <div className="flex items-center justify-between gap-3">
@@ -2024,123 +1783,6 @@ export default function BusinessOnboardingPage() {
                     </button>
                     <button type="button" onClick={goToNextStep} className="btn btn-primary px-6 py-3">
                       Continue to Location
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {step === 905 && (
-                <div className="space-y-6">
-                  <div className="flex items-center gap-2 text-gray-800">
-                    <Icon icon={faMapPin} size="sm" className="text-primary" />
-                    <h2 className="text-xl font-semibold">Business Location (Rwanda)</h2>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <div>
-                      <label htmlFor="province" className="block text-sm font-medium text-gray-700 mb-2">Province</label>
-                      <select
-                        id="province"
-                        className="input w-full py-3 text-base"
-                        value={province}
-                        onChange={(e) => {
-                          setProvince(e.target.value);
-                          setDistrict('');
-                          setSector('');
-                          setCell('');
-                          setVillage('');
-                        }}
-                      >
-                        <option value="">Select province</option>
-                        {provinces.map((p) => (
-                          <option key={p} value={p}>{p}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label htmlFor="district" className="block text-sm font-medium text-gray-700 mb-2">District</label>
-                      <select
-                        id="district"
-                        className="input w-full py-3 text-base"
-                        value={district}
-                        disabled={!province}
-                        onChange={(e) => {
-                          setDistrict(e.target.value);
-                          setSector('');
-                          setCell('');
-                          setVillage('');
-                        }}
-                      >
-                        <option value="">Select district</option>
-                        {districtOptions.map((d) => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label htmlFor="sector" className="block text-sm font-medium text-gray-700 mb-2">Sector</label>
-                      <select
-                        id="sector"
-                        className="input w-full py-3 text-base"
-                        value={sector}
-                        disabled={!district}
-                        onChange={(e) => {
-                          setSector(e.target.value);
-                          setCell('');
-                          setVillage('');
-                        }}
-                      >
-                        <option value="">Select sector</option>
-                        {sectorOptions.map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label htmlFor="cell" className="block text-sm font-medium text-gray-700 mb-2">Cell</label>
-                      <select
-                        id="cell"
-                        className="input w-full py-3 text-base"
-                        value={cell}
-                        disabled={!sector}
-                        onChange={(e) => {
-                          setCell(e.target.value);
-                          setVillage('');
-                        }}
-                      >
-                        <option value="">Select cell</option>
-                        {cellOptions.map((c) => (
-                          <option key={c} value={c}>{c}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label htmlFor="village" className="block text-sm font-medium text-gray-700 mb-2">Village</label>
-                      <select
-                        id="village"
-                        className="input w-full py-3 text-base"
-                        value={village}
-                        disabled={!cell}
-                        onChange={(e) => setVillage(e.target.value)}
-                      >
-                        <option value="">Select village</option>
-                        {villageOptions.map((v) => (
-                          <option key={v} value={v}>{v}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex items-center justify-between gap-3">
-                    <button type="button" onClick={goToPreviousStep} className="btn btn-secondary px-6 py-3">
-                      Back
-                    </button>
-                    <button type="button" onClick={goToNextStep} disabled={!hasLocation} className="btn btn-primary px-6 py-3 disabled:opacity-50 disabled:cursor-not-allowed">
-                      Continue to Section 2
                     </button>
                   </div>
                 </div>
@@ -3335,7 +2977,7 @@ export default function BusinessOnboardingPage() {
                     <button type="button" onClick={goToPreviousStep} className="btn btn-secondary px-6 py-3">
                       Back
                     </button>
-                    <Link href="/auth/login" className={`btn btn-primary px-6 py-3 ${!hasLocation ? 'pointer-events-none opacity-50' : ''}`}>
+                    <Link href="/auth/login" className={`btn btn-primary px-6 py-3 ${!section1VillageId ? 'pointer-events-none opacity-50' : ''}`}>
                       Finish (Return to Login)
                     </Link>
                   </div>
