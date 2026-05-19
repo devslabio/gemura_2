@@ -104,6 +104,7 @@ export const authApi = {
       phone: data.phone,
       password: data.password,
       account_type: 'mcc',
+      role: 'manager',
     });
   },
 

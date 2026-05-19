@@ -6,7 +6,8 @@ import '../../../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../../../../shared/utils/snackbar_helper.dart';
 import '../../../../shared/widgets/phone_input_field.dart';
-import '../../../../shared/models/user.dart'; // Import User model for account type constants
+import '../../../../shared/models/user.dart';
+import '../../../../shared/utils/registration_defaults.dart';
 import 'login_screen.dart';
 import '../../../../shared/widgets/primary_button.dart';
 
@@ -30,8 +31,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
   bool _isLoading = false;
-  final String _selectedRole = 'system_admin'; // Primary platform role for new tenant accounts (legacy API alias: owner)
-  String _selectedAccountType = User.accountTypeMCC; // Default account type
+  String _selectedAccountType = User.accountTypeMCC;
 
   @override
   void dispose() {
@@ -54,14 +54,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       final phoneInputState = _phoneInputKey.currentState;
       final fullPhoneNumber = phoneInputState?.fullPhoneNumber ?? _phoneController.text.trim();
       
+      final accountType = _selectedAccountType;
       await ref.read(authProvider.notifier).signUpWithEmailAndPassword(
             _nameController.text.trim(),
             _accountNameController.text.trim(),
             _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
             fullPhoneNumber,
             _passwordController.text,
-            _selectedRole,
-            _selectedAccountType, // New parameter
+            RegistrationDefaults.platformRoleForAccountType(accountType),
+            accountType,
             _nidController.text.trim().isEmpty ? null : _nidController.text.trim(),
           );
       

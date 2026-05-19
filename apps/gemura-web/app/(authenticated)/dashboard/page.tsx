@@ -100,7 +100,7 @@ function getPeriodRange(period: PeriodKey, customFrom?: string, customTo?: strin
   return { date_from: toYYYYMMDD(start), date_to: toYYYYMMDD(end) };
 }
 
-function MainBusinessDashboard() {
+function BusinessDashboard() {
   const { currentAccount } = useAuthStore();
   const { hasPermission, hasAnyPermission } = usePermission();
   const accountType = currentAccount?.account_type ?? '';
@@ -276,8 +276,7 @@ function MainBusinessDashboard() {
       cancelled = true;
     };
   }, [accountType, currentAccount?.account_id, dateRange.date_from, dateRange.date_to, refreshKey]);
-
-  // MCC manager panel data — shown on Overview for manager roles.
+  // MCC manager panel data — shown on Overview for manager roles (loaded when operations dashboard tab applies).
   useEffect(() => {
     if (!showMccOpsDashboard || !currentAccount?.account_id) {
       return;
@@ -1709,10 +1708,10 @@ function MainBusinessDashboard() {
   );
 }
 
-/** Supplier / external users see a focused dashboard; MCC tenants get the full tabbed dashboard. */
 export default function Dashboard() {
   const { currentAccount } = useAuthStore();
   const accountTypeLower = (currentAccount?.account_type ?? '').toLowerCase();
+
   if (!isBusinessAccount(accountTypeLower)) {
     return (
       <ExternalUserDashboard
@@ -1721,5 +1720,6 @@ export default function Dashboard() {
       />
     );
   }
-  return <MainBusinessDashboard />;
+
+  return <BusinessDashboard />;
 }

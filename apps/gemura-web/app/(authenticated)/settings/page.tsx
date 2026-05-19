@@ -10,6 +10,8 @@ import { useToastStore } from '@/store/toast';
 import { usePermission } from '@/hooks/usePermission';
 import { splitFullName } from '@/lib/utils/name';
 import { profileApi, type ProfileMccOnboardingSummary, UpdateProfilePayload } from '@/lib/api/profile';
+import { isBusinessAccount, isExternalSupplier, isExternalCustomer } from '@/lib/config/nav.config';
+import ExternalAccountProfileSection from './ExternalAccountProfileSection';
 
 const ROLE_DEFINITIONS = [
   {
@@ -48,6 +50,8 @@ export default function SettingsPage() {
   const { user, setUser, currentAccount } = useAuthStore();
   const showToast = useToastStore((s) => s.show);
   const { canManageUsers } = usePermission();
+  const accountType = (currentAccount?.account_type ?? '').toLowerCase();
+  const isExternalAccount = isExternalSupplier(accountType) || isExternalCustomer(accountType);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<{ firstName: string; lastName: string; email: string; phone: string }>({
@@ -62,10 +66,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const role = (currentAccount?.role || '').toLowerCase();
-    if (role === 'collector' || role === 'agent') {
+    if (isBusinessAccount(accountType) && (role === 'collector' || role === 'agent')) {
       router.replace('/collections');
     }
-  }, [currentAccount?.role, router]);
+  }, [currentAccount?.role, accountType, router]);
 
   /** Matches backend: employees endpoints require manage_users (or super-admin tier via PermissionService). */
   const canManageEmployees = !!currentAccount?.account_id && canManageUsers();
@@ -78,6 +82,10 @@ export default function SettingsPage() {
   ];
 
   useEffect(() => {
+    if (isExternalAccount) {
+      setLoading(false);
+      return;
+    }
     profileApi
       .getProfile()
       .then((res) => {
@@ -104,7 +112,7 @@ export default function SettingsPage() {
         }
       })
       .finally(() => setLoading(false));
-  }, [user]);
+  }, [user, isExternalAccount]);
 
   const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,6 +180,10 @@ export default function SettingsPage() {
         {/* Profile tab */}
         {activeTab === 'profile' && (
           <div className="p-6 sm:p-8">
+            {isExternalAccount ? (
+              <ExternalAccountProfileSection />
+            ) : (
+              <>
             {!loading && mccOnboardings.length > 0 && (
               <div className="mb-8 rounded-lg border border-gray-200 bg-gray-50/80 p-4 sm:p-5">
                 <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 m-0 mb-3">
@@ -259,7 +271,7 @@ export default function SettingsPage() {
                       type="email"
                       value={profile.email}
                       onChange={(e) => setProfile((p) => ({ ...p, email: e.target.value }))}
-                      className="input w-full pl-10"
+                      className="input w-full pl-11"
                       placeholder="you@example.com"
                     />
                   </div>
@@ -273,7 +285,7 @@ export default function SettingsPage() {
                       type="tel"
                       value={profile.phone}
                       onChange={(e) => setProfile((p) => ({ ...p, phone: e.target.value }))}
-                      className="input w-full pl-10"
+                      className="input w-full pl-11"
                       placeholder="250788123456"
                     />
                   </div>
@@ -284,6 +296,8 @@ export default function SettingsPage() {
                   </button>
                 </div>
               </form>
+            )}
+              </>
             )}
           </div>
         )}

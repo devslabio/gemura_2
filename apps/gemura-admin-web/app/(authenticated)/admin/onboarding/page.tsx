@@ -56,7 +56,7 @@ export default function OnboardingSubmissionsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 0 });
   const [pendingCount, setPendingCount] = useState(0);
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('approved');
   const [searchTerm, setSearchTerm] = useState('');
   const [query, setQuery] = useState('');
   const [datePreset, setDatePreset] = useState('all');
@@ -221,10 +221,15 @@ export default function OnboardingSubmissionsPage() {
             <Icon icon={faClipboardList} />
             MCC onboarding
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <span>Review and approve MCC applications from the public flow.</span>
+          <p className="text-sm text-gray-600 mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <span>
+              Superadmin view for MCCs from the public onboarding wizard (
+              <span className="font-mono text-xs">mcc_onboarding_submissions</span>). Default status is onboarded (
+              <span className="font-medium">approved</span>) — switch status to inspect pending or rejected records; approve
+              submissions to link applicants to accounts.
+            </span>
             {!loading && (
-              <span className="text-gray-400 tabular-nums whitespace-nowrap">
+              <span className="text-gray-400 tabular-nums whitespace-nowrap text-sm">
                 {pagination.total} {pagination.total === 1 ? 'row' : 'rows'}
               </span>
             )}

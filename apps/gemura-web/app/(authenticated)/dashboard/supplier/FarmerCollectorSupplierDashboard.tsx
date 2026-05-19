@@ -14,6 +14,7 @@ import {
   faArrowDown,
   faCheckCircle,
   faTriangleExclamation,
+  faTimesCircle,
 } from '@/app/components/Icon';
 import Icon from '@/app/components/Icon';
 import { type PeriodKey } from '@/lib/utils/dashboardPeriod';
@@ -25,6 +26,7 @@ import {
   breakdownToSeries,
   chartPeriodLabel,
   supplierRecentOverviewRows,
+  groupCollectionsByQualityGrade,
 } from '@/lib/utils/supplierOverviewFromStats';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
@@ -110,6 +112,7 @@ export default function FarmerCollectorSupplierDashboard() {
   const chartData = useMemo(() => groupCollectionsByDate(collections), [collections]);
   const bdSeries = useMemo(() => breakdownToSeries(data?.breakdown), [data?.breakdown]);
   const transferStats = useMemo(() => getTransferStats(transfers), [transfers]);
+  const qualityGrades = useMemo(() => groupCollectionsByQualityGrade(collections), [collections]);
 
   /** Prefer `/stats/overview` breakdown (matches dashboards date filter); fallback to logged collections split */
   const chartFromOverview = bdSeries.categories.length > 0;
@@ -144,6 +147,16 @@ export default function FarmerCollectorSupplierDashboard() {
   const acceptanceRate = transferStats.submitted > 0
     ? Math.round((transferStats.accepted / transferStats.submitted) * 100)
     : 100;
+
+  // Earnings chart
+  const hasEarningsData = bdSeries.salesValues.some((v) => v > 0);
+  const totalQualityLiters = qualityGrades.reduce((s, g) => s + g.liters, 0);
+
+  const GRADE_COLORS: Record<string, string> = { A: '#10b981', B: '#3b82f6', C: '#f59e0b', D: '#ef4444', UNGRADED: '#94a3b8' };
+  const gradeColor = (grade: string) => GRADE_COLORS[grade.toUpperCase()] ?? GRADE_COLORS.UNGRADED;
+
+  const rejLit = Number(data?.summary?.rejections?.liters ?? 0);
+  const rejVal = Number(data?.summary?.rejections?.value ?? 0);
 
   if (loading && !data) {
     return <DashboardSkeleton />;
@@ -470,6 +483,111 @@ export default function FarmerCollectorSupplierDashboard() {
               No data yet
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Quality + Earnings Row */}
+      <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Quality Grade Distribution */}
+        <div className="bg-white border border-gray-200 rounded-sm p-4">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">Milk Quality Distribution</h3>
+          {qualityGrades.length > 0 && totalQualityLiters > 0 ? (
+            <>
+              <Chart
+                type="donut"
+                height={180}
+                options={{
+                  chart: { type: 'donut', fontFamily: 'inherit' },
+                  labels: qualityGrades.map((g) => `Grade ${g.grade}`),
+                  colors: qualityGrades.map((g) => gradeColor(g.grade)),
+                  legend: { position: 'right', fontSize: '11px' },
+                  dataLabels: { enabled: true, formatter: (val: number) => `${val.toFixed(0)}%` },
+                  plotOptions: {
+                    pie: {
+                      donut: {
+                        size: '60%',
+                        labels: {
+                          show: true,
+                          total: { show: true, label: 'Total', formatter: () => `${totalQualityLiters.toFixed(0)}L` },
+                        },
+                      },
+                    },
+                  },
+                  tooltip: { y: { formatter: (v: number) => `${v.toFixed(1)} L` } },
+                }}
+                series={qualityGrades.map((g) => g.liters)}
+              />
+              <div className="mt-2 space-y-1">
+                {qualityGrades.map((g) => (
+                  <div key={g.grade} className="flex justify-between items-center text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ backgroundColor: gradeColor(g.grade) }} />
+                      <span className="text-gray-600">Grade {g.grade} ({g.count} records)</span>
+                    </span>
+                    <span className="font-medium text-gray-900">{g.liters.toFixed(1)} L</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="h-[180px] flex flex-col items-center justify-center text-gray-400">
+              <p className="text-sm">No quality grade data yet</p>
+              <p className="text-xs mt-1">Add quality grades when logging collections</p>
+            </div>
+          )}
+        </div>
+
+        {/* Earnings Trend */}
+        <div className="bg-white border border-gray-200 rounded-sm p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-900">Earnings Trend</h3>
+            <span className="text-xs text-gray-500">Total: {formatSupplierCurrency(saleVal)}</span>
+          </div>
+          {hasEarningsData ? (
+            <Chart
+              type="bar"
+              height={200}
+              options={{
+                chart: { type: 'bar', toolbar: { show: false }, fontFamily: 'inherit' },
+                plotOptions: { bar: { borderRadius: 3, columnWidth: '55%' } },
+                colors: ['#10b981'],
+                xaxis: { categories: bdSeries.categories, labels: { style: { fontSize: '11px' } } },
+                yaxis: {
+                  labels: {
+                    formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v.toFixed(0)}`,
+                    style: { fontSize: '11px' },
+                  },
+                },
+                dataLabels: { enabled: false },
+                tooltip: { y: { formatter: (v: number) => formatSupplierCurrency(v) } },
+                grid: { borderColor: '#f1f5f9', strokeDashArray: 4 },
+              }}
+              series={[{ name: 'Earnings (RF)', data: bdSeries.salesValues }]}
+            />
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-gray-400 text-sm">
+              No earnings data for selected period
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Payment Summary + Rejection Panel */}
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-green-50 border border-green-200 rounded-sm p-4">
+          <p className="text-xs font-medium text-green-700 uppercase tracking-wide">Gross Earnings</p>
+          <p className="text-2xl font-bold text-green-800 mt-1">{formatSupplierCurrency(saleVal)}</p>
+          <p className="text-xs text-green-600 mt-1">{saleLiters.toFixed(1)} L · {saleTx} sale{saleTx !== 1 ? 's' : ''}</p>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-sm p-4">
+          <p className="text-xs font-medium text-red-700 uppercase tracking-wide">Rejection Losses</p>
+          <p className="text-2xl font-bold text-red-800 mt-1">{rejLit.toFixed(1)} L</p>
+          <p className="text-xs text-red-600 mt-1">{rejVal > 0 ? formatSupplierCurrency(rejVal) : 'No value lost'}</p>
+        </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-sm p-4">
+          <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Net Estimate</p>
+          <p className="text-2xl font-bold text-blue-800 mt-1">{formatSupplierCurrency(Math.max(0, saleVal - rejVal))}</p>
+          <p className="text-xs text-blue-600 mt-1">After rejection deductions</p>
         </div>
       </div>
 

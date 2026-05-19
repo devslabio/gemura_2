@@ -42,7 +42,7 @@ class SuppliersNotifier extends StateNotifier<AsyncValue<List<Supplier>>> {
     required String lastName,
     required String phone,
     String? email,
-    String? nid,
+    required String nid,
     String? address,
     required double pricePerLiter,
   }) async {

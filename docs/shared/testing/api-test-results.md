@@ -62,25 +62,16 @@
 - **Account**: ACC_MAIN_001
 - **Wallet Balance**: 1,000,000 RWF
 
-### Test Suppliers (3)
-1. **Jean Baptiste Uwimana** (A_SUP_001)
-   - Phone: 250788111222
-   - Price: 400 RWF/L
+### Test Supplier (1) — same convention as Main MCC role demos (`2507884090xx`, `@gemura.rw`, password `Pass123!`)
+**Demo Supplier** (A_SUP_001) — role slug: `supplier`
+   - Phone: 250788409034
+   - Email: supplier@gemura.rw
+   - Price: 400 RWF/L (relationship default; sample milk rows use varied prices)
    - Location: Kigali, Gasabo
 
-2. **Marie Claire Mukamana** (A_SUP_002)
-   - Phone: 250788333444
-   - Price: 390 RWF/L
-   - Location: Kigali, Kicukiro
-
-3. **Pierre Nkurunziza** (A_SUP_003)
-   - Phone: 250788555666
-   - Price: 410 RWF/L
-   - Location: Kigali, Nyarugenge
-
 ### Sample Data
-- **Milk Collections**: 6 records
-- **Total Milk Collected**: 856 liters
+- **Milk Collections**: 7 records
+- **Total Milk Collected**: 918 liters
 - **Categories**: 3 (Dairy Products, Animal Feed, Veterinary Supplies)
 - **Products**: 3 (Fresh Milk, Yogurt, Cattle Feed)
 

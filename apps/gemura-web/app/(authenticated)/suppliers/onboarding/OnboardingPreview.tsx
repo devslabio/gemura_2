@@ -1,9 +1,11 @@
 'use client';
 
+import { useMemo } from 'react';
 import type { FarmerFormState, CollectorFormState } from './model';
 import { BREEDS, BreedKey } from './model';
 import { farmerRiskFlags } from './FarmerOnboardingPath';
 import { collectorRiskFlags, rosterSummary } from './CollectorOnboardingPath';
+import { mergeCollectorDraft, mergeFarmerDraft } from './mergeOnboardingDraft';
 import { ReviewRow, ReviewSection, RiskBanner } from './formPrimitives';
 import {
   computeCollectorAutoSummary,
@@ -176,8 +178,9 @@ export function FarmerOnboardingPreview({
   gpsText: string;
   hasNidPhoto: boolean;
 }) {
-  const risks = farmerRiskFlags(f);
-  const auto = computeFarmerAutoSummary(f, { districtForRefugee: f.identity.district });
+  const fSafe = useMemo(() => mergeFarmerDraft(f as unknown), [f]);
+  const risks = farmerRiskFlags(fSafe);
+  const auto = computeFarmerAutoSummary(fSafe, { districtForRefugee: fSafe.identity.district });
 
   return (
     <div className="space-y-4 max-h-[min(70vh,560px)] overflow-y-auto pr-1">
@@ -194,61 +197,61 @@ export function FarmerOnboardingPreview({
       </ReviewSection>
 
       <ReviewSection title="1 — Identity & location">
-        <ReviewRow label="Name" value={`${f.identity.firstName} ${f.identity.surname} ${f.identity.otherNames}`.trim()} />
-        <ReviewRow label="Province / District" value={`${f.identity.province} / ${f.identity.district}`} />
-        <ReviewRow label="Sector / Cell / Village" value={`${f.identity.sector} / ${f.identity.cell} / ${f.identity.village}`} />
-        <ReviewRow label="Phones" value={`${f.identity.primaryPhone}${f.identity.whatsapp ? ` · WA: ${f.identity.whatsapp}` : ''}`} />
-        <ReviewRow label="NID" value={f.identity.nid} />
-        <ReviewRow label="Distance to MCC (km)" value={f.identity.distanceMccKm} />
-        <ReviewRow label="Who brings milk" value={f.identity.whoBringsMilk} />
-        <ReviewRow label="Business type" value={f.identity.businessType} />
-        <ReviewRow label="Disability" value={f.identity.ownerDisability} />
+        <ReviewRow label="Name" value={`${fSafe.identity.firstName} ${fSafe.identity.surname} ${fSafe.identity.otherNames}`.trim()} />
+        <ReviewRow label="Province / District" value={`${fSafe.identity.province} / ${fSafe.identity.district}`} />
+        <ReviewRow label="Sector / Cell / Village" value={`${fSafe.identity.sector} / ${fSafe.identity.cell} / ${fSafe.identity.village}`} />
+        <ReviewRow label="Phones" value={`${fSafe.identity.primaryPhone}${fSafe.identity.whatsapp ? ` · WA: ${fSafe.identity.whatsapp}` : ''}`} />
+        <ReviewRow label="NID" value={fSafe.identity.nid} />
+        <ReviewRow label="Distance to MCC (km)" value={fSafe.identity.distanceMccKm} />
+        <ReviewRow label="Who brings milk" value={fSafe.identity.whoBringsMilk} />
+        <ReviewRow label="Business type" value={fSafe.identity.businessType} />
+        <ReviewRow label="Disability" value={fSafe.identity.ownerDisability} />
       </ReviewSection>
 
       <ReviewSection title="2 — Herd & production">
-        <ReviewRow label="Total cows" value={f.herd.totalCows} />
-        <ReviewRow label="Breed counts" value={joinObj(f.herd.breedCounts)} />
-        <ReviewRow label="Peak / low season (L/day)" value={`${f.herd.peakTotal} / ${f.herd.lowTotal}`} />
-        <ReviewRow label="% sold" value={f.herd.soldPct} />
-        <ReviewRow label="Sales channels" value={f.herd.salesChannels.join(', ')} />
+        <ReviewRow label="Total cows" value={fSafe.herd.totalCows} />
+        <ReviewRow label="Breed counts" value={joinObj(fSafe.herd.breedCounts)} />
+        <ReviewRow label="Peak / low season (L/day)" value={`${fSafe.herd.peakTotal} / ${fSafe.herd.lowTotal}`} />
+        <ReviewRow label="% sold" value={fSafe.herd.soldPct} />
+        <ReviewRow label="Sales channels" value={fSafe.herd.salesChannels.join(', ')} />
       </ReviewSection>
 
       <ReviewSection title="3 — Lactation & breeding">
-        <ReviewRow label="Breeding methods" value={f.lactation.breedingMethod.join(', ')} />
-        <ReviewRow label="Insurance" value={f.lactation.cowsInsured} />
+        <ReviewRow label="Breeding methods" value={fSafe.lactation.breedingMethod.join(', ')} />
+        <ReviewRow label="Insurance" value={fSafe.lactation.cowsInsured} />
       </ReviewSection>
 
       <ReviewSection title="4 — Farming & infrastructure">
-        <ReviewRow label="Grazing" value={f.farming.grazing} />
-        <ReviewRow label="Land (dairy / other ha)" value={`${f.farming.dairyHa} / ${f.farming.otherHa}`} />
+        <ReviewRow label="Grazing" value={fSafe.farming.grazing} />
+        <ReviewRow label="Land (dairy / other ha)" value={`${fSafe.farming.dairyHa} / ${fSafe.farming.otherHa}`} />
       </ReviewSection>
 
       <ReviewSection title="5 — Management">
-        <ReviewRow label="Dedicated manager" value={f.management.dedicatedManager} />
-        <ReviewRow label="Vet access" value={f.management.vetAccess} />
+        <ReviewRow label="Dedicated manager" value={fSafe.management.dedicatedManager} />
+        <ReviewRow label="Vet access" value={fSafe.management.vetAccess} />
       </ReviewSection>
 
       <ReviewSection title="6 — Workforce">
-        <ReviewRow label="Total / women / 18–35 / women 18–35 / PWD" value={`${f.workforce.total} / ${f.workforce.women} / ${f.workforce.aged1835} / ${f.workforce.women1835} / ${f.workforce.disabled}`} />
+        <ReviewRow label="Total / women / 18–35 / women 18–35 / PWD" value={`${fSafe.workforce.total} / ${fSafe.workforce.women} / ${fSafe.workforce.aged1835} / ${fSafe.workforce.women1835} / ${fSafe.workforce.disabled}`} />
       </ReviewSection>
 
       <ReviewSection title="7 — Finance">
-        <ReviewRow label="Records" value={f.financeFarmer.records} />
-        <ReviewRow label="Annual revenue (RWF)" value={f.financeFarmer.annualRevenueRwf} />
-        <ReviewRow label="Credit intent (max 2)" value={f.financeFarmer.creditIntent.join(', ')} />
+        <ReviewRow label="Records" value={fSafe.financeFarmer.records} />
+        <ReviewRow label="Annual revenue (RWF)" value={fSafe.financeFarmer.annualRevenueRwf} />
+        <ReviewRow label="Credit intent (max 2)" value={fSafe.financeFarmer.creditIntent.join(', ')} />
       </ReviewSection>
 
       <ReviewSection title="8 — Goals">
-        <ReviewRow label="12-month goal" value={f.goalsFarmer.goal12m} />
-        <ReviewRow label="Supply days / missed" value={`${f.goalsFarmer.supplyDays} / ${f.goalsFarmer.missed4w}`} />
+        <ReviewRow label="12-month goal" value={fSafe.goalsFarmer.goal12m} />
+        <ReviewRow label="Supply days / missed" value={`${fSafe.goalsFarmer.supplyDays} / ${fSafe.goalsFarmer.missed4w}`} />
       </ReviewSection>
 
       <ReviewSection title="Agent — pathway">
-        <ReviewRow label="Pathway 1" value={f.agentFarmer.pathwayP1} />
-        <ReviewRow label="Pathway 1 reason" value={f.agentFarmer.pathwayP1Reason || '—'} />
-        <ReviewRow label="Breed improvement" value={f.agentFarmer.breedImprovement} />
-        <ReviewRow label="Credit tier" value={f.agentFarmer.creditTier} />
-        <ReviewRow label="Agent notes" value={f.agentFarmer.notes} />
+        <ReviewRow label="Pathway 1" value={fSafe.agentFarmer.pathwayP1} />
+        <ReviewRow label="Pathway 1 reason" value={fSafe.agentFarmer.pathwayP1Reason || '—'} />
+        <ReviewRow label="Breed improvement" value={fSafe.agentFarmer.breedImprovement} />
+        <ReviewRow label="Credit tier" value={fSafe.agentFarmer.creditTier} />
+        <ReviewRow label="Agent notes" value={fSafe.agentFarmer.notes} />
       </ReviewSection>
 
       {risks.length > 0 && (
@@ -272,9 +275,10 @@ export function CollectorOnboardingPreview({
   gpsText: string;
   hasNidPhoto: boolean;
 }) {
-  const risks = collectorRiskFlags(c);
-  const { total, reg, notReg } = rosterSummary(c);
-  const auto = computeCollectorAutoSummary(c, { districtForRefugee: c.c1.district });
+  const cSafe = useMemo(() => mergeCollectorDraft(c as unknown), [c]);
+  const risks = collectorRiskFlags(cSafe);
+  const { total, reg, notReg } = rosterSummary(cSafe);
+  const auto = computeCollectorAutoSummary(cSafe, { districtForRefugee: cSafe.c1.district });
 
   return (
     <div className="space-y-4 max-h-[min(70vh,560px)] overflow-y-auto pr-1">
@@ -293,34 +297,34 @@ export function CollectorOnboardingPreview({
       <ReviewSection title="Collector profile">
         <ReviewRow
           label="Type"
-          value={c.collectorKind ? MILK_COLLECTOR_KIND[c.collectorKind].label : '—'}
+          value={cSafe.collectorKind ? MILK_COLLECTOR_KIND[cSafe.collectorKind].label : '—'}
         />
         <p className="text-xs text-slate-600 -mt-2 mb-0">
-          {c.collectorKind ? MILK_COLLECTOR_KIND[c.collectorKind].description : null}
+          {cSafe.collectorKind ? MILK_COLLECTOR_KIND[cSafe.collectorKind].description : null}
         </p>
       </ReviewSection>
 
       <ReviewSection title="C1 — Identity">
         <ReviewRow
           label="Name"
-          value={`${c.c1.firstName} ${c.c1.surname} ${c.c1.otherNames}`.trim()}
+          value={`${cSafe.c1.firstName} ${cSafe.c1.surname} ${cSafe.c1.otherNames}`.trim()}
         />
-        <ReviewRow label="Phones" value={`${c.c1.primaryPhone}${c.c1.whatsapp ? ` · ${c.c1.whatsapp}` : ''}`} />
-        <ReviewRow label="Location" value={`${c.c1.province}, ${c.c1.district}, ${c.c1.sector}`} />
-        <ReviewRow label="Linked MCC" value={c.c1.linkedMcc === 'other' ? c.c1.linkedMccOther : c.c1.linkedMcc} />
+        <ReviewRow label="Phones" value={`${cSafe.c1.primaryPhone}${cSafe.c1.whatsapp ? ` · ${cSafe.c1.whatsapp}` : ''}`} />
+        <ReviewRow label="Location" value={`${cSafe.c1.province}, ${cSafe.c1.district}, ${cSafe.c1.sector}`} />
+        <ReviewRow label="Linked MCC" value={cSafe.c1.linkedMcc === 'other' ? cSafe.c1.linkedMccOther : cSafe.c1.linkedMcc} />
       </ReviewSection>
 
       <ReviewSection title="C2 — Operations">
-        <ReviewRow label="Peak / low (L/day)" value={`${c.c2.peakL} / ${c.c2.lowL}`} />
-        <ReviewRow label="Transit (min)" value={c.c2.transitMin} />
-        <ReviewRow label="Farms count" value={c.c2.farmCount} />
+        <ReviewRow label="Peak / low (L/day)" value={`${cSafe.c2.peakL} / ${cSafe.c2.lowL}`} />
+        <ReviewRow label="Transit (min)" value={cSafe.c2.transitMin} />
+        <ReviewRow label="Farms count" value={cSafe.c2.farmCount} />
       </ReviewSection>
 
       <ReviewSection title="C3 — Farmer roster">
         <ReviewRow label="Total farms" value={String(total)} />
         <ReviewRow label="Registered / not registered" value={`${reg} / ${notReg}`} />
         <ul className="list-disc pl-5 text-sm text-slate-700 space-y-1 mt-2">
-          {c.roster.map((r) => (
+          {cSafe.roster.map((r) => (
             <li key={r.id}>
               {r.nameOrId || '(unnamed)'} — {r.registration || '—'}
             </li>
@@ -329,14 +333,14 @@ export function CollectorOnboardingPreview({
       </ReviewSection>
 
       <ReviewSection title="C4–C6 — Workforce & goals">
-        <ReviewRow label="Workforce counts" value={`${c.workforceC.total} total`} />
-        <ReviewRow label="Goal 12m" value={c.goalsC.goal12m} />
+        <ReviewRow label="Workforce counts" value={`${cSafe.workforceC.total} total`} />
+        <ReviewRow label="Goal 12m" value={cSafe.goalsC.goal12m} />
       </ReviewSection>
 
       <ReviewSection title="Agent">
-        <ReviewRow label="Pathway 4" value={c.agentCollector.pathwayP4} />
-        <ReviewRow label="Credit tier" value={c.agentCollector.creditTier} />
-        <ReviewRow label="Notes" value={c.agentCollector.notes} />
+        <ReviewRow label="Pathway 4" value={cSafe.agentCollector.pathwayP4} />
+        <ReviewRow label="Credit tier" value={cSafe.agentCollector.creditTier} />
+        <ReviewRow label="Notes" value={cSafe.agentCollector.notes} />
       </ReviewSection>
 
       {risks.length > 0 && (

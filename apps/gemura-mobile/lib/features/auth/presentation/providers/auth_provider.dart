@@ -123,15 +123,14 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       // Create registration request (permissions will be set by API)
       final registrationRequest = RegistrationRequest(
         name: name,
-        accountName: accountName,
+        accountName: accountName.isNotEmpty ? accountName : name,
         email: email,
         phone: phoneNumber,
         password: password,
-        nid: nid, // Optional field, can be null
+        nid: nid,
         role: role,
-        accountType: accountType, // New field
-        permissions: {}, // API will set default permissions
-        isAgentCandidate: false, // Default to false since we removed the checkbox
+        accountType: accountType,
+        permissions: const {},
       );
       
       await _authService.register(registrationRequest);

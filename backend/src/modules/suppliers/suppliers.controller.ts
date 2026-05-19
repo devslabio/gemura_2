@@ -135,6 +135,19 @@ export class SuppliersController {
     return this.suppliersService.getMyOnboarding(user);
   }
 
+  @Post('my-onboarding/init')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Start milk onboarding record for the current farmer/supplier (self-service)',
+    description:
+      'Creates supplier_milk_onboardings when missing. Idempotent if a row already exists. Not for MCC staff or customers.',
+  })
+  @ApiResponse({ status: 201, description: 'Row created' })
+  @ApiResponse({ status: 200, description: 'Row already existed' })
+  async initMyMilkOnboarding(@CurrentUser() user: User) {
+    return this.suppliersService.initMyMilkOnboarding(user);
+  }
+
   @Put('my-onboarding')
   @ApiOperation({ summary: 'Merge fields into the stored draft section of milk onboarding' })
   @ApiBody({ type: UpdateSupplierMilkOnboardingDto })
@@ -332,6 +345,19 @@ export class SuppliersController {
   })
   async getAllSuppliers(@CurrentUser() user: User, @Body('account_id') accountId?: string) {
     return this.suppliersService.getAllSuppliers(user, accountId);
+  }
+
+  /** Declared before `by-id/:id` so `:id` does not greedily swallow `…/onboarding`. */
+  @Get('by-id/:id/onboarding')
+  @RequirePermission('view_suppliers')
+  @ApiOperation({
+    summary: 'Get stored milk onboarding for a supplier (by tenant account UUID)',
+    description:
+      'Returns the SupplierMilkOnboarding payload for the user linked to the supplier account when the supplier is linked to the caller\'s default (MCC) account.',
+  })
+  @ApiParam({ name: 'id', description: 'Supplier account ID (UUID)', type: String })
+  async getSupplierOnboardingByAccount(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.suppliersService.getSupplierOnboardingByAccount(user, id);
   }
 
   @Get('by-id/:id')

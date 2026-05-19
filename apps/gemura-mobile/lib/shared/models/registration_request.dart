@@ -1,3 +1,5 @@
+import '../utils/registration_defaults.dart';
+
 class RegistrationRequest {
   final String name;
   final String accountName;
@@ -17,24 +19,29 @@ class RegistrationRequest {
     required this.phone,
     required this.password,
     this.nid,
-    required this.role,
-    required this.accountType, // New required field
+    String? role,
+    required this.accountType,
     required this.permissions,
     this.isAgentCandidate = false,
-  });
+  }) : role = role ?? RegistrationDefaults.platformRoleForAccountType(accountType);
 
   Map<String, dynamic> toJson() {
+    final trimmed = name.trim();
+    final parts = trimmed.split(RegExp(r'\s+'));
+    final firstName = parts.isNotEmpty ? parts.first : trimmed;
+    final lastName = parts.length > 1 ? parts.sublist(1).join(' ') : firstName;
+
     return {
-      'name': name,
+      'first_name': firstName,
+      'last_name': lastName,
       'account_name': accountName,
       if (email != null) 'email': email,
-      'phone': phone,
+      'phone': RegistrationDefaults.normalizePhone(phone),
       'password': password,
       if (nid != null) 'nid': nid,
       'role': role,
-      'account_type': accountType, // New field
+      'account_type': accountType,
       if (permissions.isNotEmpty) 'permissions': permissions,
-      // Removed is_agent_candidate as it's not accepted by the backend DTO
     };
   }
 

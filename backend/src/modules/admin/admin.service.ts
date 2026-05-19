@@ -1829,30 +1829,38 @@ export class AdminService {
       };
     }
 
-    const farms = await this.prisma.farm.findMany({
-      where: { account_id: opAccountId },
-      orderBy: { created_at: 'desc' },
+    if (resource === 'farms') {
+      const farms = await this.prisma.farm.findMany({
+        where: { account_id: opAccountId },
+        orderBy: { created_at: 'desc' },
+      });
+
+      const data = farms.map((row) => ({
+        id: row.id,
+        account_id: row.account_id,
+        code: row.code,
+        name: row.name,
+        description: row.description,
+        location: row.location,
+        location_id: row.location_id,
+        status: row.status,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      }));
+
+      return {
+        code: 200,
+        status: 'success',
+        message: 'User business records retrieved successfully.',
+        data,
+      };
+    }
+
+    throw new BadRequestException({
+      code: 400,
+      status: 'error',
+      message: `Unsupported resource: ${resource}.`,
     });
-
-    const data = farms.map((row) => ({
-      id: row.id,
-      account_id: row.account_id,
-      code: row.code,
-      name: row.name,
-      description: row.description,
-      location: row.location,
-      location_id: row.location_id,
-      status: row.status,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-    }));
-
-    return {
-      code: 200,
-      status: 'success',
-      message: 'User business records retrieved successfully.',
-      data,
-    };
   }
 
   /**
@@ -5703,6 +5711,256 @@ export class AdminService {
           total,
           totalPages: Math.ceil(total / safeLimit),
         },
+      },
+    };
+  }
+
+  /** MCC accounts that appear on supplier milk onboarding rows (admin filter dropdown). */
+  async listSupplierMilkOnboardingMccFilterOptions(user: User, accountId: string) {
+    await this.checkAdminPermission(user, accountId);
+    const rows = await this.prisma.supplierMilkOnboarding.findMany({
+      where: { mcc_account_id: { not: null } },
+      distinct: ['mcc_account_id'],
+      select: { mcc_account_id: true },
+    });
+    const uuidList = rows.map((r) => r.mcc_account_id).filter((x): x is string => Boolean(x));
+    if (uuidList.length === 0) {
+      return {
+        code: 200,
+        status: 'success',
+        message: 'OK',
+        data: { mcc_accounts: [] as Array<{ id: string; code: string; name: string }> },
+      };
+    }
+    const accounts = await this.prisma.account.findMany({
+      where: { id: { in: uuidList } },
+      select: { id: true, code: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    return {
+      code: 200,
+      status: 'success',
+      message: 'OK',
+      data: { mcc_accounts: accounts },
+    };
+  }
+
+  /**
+   * List rows from `supplier_milk_onboardings` (MCC wizard → farmer/collector signup).
+   */
+  async listSupplierMilkOnboardings(
+    user: User,
+    accountId: string,
+    page = 1,
+    limit = 20,
+    mccAccountId?: string,
+    supplierAccountType?: string,
+    search?: string,
+    createdFrom?: string,
+    createdTo?: string,
+    tzOffsetMinutes?: number,
+  ) {
+    await this.checkAdminPermission(user, accountId);
+    const safeLimit = Math.min(Math.max(limit, 1), 100);
+    const safePage = Math.max(page, 1);
+    const skip = (safePage - 1) * safeLimit;
+
+    const andParts: Prisma.SupplierMilkOnboardingWhereInput[] = [];
+
+    if (mccAccountId?.trim() && AdminService.LOCATION_UUID_RE.test(mccAccountId.trim())) {
+      andParts.push({ mcc_account_id: mccAccountId.trim() });
+    }
+
+    if (supplierAccountType === 'farmer' || supplierAccountType === 'supplier') {
+      andParts.push({ user: { account_type: supplierAccountType } });
+    }
+
+    if (createdFrom || createdTo) {
+      const createdAt: Prisma.DateTimeFilter = {};
+      const offset = Number.isFinite(tzOffsetMinutes as number) ? (tzOffsetMinutes as number) : 0;
+      if (createdFrom) {
+        const from = this.parseClientLocalDateToUtcBoundary(createdFrom, offset, false);
+        if (from) createdAt.gte = from;
+      }
+      if (createdTo) {
+        const to = this.parseClientLocalDateToUtcBoundary(createdTo, offset, true);
+        if (to) createdAt.lte = to;
+      }
+      if (Object.keys(createdAt).length > 0) {
+        andParts.push({ created_at: createdAt });
+      }
+    }
+
+    if (search?.trim()) {
+      const q = search.trim();
+      const phoneDigits = q.replace(/\D/g, '');
+      const mccMatches = await this.prisma.account.findMany({
+        where: {
+          OR: [
+            { code: { contains: q, mode: 'insensitive' } },
+            { name: { contains: q, mode: 'insensitive' } },
+          ],
+        },
+        select: { id: true },
+        take: 200,
+      });
+      const mccIdList = mccMatches.map((m) => m.id);
+
+      const searchOr: Prisma.SupplierMilkOnboardingWhereInput[] = [
+        { user: { name: { contains: q, mode: 'insensitive' } } },
+        { user: { first_name: { contains: q, mode: 'insensitive' } } },
+        { user: { last_name: { contains: q, mode: 'insensitive' } } },
+        { user: { code: { contains: q, mode: 'insensitive' } } },
+        {
+          user: {
+            default_account: {
+              is: {
+                OR: [
+                  { code: { contains: q, mode: 'insensitive' } },
+                  { name: { contains: q, mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        },
+      ];
+      if (phoneDigits.length >= 6) {
+        searchOr.push({ user: { phone: { contains: phoneDigits } } });
+      }
+      if (mccIdList.length > 0) {
+        searchOr.push({ mcc_account_id: { in: mccIdList } });
+      }
+      andParts.push({ OR: searchOr });
+    }
+
+    const where: Prisma.SupplierMilkOnboardingWhereInput = andParts.length > 0 ? { AND: andParts } : {};
+
+    const [rows, total] = await Promise.all([
+      this.prisma.supplierMilkOnboarding.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        skip,
+        take: safeLimit,
+        select: {
+          id: true,
+          user_id: true,
+          mcc_account_id: true,
+          created_at: true,
+          updated_at: true,
+          user: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              first_name: true,
+              last_name: true,
+              phone: true,
+              account_type: true,
+              supplier_segment: true,
+              default_account: { select: { id: true, code: true, name: true } },
+            },
+          },
+        },
+      }),
+      this.prisma.supplierMilkOnboarding.count({ where }),
+    ]);
+
+    const mccIds = [...new Set(rows.map((r) => r.mcc_account_id).filter((x): x is string => Boolean(x)))];
+    const mccAccounts =
+      mccIds.length > 0
+        ? await this.prisma.account.findMany({
+            where: { id: { in: mccIds } },
+            select: { id: true, code: true, name: true },
+          })
+        : [];
+    const mccMap = new Map(mccAccounts.map((a) => [a.id, a]));
+
+    const records = rows.map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      mcc_account_id: r.mcc_account_id,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      user: {
+        id: r.user.id,
+        code: r.user.code,
+        name: r.user.name,
+        first_name: r.user.first_name,
+        last_name: r.user.last_name,
+        phone: r.user.phone,
+        account_type: r.user.account_type,
+        supplier_segment: r.user.supplier_segment,
+      },
+      linked_supplier_account: r.user.default_account,
+      linked_mcc: r.mcc_account_id ? (mccMap.get(r.mcc_account_id) ?? null) : null,
+    }));
+
+    return {
+      code: 200,
+      status: 'success',
+      message: 'Supplier onboarding records retrieved successfully.',
+      data: {
+        records,
+        pagination: {
+          page: safePage,
+          limit: safeLimit,
+          total,
+          totalPages: Math.ceil(total / safeLimit),
+        },
+      },
+    };
+  }
+
+  async getSupplierMilkOnboardingById(user: User, accountId: string, recordId: string) {
+    await this.checkAdminPermission(user, accountId);
+    const row = await this.prisma.supplierMilkOnboarding.findUnique({
+      where: { id: recordId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            first_name: true,
+            last_name: true,
+            phone: true,
+            email: true,
+            account_type: true,
+            supplier_segment: true,
+            nid: true,
+            default_account: { select: { id: true, code: true, name: true, type: true } },
+          },
+        },
+      },
+    });
+    if (!row) {
+      throw new NotFoundException({
+        code: 404,
+        status: 'error',
+        message: 'Supplier onboarding record not found.',
+      });
+    }
+    let linked_mcc: { id: string; code: string; name: string } | null = null;
+    if (row.mcc_account_id) {
+      const acc = await this.prisma.account.findUnique({
+        where: { id: row.mcc_account_id },
+        select: { id: true, code: true, name: true },
+      });
+      linked_mcc = acc;
+    }
+    return {
+      code: 200,
+      status: 'success',
+      message: 'OK',
+      data: {
+        id: row.id,
+        mcc_account_id: row.mcc_account_id,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        payload: row.payload,
+        user: row.user,
+        linked_mcc,
+        linked_supplier_account: row.user.default_account,
       },
     };
   }

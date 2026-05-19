@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { suppliersApi, Supplier } from '@/lib/api/suppliers';
+import { splitFullName } from '@/lib/utils/name';
 import { useAuthStore } from '@/store/auth';
-import { usePermission } from '@/hooks/usePermission';
+import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import DataTableWithPagination from '@/app/components/DataTableWithPagination';
 import FilterBar, { FilterBarGroup, FilterBarSearch, FilterBarActions, FilterBarExport } from '@/app/components/FilterBar';
 import type { TableColumn } from '@/app/components/DataTable';
@@ -14,7 +15,7 @@ import Modal from '@/app/components/Modal';
 import BulkImportModal from '@/app/components/BulkImportModal';
 import CreateSupplierForm from './CreateSupplierForm';
 import SupplierOnboardingModal from './onboarding/SupplierOnboardingModal';
-import Icon, { faPlus, faEye, faCheckCircle, faBuilding, faPhone, faEnvelope, faDollarSign, faFile, faUserPlus } from '@/app/components/Icon';
+import Icon, { faPlus, faEye, faCheckCircle, faBuilding, faPhone, faDollarSign, faFile, faUserPlus } from '@/app/components/Icon';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -22,10 +23,19 @@ const STATUS_OPTIONS = [
   { value: 'inactive', label: 'Inactive' },
 ];
 
+const TYPE_OPTIONS = [
+  { value: '', label: 'All Types' },
+  { value: 'farmer', label: 'farmer' },
+  { value: 'collector', label: 'collector' },
+  { value: 'collector-farmer', label: 'collector-farmer' },
+  { value: 'mcp', label: 'mcp' },
+  { value: 'farmer only', label: 'farmer only' },
+];
+
 export default function SuppliersPage() {
   const searchParams = useSearchParams();
   const { currentAccount } = useAuthStore();
-  const { hasPermission, isAdmin } = usePermission();
+  const { suppliers: supplierCrud } = useCrudPermissions();
   const [loading, setLoading] = useState(true);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [error, setError] = useState('');
@@ -34,7 +44,11 @@ export default function SuppliersPage() {
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const canCreateSupplier = hasPermission('create_suppliers') || isAdmin();
+  const [typeFilter, setTypeFilter] = useState('');
+  const normalizeSupplierType = (supplierType?: string | null): string => {
+    if (!supplierType || supplierType === 'supplier') return 'farmer';
+    return supplierType;
+  };
 
   const loadSuppliers = useCallback(async () => {
     try {
@@ -66,7 +80,7 @@ export default function SuppliersPage() {
           (s.name && s.name.toLowerCase().includes(q)) ||
           (s.code && s.code.toLowerCase().includes(q)) ||
           (s.phone && s.phone.includes(q)) ||
-          (s.email && s.email.toLowerCase().includes(q)) ||
+          normalizeSupplierType(s.type).toLowerCase().includes(q) ||
             (s.bank_name && s.bank_name.toLowerCase().includes(q)) ||
             (s.bank_account_number && s.bank_account_number.toLowerCase().includes(q)) ||
           (s.account?.code && s.account.code.toLowerCase().includes(q)) ||
@@ -76,12 +90,16 @@ export default function SuppliersPage() {
     if (statusFilter) {
       list = list.filter((s) => s.relationship_status === statusFilter);
     }
+    if (typeFilter) {
+      list = list.filter((s) => normalizeSupplierType(s.type) === typeFilter);
+    }
     return list;
-  }, [suppliers, search, statusFilter]);
+  }, [suppliers, search, statusFilter, typeFilter]);
 
   const clearFilters = () => {
     setSearch('');
     setStatusFilter('');
+    setTypeFilter('');
   };
 
   const formatCurrency = (amount: number) => {
@@ -116,16 +134,11 @@ export default function SuppliersPage() {
       ),
     },
     {
-      key: 'email',
-      label: 'Email',
+      key: 'type',
+      label: 'Type',
       sortable: true,
-      render: (value) => value ? (
-        <div className="flex items-center text-gray-900">
-          <Icon icon={faEnvelope} size="sm" className="mr-2 text-gray-400" />
-          <span>{value}</span>
-        </div>
-      ) : (
-        <span className="text-gray-400">N/A</span>
+      render: (value, row) => (
+        <span className="text-gray-900">{normalizeSupplierType((value as string | null | undefined) ?? row.type)}</span>
       ),
     },
     {
@@ -213,32 +226,33 @@ export default function SuppliersPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Suppliers</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => canCreateSupplier && setBulkImportOpen(true)} className="btn btn-secondary" disabled={!canCreateSupplier}>
-            <Icon icon={faFile} size="sm" className="mr-2" />
-            Bulk import
-          </button>
-          <a
-            href="#"
-            onClick={(e) => { e.preventDefault(); suppliersApi.downloadTemplate().catch(() => {}); }}
-            className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors"
-          >
-            Download template
-          </a>
-          <button
-            type="button"
-            onClick={() => canCreateSupplier && setOnboardModalOpen(true)}
-            className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 text-sm font-medium text-white bg-amber-700 hover:bg-amber-800 rounded border border-amber-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={!canCreateSupplier}
-          >
-            <Icon icon={faUserPlus} size="sm" />
-            Onboard new supplier
-          </button>
-          <button type="button" onClick={() => canCreateSupplier && setCreateModalOpen(true)} className="btn btn-primary" disabled={!canCreateSupplier}>
-            <Icon icon={faPlus} size="sm" className="mr-2" />
-            Add Supplier
-          </button>
-        </div>
+        {supplierCrud.create ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setBulkImportOpen(true)} className="btn btn-secondary">
+              <Icon icon={faFile} size="sm" className="mr-2" />
+              Bulk import
+            </button>
+            <a
+              href="#"
+              onClick={(e) => { e.preventDefault(); suppliersApi.downloadTemplate().catch(() => {}); }}
+              className="inline-flex items-center justify-center gap-1.5 h-9 px-4 text-sm font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 rounded hover:bg-emerald-100 transition-colors"
+            >
+              Download template
+            </a>
+            <button
+              type="button"
+              onClick={() => setOnboardModalOpen(true)}
+              className="inline-flex items-center justify-center gap-2 min-h-[44px] px-4 text-sm font-medium text-white bg-amber-700 hover:bg-amber-800 rounded border border-amber-800 transition-colors"
+            >
+              <Icon icon={faUserPlus} size="sm" />
+              Onboard new supplier
+            </button>
+            <button type="button" onClick={() => setCreateModalOpen(true)} className="btn btn-primary">
+              <Icon icon={faPlus} size="sm" className="mr-2" />
+              Add Supplier
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <BulkImportModal
@@ -258,13 +272,10 @@ export default function SuppliersPage() {
         onDownloadTemplate={() => suppliersApi.downloadTemplate()}
         onBulkCreate={(rows) => {
           const data: import('@/lib/api/suppliers').CreateSupplierData[] = rows.map((row) => {
-            const raw = String(row.name ?? '').trim();
-            const ix = raw.indexOf(' ');
-            const first_name = (ix === -1 ? raw || 'Supplier' : raw.slice(0, ix)).trim();
-            const last_name = (ix === -1 ? '-' : raw.slice(ix + 1)).trim() || '-';
+            const { firstName, lastName } = splitFullName(String(row.name ?? ''));
             return {
-              first_name,
-              last_name,
+              first_name: firstName,
+              last_name: lastName,
               phone: String(row.phone ?? ''),
               price_per_liter: Number(row.price_per_liter) || 0,
               email: row.email != null ? String(row.email) : undefined,
@@ -295,7 +306,7 @@ export default function SuppliersPage() {
         onRegistered={() => loadSuppliers()}
       />
 
-      <Modal open={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Add Supplier" maxWidth="max-w-lg">
+      <Modal open={createModalOpen} onClose={() => setCreateModalOpen(false)} title="Add Supplier" maxWidth="max-w-3xl">
         <CreateSupplierForm
           onSuccess={() => {
             setCreateModalOpen(false);
@@ -309,7 +320,7 @@ export default function SuppliersPage() {
         <FilterBarSearch
           value={search}
           onChange={setSearch}
-          placeholder="Search by name, code, phone, email..."
+          placeholder="Search by name, code, phone, type..."
         />
         <FilterBarGroup label="Status">
           <select
@@ -324,6 +335,19 @@ export default function SuppliersPage() {
             ))}
           </select>
         </FilterBarGroup>
+        <FilterBarGroup label="Type">
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="input h-9 min-h-[2.25rem] !py-1.5 !px-3 text-sm w-full text-gray-900"
+          >
+            {TYPE_OPTIONS.map((o) => (
+              <option key={o.value || 'all'} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </FilterBarGroup>
         <FilterBarActions onClear={clearFilters} />
         <FilterBarExport<Supplier>
           data={filteredSuppliers}
@@ -332,7 +356,7 @@ export default function SuppliersPage() {
             { key: 'name', label: 'Name' },
             { key: 'code', label: 'Code' },
             { key: 'phone', label: 'Phone' },
-            { key: 'email', label: 'Email', getValue: (r) => r.email ?? '' },
+            { key: 'type', label: 'Type', getValue: (r) => normalizeSupplierType(r.type) },
             { key: 'price_per_liter', label: 'Price/Liter', getValue: (r) => r.price_per_liter != null ? String(r.price_per_liter) : '' },
             { key: 'bank_name', label: 'Bank Name', getValue: (r) => r.bank_name ?? '' },
             { key: 'bank_account_number', label: 'Bank Account Number', getValue: (r) => r.bank_account_number ?? '' },

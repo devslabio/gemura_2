@@ -10,6 +10,7 @@ import { isBusinessAccount } from '@/lib/config/nav.config';
 import { profileApi } from '@/lib/api/profile';
 import { supplierOnboardingApi } from '@/lib/api/supplierOnboardingApi';
 import { computeOnboardingRecordCompletion } from '@/app/(authenticated)/suppliers/onboarding/onboardingRecordCompletion';
+import { normalizeRwandaLoginPhoneDigits } from '@/lib/utils/rwandaPhone';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -53,6 +54,7 @@ export default function LoginPage() {
           return;
         }
         normalizedIdentifier = normalizedIdentifier.replace(/\D/g, '');
+        normalizedIdentifier = normalizeRwandaLoginPhoneDigits(normalizedIdentifier);
       } else {
         if (!normalizedIdentifier.includes('@')) {
           setError('Please enter a valid email address');
@@ -101,7 +103,7 @@ export default function LoginPage() {
                 ? computeOnboardingRecordCompletion(ob.data.onboarding)
                 : 0;
           if (pct < 100) {
-            targetRoute = '/profile';
+            targetRoute = '/settings';
           }
         } catch {
           /* keep /dashboard */
@@ -210,7 +212,7 @@ export default function LoginPage() {
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="w-full pl-12 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-sm text-gray-900 placeholder-gray-500 focus:outline-none focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary text-sm"
-                  placeholder={isPhoneLogin ? 'Enter your phone number' : 'Enter your email'}
+                  placeholder={isPhoneLogin ? 'e.g. 250788409034 or 0788409034' : 'Enter your email'}
                   required
                   disabled={loading}
                 />

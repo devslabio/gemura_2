@@ -32,7 +32,7 @@ services:
         echo 'Waiting for database...' &&
         sleep 5 &&
         npx prisma migrate deploy &&
-        node dist/src/main.js
+        node dist/main.js
       "
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3004/api/health"]

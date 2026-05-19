@@ -44,7 +44,7 @@ class CustomersNotifier extends StateNotifier<AsyncValue<List<Customer>>> {
     String? email,
     String? nid,
     String? address,
-    required double pricePerLiter,
+    double? pricePerLiter,
   }) async {
     try {
       // Create the customer via API

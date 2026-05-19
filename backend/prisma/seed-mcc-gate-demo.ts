@@ -54,13 +54,14 @@ async function main() {
     process.exit(1);
   }
 
-  const farmerJean = await prisma.account.findUnique({ where: { code: 'A_SUP_001' } });
-  const farmerMarie = await prisma.account.findUnique({ where: { code: 'A_SUP_002' } });
-  const farmerPierre = await prisma.account.findUnique({ where: { code: 'A_SUP_003' } });
-  if (!farmerJean || !farmerMarie || !farmerPierre) {
-    console.error('❌ Supplier accounts A_SUP_001–003 not found. Run prisma:seed first.');
+  const farmerDemo = await prisma.account.findUnique({ where: { code: 'A_SUP_001' } });
+  if (!farmerDemo) {
+    console.error('❌ Supplier account A_SUP_001 not found. Run prisma:seed first.');
     process.exit(1);
   }
+  const farmerJean = farmerDemo;
+  const farmerMarie = farmerDemo;
+  const farmerPierre = farmerDemo;
 
   const umucundaHub = await prisma.account.upsert({
     where: { code: 'A_SEED_UMU_GATE' },

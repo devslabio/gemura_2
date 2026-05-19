@@ -102,9 +102,18 @@ export class RegisterSupplierOnboardingDto {
 }
 
 export class UpdateSupplierMilkOnboardingDto {
-  @ApiProperty({ description: 'Patch updates into onboarding.draft (front-end form state)' })
+  @ApiPropertyOptional({ description: 'Patch updates into onboarding.draft (shallow merge at draft root)' })
+  @IsOptional()
   @IsObject()
-  draft: Record<string, unknown>;
+  draft?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    description:
+      'When set, replaces the entire milk onboarding JSON document (supplier self-service wizard save).',
+  })
+  @IsOptional()
+  @IsObject()
+  onboarding?: Record<string, unknown>;
 }
 
 export class CreateManagedFarmDto {

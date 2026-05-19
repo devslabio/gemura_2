@@ -33,7 +33,7 @@ services:
         echo 'Running Prisma migrations...' &&
         npx prisma migrate deploy &&
         echo 'Starting Gemura API...' &&
-        node dist/src/main.js
+        node dist/main.js
       "
 
   # Frontend Web App (Next.js) - To be added

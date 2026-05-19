@@ -55,5 +55,5 @@ EXPOSE 3004
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD sh -c 'node -e "const port = process.env.PORT || \"3004\"; require(\"http\").get(\"http://localhost:\" + port + \"/api/health\", (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"'
 
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "dist/main.js"]
 

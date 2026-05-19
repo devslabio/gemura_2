@@ -15,6 +15,7 @@ import {
   WizardStepPanel,
 } from './formPrimitives';
 import { P } from './fieldPlaceholders';
+import { RwandaLocationFields } from './RwandaLocationFields';
 
 const WHO_BRINGS = [
   { value: 'self', label: 'I bring it myself' },
@@ -118,6 +119,9 @@ function toggleCreditIntent(
 }
 
 export function computeFarmerProgress(f: FarmerFormState): number {
+  if (!f?.identity || !f?.herd || !f?.lactation || !f?.management || !f?.workforce || !f?.financeFarmer || !f?.goalsFarmer || !f?.agentFarmer) {
+    return 0;
+  }
   const checks: boolean[] = [
     !!f.identity.surname.trim(),
     !!f.identity.firstName.trim(),
@@ -143,6 +147,7 @@ export function computeFarmerProgress(f: FarmerFormState): number {
 
 export function farmerRiskFlags(f: FarmerFormState): string[] {
   const msgs: string[] = [];
+  if (!f?.identity || !f?.lactation || !f?.herd) return msgs;
   const km = Number(f.identity.distanceMccKm);
   if (!Number.isNaN(km) && km > 15) {
     msgs.push('Rejection risk rises significantly above 15 km');
@@ -205,8 +210,8 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
         title="1 — Farmer identity & location"
         subtitle="Names, address, phones, NID, distance to MCC, business type"
       >
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
             <FieldLabel htmlFor="fsur">Surname</FieldLabel>
             <TextInput
               id="fsur"
@@ -215,7 +220,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
               onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, surname: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="ffirst">First name</FieldLabel>
             <TextInput
               id="ffirst"
@@ -224,7 +229,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
               onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, firstName: e.target.value } }))}
             />
           </div>
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-2 space-y-1">
             <FieldLabel htmlFor="fother" optional>
               Other names
             </FieldLabel>
@@ -235,52 +240,32 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
               onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, otherNames: e.target.value } }))}
             />
           </div>
-          <div>
-            <FieldLabel htmlFor="fprov">Province</FieldLabel>
-            <TextInput
-              id="fprov"
-              value={f.identity.province}
-              placeholder={P.province}
-              onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, province: e.target.value } }))}
-            />
-          </div>
-          <div>
-            <FieldLabel htmlFor="fdist">District</FieldLabel>
-            <TextInput
-              id="fdist"
-              value={f.identity.district}
-              placeholder={P.district}
-              onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, district: e.target.value } }))}
-            />
-          </div>
-          <div>
-            <FieldLabel htmlFor="fsec">Sector</FieldLabel>
-            <TextInput
-              id="fsec"
-              value={f.identity.sector}
-              placeholder={P.sector}
-              onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, sector: e.target.value } }))}
-            />
-          </div>
-          <div>
-            <FieldLabel htmlFor="fcell">Cell</FieldLabel>
-            <TextInput
-              id="fcell"
-              value={f.identity.cell}
-              placeholder={P.cell}
-              onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, cell: e.target.value } }))}
-            />
-          </div>
-          <div>
-            <FieldLabel htmlFor="fvill">Village</FieldLabel>
-            <TextInput
-              id="fvill"
-              value={f.identity.village}
-              placeholder={P.village}
-              onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, village: e.target.value } }))}
-            />
-          </div>
-          <div>
+          <RwandaLocationFields
+            idPrefix="f1"
+            names={{
+              province: f.identity.province,
+              district: f.identity.district,
+              sector: f.identity.sector,
+              cell: f.identity.cell,
+              village: f.identity.village,
+            }}
+            locationVillageId={f.identity.locationVillageId}
+            onUpdate={(next) =>
+              setF((p) => ({
+                ...p,
+                identity: {
+                  ...p.identity,
+                  province: next.province,
+                  district: next.district,
+                  sector: next.sector,
+                  cell: next.cell,
+                  village: next.village,
+                  locationVillageId: next.locationVillageId,
+                },
+              }))
+            }
+          />
+          <div className="space-y-1">
             <FieldLabel htmlFor="fphone">Primary phone (wallet login)</FieldLabel>
             <TextInput
               id="fphone"
@@ -290,7 +275,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
               onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, primaryPhone: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="fwa" optional>
               WhatsApp
             </FieldLabel>
@@ -302,7 +287,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
               onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, whatsapp: e.target.value } }))}
             />
           </div>
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-2 space-y-2">
             <FieldLabel htmlFor="fnid">National ID number</FieldLabel>
             <TextInput
               id="fnid"
@@ -319,7 +304,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
             />
             <Hint>VIBE C16–C21, C79 auto-derived from ID capture on sync — not manual here.</Hint>
           </div>
-          <div>
+          <div className="space-y-2">
             <FieldLabel htmlFor="fdistmcc">Distance to MCC (km)</FieldLabel>
             <TextInput
               id="fdistmcc"
@@ -344,7 +329,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
           options={WHO_BRINGS}
         />
         {f.identity.whoBringsMilk === 'other' && (
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="fwhoother">Specify</FieldLabel>
             <TextInput
               id="fwhoother"
@@ -366,9 +351,9 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
         />
 
         {showCoop && (
-          <div className="grid sm:grid-cols-2 gap-3 p-3 rounded-sm bg-gray-50 border border-gray-200">
+          <div className="grid sm:grid-cols-2 gap-4 p-3 rounded-sm bg-gray-50 border border-gray-200">
             <p className="sm:col-span-2 text-sm font-medium">Cooperative (A9–A12)</p>
-            <div>
+            <div className="space-y-1">
               <FieldLabel htmlFor="cmem">Total members (C28)</FieldLabel>
               <TextInput
                 id="cmem"
@@ -378,7 +363,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
                 onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, coopMembers: e.target.value } }))}
               />
             </div>
-            <div>
+            <div className="space-y-1">
               <FieldLabel htmlFor="cwom">Women members (C29)</FieldLabel>
               <TextInput
                 id="cwom"
@@ -388,7 +373,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
                 onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, coopWomen: e.target.value } }))}
               />
             </div>
-            <div>
+            <div className="space-y-1">
               <FieldLabel htmlFor="cyouth">Members aged 18–35 (C31)</FieldLabel>
               <TextInput
                 id="cyouth"
@@ -398,7 +383,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
                 onChange={(e) => setF((p) => ({ ...p, identity: { ...p.identity, coopYouth1835: e.target.value } }))}
               />
             </div>
-            <div>
+            <div className="space-y-1">
               <FieldLabel htmlFor="cyw">Young women 18–35 (C33)</FieldLabel>
               <TextInput
                 id="cyw"
@@ -433,7 +418,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
         title="2 — Herd composition & production"
         subtitle="Herd size, breeds, production volumes, sales channels"
       >
-        <div>
+        <div className="space-y-1">
           <FieldLabel htmlFor="tcows">Total cows (all types)</FieldLabel>
           <TextInput
             id="tcows"
@@ -446,7 +431,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
         <p className="text-sm font-medium text-slate-800">Breed breakdown (counts)</p>
         <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
           {BREEDS.map((b) => (
-            <div key={b}>
+            <div key={b} className="space-y-1">
               <FieldLabel htmlFor={`bc-${b}`}>{BREED_LABEL[b]}</FieldLabel>
               <TextInput
                 id={`bc-${b}`}
@@ -469,7 +454,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
         <p className="text-sm font-medium text-slate-800">Lactating cows by breed</p>
         <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
           {BREEDS.map((b) => (
-            <div key={b}>
+            <div key={b} className="space-y-1">
               <FieldLabel htmlFor={`lac-${b}`}>{BREED_LABEL[b]}</FieldLabel>
               <TextInput
                 id={`lac-${b}`}
@@ -492,7 +477,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
         <p className="text-sm font-medium text-slate-800">Avg daily production per cow (L/cow/day)</p>
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
           {(['friesian', 'jersey', 'cross', 'local'] as BreedKey[]).map((b) => (
-            <div key={b}>
+            <div key={b} className="space-y-1">
               <FieldLabel htmlFor={`avg-${b}`}>{BREED_LABEL[b]}</FieldLabel>
               <TextInput
                 id={`avg-${b}`}
@@ -512,8 +497,8 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
             </div>
           ))}
         </div>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
             <FieldLabel htmlFor="peak">Peak season total (L/day)</FieldLabel>
             <TextInput
               id="peak"
@@ -523,7 +508,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
               onChange={(e) => setF((p) => ({ ...p, herd: { ...p.herd, peakTotal: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="low">Low season total (L/day)</FieldLabel>
             <TextInput
               id="low"
@@ -556,7 +541,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
           }
         />
         {salesOtherMcc && (
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="omcc">Other MCC name</FieldLabel>
             <TextInput
               id="omcc"
@@ -620,7 +605,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
         <p className="text-sm font-medium">Calving interval (months) per breed</p>
         <div className="grid sm:grid-cols-5 gap-2">
           {BREEDS.map((b) => (
-            <div key={b}>
+            <div key={b} className="space-y-1">
               <FieldLabel htmlFor={`ci-${b}`}>{BREED_LABEL[b]}</FieldLabel>
               <TextInput
                 id={`ci-${b}`}
@@ -676,8 +661,8 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
           ]}
         />
         {showInsuredDetail && (
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
               <FieldLabel htmlFor="insc">Cows covered (count)</FieldLabel>
               <TextInput
                 id="insc"
@@ -687,7 +672,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
                 onChange={(e) => setF((p) => ({ ...p, lactation: { ...p.lactation, cowsInsuredCount: e.target.value } }))}
               />
             </div>
-            <div>
+            <div className="space-y-1">
               <FieldLabel htmlFor="insp">Insurance provider</FieldLabel>
               <TextInput
                 id="insp"
@@ -776,8 +761,8 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
             }))
           }
         />
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
             <FieldLabel htmlFor="dha">Dairy land (ha)</FieldLabel>
             <TextInput
               id="dha"
@@ -787,7 +772,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
               onChange={(e) => setF((p) => ({ ...p, farming: { ...p.farming, dairyHa: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="oha">Other land (ha)</FieldLabel>
             <TextInput
               id="oha"
@@ -847,7 +832,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
           ]}
         />
         {showManagerFields && (
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="mname">Farm manager name</FieldLabel>
             <TextInput
               id="mname"
@@ -905,7 +890,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
           ]}
         />
         {showTraining && (
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="tprov">Training provider</FieldLabel>
             <TextInput
               id="tprov"
@@ -926,8 +911,8 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
           ]}
         />
         {showSubsidy && (
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="space-y-1">
               <FieldLabel htmlFor="gsrc">Grant source</FieldLabel>
               <TextInput
                 id="gsrc"
@@ -936,7 +921,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
                 onChange={(e) => setF((p) => ({ ...p, management: { ...p.management, grantSource: e.target.value } }))}
               />
             </div>
-            <div>
+            <div className="space-y-1">
               <FieldLabel htmlFor="gwhat">What was provided</FieldLabel>
               <TextInput
                 id="gwhat"
@@ -959,8 +944,8 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
         <Hint>
           Platform derives male/female and age splits (C47, C50, C55–C57, C52) from these counts — shown for agent awareness.
         </Hint>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
             <FieldLabel htmlFor="wtot">Total workers incl. owner (C45)</FieldLabel>
             <TextInput
               id="wtot"
@@ -970,7 +955,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
               onChange={(e) => setF((p) => ({ ...p, workforce: { ...p.workforce, total: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="wwom">How many are women (C46)</FieldLabel>
             <TextInput
               id="wwom"
@@ -980,7 +965,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
               onChange={(e) => setF((p) => ({ ...p, workforce: { ...p.workforce, women: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="w1835">Aged 18–35 (C48)</FieldLabel>
             <TextInput
               id="w1835"
@@ -990,7 +975,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
               onChange={(e) => setF((p) => ({ ...p, workforce: { ...p.workforce, aged1835: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="wwy">Of 18–35, how many women (C49)</FieldLabel>
             <TextInput
               id="wwy"
@@ -1000,7 +985,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
               onChange={(e) => setF((p) => ({ ...p, workforce: { ...p.workforce, women1835: e.target.value } }))}
             />
           </div>
-          <div>
+          <div className="space-y-1">
             <FieldLabel htmlFor="wpwd">Workers with disability (C51)</FieldLabel>
             <TextInput
               id="wpwd"
@@ -1012,7 +997,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
           </div>
         </div>
         {showManagerFields && (
-          <div className="grid sm:grid-cols-2 gap-3 p-3 rounded-sm border border-gray-200 bg-gray-50">
+          <div className="grid sm:grid-cols-2 gap-4 p-3 rounded-sm border border-gray-200 bg-gray-50">
             <p className="sm:col-span-2 text-sm font-medium">Separate farm manager (C43–C44)</p>
             <RadioRow
               name="msx"
@@ -1026,7 +1011,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
                 { value: 'female', label: 'Female' },
               ]}
             />
-            <div>
+            <div className="space-y-1">
               <FieldLabel htmlFor="mage">Manager age</FieldLabel>
               <TextInput
                 id="mage"
@@ -1159,7 +1144,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
             }
           />
         )}
-        <div>
+        <div className="space-y-1">
           <FieldLabel htmlFor="rev">Average annual revenue before Gemura (RWF) — C75</FieldLabel>
           <TextInput
             id="rev"
@@ -1217,7 +1202,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
           onChange={(v) => setF((p) => ({ ...p, goalsFarmer: { ...p.goalsFarmer, missed4w: v } }))}
           options={MISSED}
         />
-        <div>
+        <div className="space-y-1">
           <FieldLabel htmlFor="missr" optional>
             Main reason for missed deliveries
           </FieldLabel>
@@ -1265,7 +1250,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
             { value: 'not', label: 'Does not qualify' },
           ]}
         />
-        <div>
+        <div className="space-y-1">
           <FieldLabel htmlFor="p1r">Pathway 1 reason</FieldLabel>
           <TextArea
             id="p1r"
@@ -1306,7 +1291,7 @@ export function FarmerOnboardingPath({ f, setF, onlyStep, districtForRefugeeHint
             { value: 'reliable', label: 'Reliable (20+ L/day)' },
           ]}
         />
-        <div>
+        <div className="space-y-1">
           <FieldLabel htmlFor="agn">Agent notes</FieldLabel>
           <TextArea
             id="agn"

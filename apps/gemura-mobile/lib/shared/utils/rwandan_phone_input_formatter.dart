@@ -1,22 +1,42 @@
 import 'package:flutter/services.dart';
 
-/// Custom input formatter for phone numbers with country code pickers
-/// This formatter automatically handles phone number formatting
-/// It removes non-digit characters and limits length appropriately
+/// Digits-only formatter for international phone fields (legacy).
 class PhoneInputFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
-    // Remove any non-digit characters
     String cleaned = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
-    
-    // Limit to reasonable length (15 digits max for international numbers)
     if (cleaned.length > 15) {
       cleaned = cleaned.substring(0, 15);
     }
-    
+    return TextEditingValue(
+      text: cleaned,
+      selection: TextSelection.collapsed(offset: cleaned.length),
+    );
+  }
+}
+
+/// Rwanda national number: exactly 9 digits (after +250), digits only.
+class RwandaLocalPhoneFormatter extends TextInputFormatter {
+  static const int nationalDigitCount = 9;
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var cleaned = newValue.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (cleaned.startsWith('250') && cleaned.length > nationalDigitCount) {
+      cleaned = cleaned.substring(3);
+    }
+    if (cleaned.startsWith('0') && cleaned.length > nationalDigitCount) {
+      cleaned = cleaned.substring(1);
+    }
+    if (cleaned.length > nationalDigitCount) {
+      cleaned = cleaned.substring(0, nationalDigitCount);
+    }
     return TextEditingValue(
       text: cleaned,
       selection: TextSelection.collapsed(offset: cleaned.length),

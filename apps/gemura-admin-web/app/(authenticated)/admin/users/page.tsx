@@ -73,7 +73,7 @@ export default function UsersPage() {
   /** Primitive snapshot — avoids effect loops when `useSearchParams` returns a new object each render. */
   const searchParamsKey = searchParams.toString();
 
-  /** Keep non-search filter fields in sync with the ref so loadUsers reads the latest values. */
+  /** Keep filters + sort in sync with the ref; search is driven by debounce/URL/clear only. */
   useEffect(() => {
     filtersRef.current = {
       ...filtersRef.current,

@@ -861,6 +861,63 @@ export class AdminController {
     return this.adminService.needsChangesMccOnboardingSubmission(user, accountId, submissionId, dto.notes);
   }
 
+  @Get('supplier-milk-onboarding/mcc-filter-options')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'MCC accounts referenced on supplier onboarding records (for filter dropdown)',
+  })
+  async listSupplierMilkOnboardingMccOptions(@CurrentUser() user: User, @CurrentAccount() accountId: string) {
+    return this.adminService.listSupplierMilkOnboardingMccFilterOptions(user, accountId);
+  }
+
+  @Get('supplier-milk-onboarding')
+  @RequirePermission('manage_users')
+  @ApiOperation({
+    summary: 'List supplier milk onboarding records (MCC wizard signups)',
+    description: 'Filter by MCC account (onboarding parent), account type, dates, and search user/phone/account.',
+  })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'mcc_account_id', required: false, description: 'Linked MCC Account UUID.' })
+  @ApiQuery({ name: 'account_type', required: false, enum: ['farmer', 'supplier'], description: 'Gemura user.account_type.' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'created_from', required: false, description: 'YYYY-MM-DD (created_at lower bound).' })
+  @ApiQuery({ name: 'created_to', required: false, description: 'YYYY-MM-DD (created_at upper bound).' })
+  @ApiQuery({ name: 'tz_offset_minutes', required: false, description: 'Client Date.getTimezoneOffset().' })
+  async listSupplierMilkOnboarding(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('mcc_account_id') mccAccountId?: string,
+    @Query('account_type') accountType?: string,
+    @Query('search') search?: string,
+    @Query('created_from') createdFrom?: string,
+    @Query('created_to') createdTo?: string,
+    @Query('tz_offset_minutes') tzOffsetMinutes?: string,
+  ) {
+    return this.adminService.listSupplierMilkOnboardings(
+      user,
+      accountId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+      mccAccountId,
+      accountType,
+      search,
+      createdFrom,
+      createdTo,
+      tzOffsetMinutes ? parseInt(tzOffsetMinutes, 10) : undefined,
+    );
+  }
+
+  @Get('supplier-milk-onboarding/:recordId')
+  @RequirePermission('manage_users')
+  @ApiOperation({ summary: 'Get one supplier milk onboarding row (payload JSON + links)' })
+  @ApiParam({ name: 'recordId', description: 'supplier_milk_onboardings.id' })
+  async getSupplierMilkOnboarding(@CurrentUser() user: User, @CurrentAccount() accountId: string, @Param('recordId') recordId: string) {
+    return this.adminService.getSupplierMilkOnboardingById(user, accountId, recordId);
+  }
+
   @Get('tenant-accounts')
   @RequireAnyPermission(['manage_users', 'view_regional_accounts'])
   @ApiOperation({

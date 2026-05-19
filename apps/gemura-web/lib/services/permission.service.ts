@@ -1,6 +1,6 @@
 import { useAuthStore } from '@/store/auth';
 import { isExternalCustomer, isExternalSupplier } from '@/lib/config/nav.config';
-import { isPlatformSuperAdminRole } from '@/lib/utils/platform-rbac';
+import { isPlatformSuperAdminRole, platformRolesMatch } from '@/lib/utils/platform-rbac';
 
 export interface Permission {
   [key: string]: boolean;
@@ -13,22 +13,27 @@ function isExternalMilkAccount(accountType: string | undefined): boolean {
 }
 
 export class PermissionService {
+  private static normalizeRole(role?: string | null): string {
+    return (role || '').trim().toLowerCase().replace(/\s+/g, '_');
+  }
+
   /**
    * Check if user has a specific permission
    */
   static hasPermission(permission: string): boolean {
     const { user, currentAccount } = useAuthStore.getState();
-    
+
     if (!user || !currentAccount) {
       return false;
     }
 
-    // Owner and admin have all permissions on MCC/operations accounts only — not on farmer/supplier/customer logins.
-    if (
-      !isExternalMilkAccount(currentAccount.account_type) &&
-      (currentAccount.role === 'owner' || currentAccount.role === 'admin')
-    ) {
-      return true;
+    const role = this.normalizeRole(currentAccount.role);
+
+    // Platform admin tier + managers: full bypass on tenant accounts only (not external farmer/customer/supplier portals).
+    if (!isExternalMilkAccount(currentAccount.account_type)) {
+      if (isPlatformSuperAdminRole(currentAccount.role) || role === 'manager') {
+        return true;
+      }
     }
 
     const permissions = currentAccount.permissions;
@@ -36,10 +41,10 @@ export class PermissionService {
       return false;
     }
 
-    // Check if permissions is array or object
     if (Array.isArray(permissions)) {
       return permissions.includes(permission);
-    } else if (typeof permissions === 'object') {
+    }
+    if (typeof permissions === 'object') {
       return permissions[permission] === true;
     }
 
@@ -50,14 +55,14 @@ export class PermissionService {
    * Check if user has any of the specified permissions
    */
   static hasAnyPermission(permissions: string[]): boolean {
-    return permissions.some(permission => this.hasPermission(permission));
+    return permissions.some((permission) => this.hasPermission(permission));
   }
 
   /**
    * Check if user has all of the specified permissions
    */
   static hasAllPermissions(permissions: string[]): boolean {
-    return permissions.every(permission => this.hasPermission(permission));
+    return permissions.every((permission) => this.hasPermission(permission));
   }
 
   /**
@@ -65,29 +70,22 @@ export class PermissionService {
    */
   static hasRole(role: string): boolean {
     const { currentAccount } = useAuthStore.getState();
-    return currentAccount?.role === role;
+    return platformRolesMatch(currentAccount?.role, role);
   }
 
   /**
-   * Check if user is admin or owner
+   * Platform super-admin tier (`system_admin`, legacy `owner`) or `admin` — excluding external milk portals.
    */
-  static isAdmin(): boolean {
-    const { currentAccount } = useAuthStore.getState();
-    if (!currentAccount) return false;
-    if (isExternalMilkAccount(currentAccount.account_type)) {
-      return false;
-    }
-    return currentAccount.role === 'admin' || currentAccount.role === 'owner';
-  }
-
-  /** System admin / admin / owner on a business account (not external milk logins). */
   static isSuperAdminOrAdmin(): boolean {
     const { currentAccount } = useAuthStore.getState();
     if (!currentAccount) return false;
-    if (isExternalMilkAccount(currentAccount.account_type)) {
-      return false;
-    }
-    return isPlatformSuperAdminRole(currentAccount.role ?? '');
+    if (isExternalMilkAccount(currentAccount.account_type)) return false;
+    return isPlatformSuperAdminRole(currentAccount.role);
+  }
+
+  /** @deprecated Prefer {@link isSuperAdminOrAdmin}; identical behavior. */
+  static isAdmin(): boolean {
+    return this.isSuperAdminOrAdmin();
   }
 
   /**
