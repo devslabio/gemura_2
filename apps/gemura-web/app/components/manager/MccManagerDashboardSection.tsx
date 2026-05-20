@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
@@ -7,11 +7,11 @@ import type { ApexOptions } from 'apexcharts';
 import type { OverviewResponse, OverviewRecentTransaction } from '@/lib/api/stats';
 import type { MccManagerOverviewData } from '@/lib/api/mcc-manager';
 import { mccManagerApi } from '@/lib/api/mcc-manager';
+import { MccOnboardingProfilePanel } from '@/app/components/manager/MccOnboardingProfilePanel';
 import { employeesApi } from '@/lib/api/employees';
 import { useToastStore } from '@/store/toast';
 import { usePermission } from '@/hooks/usePermission';
 import Icon, {
-  faBell,
   faBox,
   faArrowRight,
   faChartLine,
@@ -21,6 +21,11 @@ import Icon, {
   faTriangleExclamation,
   faUserFriends,
   faWallet,
+  faPlus,
+  faReceipt,
+  faUsers,
+  faCog,
+  faFileAlt,
 } from '@/app/components/Icon';
 
 type OverviewData = OverviewResponse['data'];
@@ -32,6 +37,8 @@ const SPLIT_UMUCUNDA = '#004AAD';
 
 const PANEL =
   'bg-white border border-gray-200 rounded-sm p-6 sm:p-7 min-h-0 h-full flex flex-col';
+/** Equal-height analytics / ops cards in a row */
+const PANEL_ROW = `${PANEL} min-h-[300px]`;
 const PANEL_TITLE = 'text-base font-semibold text-gray-900';
 const PANEL_DESC = 'text-sm text-gray-500 mt-1.5 mb-5';
 const TH = 'text-left py-2 px-3 text-[11px] font-medium text-gray-700 border-b border-gray-200 whitespace-nowrap';
@@ -152,6 +159,22 @@ function badgeNeutral() {
   return 'inline-flex rounded-sm bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-800';
 }
 
+export type ManagerQuickAction =
+  | 'sale'
+  | 'collection'
+  | 'transaction'
+  | 'staff'
+  | 'supplier'
+  | 'report'
+  | 'payments';
+
+function formatTimeAgo(iso: string): string {
+  const h = (Date.now() - new Date(iso).getTime()) / 3600000;
+  if (h < 1) return `${Math.max(1, Math.round(h * 60))}m ago`;
+  if (h < 24) return `${Math.round(h)}h ago`;
+  return new Date(iso).toLocaleDateString('en-GB', { month: 'short', day: 'numeric' });
+}
+
 function KpiTile({
   label,
   value,
@@ -159,6 +182,7 @@ function KpiTile({
   icon,
   accent,
   href,
+  progressPct,
 }: {
   label: string;
   value: string;
@@ -166,6 +190,7 @@ function KpiTile({
   icon: Parameters<typeof Icon>[0]['icon'];
   accent: 'blue' | 'green' | 'amber' | 'red' | 'slate';
   href?: string;
+  progressPct?: number | null;
 }) {
   const iconAccents = {
     blue: { bg: '#eff6ff', fg: '#004AAD' },
@@ -179,11 +204,19 @@ function KpiTile({
     <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="mb-1 text-xs font-semibold text-gray-500 truncate">{label}</p>
-          <p className="font-black leading-none text-slate-950 tracking-tight whitespace-nowrap text-[clamp(2.2rem,3.8vw,3.6rem)]">
+          <p className="mb-1 text-xs font-medium text-gray-500 uppercase tracking-wide truncate">{label}</p>
+          <p className="text-2xl sm:text-3xl font-bold leading-tight text-gray-900 tabular-nums break-words">
             {value}
           </p>
           <p className="mt-2 text-[11px] font-normal leading-snug text-gray-500 line-clamp-2">{sub}</p>
+          {progressPct != null && progressPct >= 0 ? (
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-sm bg-gray-100">
+              <div
+                className="h-full rounded-sm bg-[var(--primary)]"
+                style={{ width: `${Math.min(100, progressPct)}%` }}
+              />
+            </div>
+          ) : null}
         </div>
         <div
           className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-xl border border-black/5"
@@ -198,14 +231,14 @@ function KpiTile({
     return (
       <Link
         href={href}
-        className="block rounded-sm border border-gray-200 bg-white p-5 sm:p-6 min-h-[120px] min-w-0 transition-colors hover:border-gray-300"
+        className="block rounded-sm border border-gray-200 bg-white p-6 min-h-[128px] min-w-0 h-full transition-colors hover:border-gray-300"
       >
         {content}
       </Link>
     );
   }
   return (
-    <div className="rounded-sm border border-gray-200 bg-white p-5 sm:p-6 min-h-[120px] min-w-0 transition-colors hover:border-gray-300">
+    <div className="rounded-sm border border-gray-200 bg-white p-6 min-h-[128px] min-w-0 h-full transition-colors hover:border-gray-300">
       {content}
     </div>
   );
@@ -231,6 +264,11 @@ export interface MccManagerDashboardSectionProps {
   periodKey: OpsPeriodKey;
   rangeDateFrom: string;
   rangeDateTo: string;
+  onQuickAction?: (action: ManagerQuickAction) => void;
+  canCreateSales?: boolean;
+  canCreateCollections?: boolean;
+  canViewAnalytics?: boolean;
+  canManageUsers?: boolean;
 }
 
 export default function MccManagerDashboardSection({
@@ -242,6 +280,11 @@ export default function MccManagerDashboardSection({
   periodKey,
   rangeDateFrom,
   rangeDateTo,
+  onQuickAction,
+  canCreateSales = false,
+  canCreateCollections = false,
+  canViewAnalytics = false,
+  canManageUsers = false,
 }: MccManagerDashboardSectionProps) {
   const toast = useToastStore();
   const { hasPermission, hasAnyPermission } = usePermission();
@@ -427,16 +470,24 @@ export default function MccManagerDashboardSection({
   const profileTankCapacity = mcc?.profile?.cooling_tank_total_capacity_litres ?? null;
   const tankCapacityLitres = profileTankCapacity && profileTankCapacity > 0 ? profileTankCapacity : 0;
   const snapshotTankLitres = mcc?.facility_snapshot?.tank_used_litres;
-  const tankLitres = snapshotTankLitres ?? gate?.total_litres ?? litresPeriod;
-  const snapshotTankPct = mcc?.facility_snapshot?.tank_used_pct;
+  const tankLitresUsed =
+    snapshotTankLitres != null && Number(snapshotTankLitres) >= 0
+      ? Number(snapshotTankLitres)
+      : Number(gate?.total_litres ?? litresPeriod ?? 0);
+  const tankPctRaw =
+    tankCapacityLitres > 0 ? (tankLitresUsed / tankCapacityLitres) * 100 : null;
   const tankPct: number | null =
-    snapshotTankPct != null
-      ? Math.max(0, Math.min(100, Math.round(snapshotTankPct)))
-      : tankCapacityLitres > 0
-        ? Math.max(0, Math.min(100, Math.round((tankLitres / tankCapacityLitres) * 100)))
-        : null;
+    tankPctRaw != null ? Math.max(0, Math.min(100, Math.round(tankPctRaw * 10) / 10)) : null;
+  const tankPctLabel =
+    tankPct == null
+      ? '—'
+      : tankPct < 1 && tankPct > 0
+        ? `${tankPct}%`
+        : `${Math.round(tankPct)}%`;
   const tankTone: 'green' | 'amber' | 'red' | 'slate' =
     tankPct == null ? 'slate' : tankPct >= 85 ? 'red' : tankPct >= 70 ? 'amber' : 'green';
+  const tankRingVisualPct =
+    tankPct != null && tankPct > 0 && tankPct < 1 ? 1 : tankPct ?? 0;
   const litresTrend = (today?.breakdown?.length ? today.breakdown : last7?.breakdown ?? [])
     .slice(-14)
     .map((d) => ({
@@ -465,12 +516,34 @@ export default function MccManagerDashboardSection({
     tankCapacityLitres > 0
       ? `Bulk milk tank (${Math.round(tankCapacityLitres).toLocaleString()} L)`
       : 'Bulk milk tank';
+  const isSingleDay = rangeDateFrom === rangeDateTo;
+  const totalLitresDisplay = isSingleDay && gate ? gate.total_litres : litresPeriod;
+  const changePct = isSingleDay ? mcc?.litres_change_pct ?? null : null;
+  const trend7 = mcc?.trend_7d ?? [];
+  const quality = mcc?.quality_summary;
+  const recentDeliveries = mcc?.recent_deliveries ?? [];
+  const routes = mcc?.collection_by_route ?? [];
+  const topFarmers = mcc?.top_farmers_month ?? [];
+  const topCollectors = mcc?.top_collectors_month ?? [];
+  const payments = mcc?.payments_overview;
+  const coolingTanks = mcc?.cooling_tanks ?? [];
+  const onboardingProfile = mcc?.profile;
+  const onboardingCompletion = mcc?.onboarding_completion ?? null;
+  const accountLabel = mcc?.account_context?.name;
+  const hasOnboardingProfile =
+    Boolean(onboardingProfile?.source_submission_code) ||
+    coolingTanks.length > 0 ||
+    (onboardingProfile?.total_farmers_supplying != null && onboardingProfile.total_farmers_supplying > 0);
+  const rejectionCauses = mcc?.rejection_causes_top ?? [];
+  const fuelPct = mcc?.facility_snapshot?.generator_fuel_pct;
+  const rejectedPctOfTotal =
+    totalLitresDisplay > 0 ? Math.round((rejectedLitres / totalLitresDisplay) * 1000) / 10 : null;
   const donutSeries = splitTotal > 0 ? [directL, umucundaL] : [0, 0];
   const deliveryShareOptions: ApexOptions = {
     chart: { type: 'donut', toolbar: { show: false }, fontFamily: 'inherit' },
     labels: ['Direct farmer deliveries', 'Umucunda (via collector)'],
     colors: [SPLIT_DIRECT, SPLIT_UMUCUNDA],
-    legend: { position: 'right', fontSize: '11px', offsetY: 8 },
+    legend: { position: 'bottom', fontSize: '11px', horizontalAlign: 'center' },
     stroke: { width: 0 },
     dataLabels: { enabled: true, formatter: (v: number) => `${Math.round(v)}%` },
     plotOptions: {
@@ -490,28 +563,25 @@ export default function MccManagerDashboardSection({
       },
     },
   };
-  const trendCategories = litresTrend.map((t) => t.label);
-  const trendExpected = litresTrend.map(() => Math.round(litres7Avg || 0));
-  const dailyTrendOptions: ApexOptions = {
-    chart: { type: 'line', toolbar: { show: false }, fontFamily: 'inherit' },
-    colors: ['#2563eb', '#9ca3af'],
-    stroke: { width: [0, 2], curve: 'smooth' },
-    plotOptions: { bar: { borderRadius: 4, columnWidth: '52%' } },
+  const trend7Options: ApexOptions = {
+    chart: { type: 'area', toolbar: { show: false }, fontFamily: 'inherit', zoom: { enabled: false } },
+    colors: ['#004AAD'],
+    stroke: { curve: 'smooth', width: 2 },
+    fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05, stops: [0, 90, 100] } },
     dataLabels: { enabled: false },
-    legend: { position: 'top', fontSize: '11px' },
-    xaxis: { categories: trendCategories, labels: { rotate: -30, style: { fontSize: '10px', colors: '#6b7280' } } },
+    xaxis: {
+      categories: trend7.map((t) => t.label),
+      labels: { rotate: -25, style: { fontSize: '10px', colors: '#6b7280' } },
+    },
     yaxis: {
       labels: {
-        formatter: (v: number) => `${Math.round(v / 100) / 10}k`,
+        formatter: (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v))),
       },
     },
     grid: { borderColor: '#f3f4f6', strokeDashArray: 4 },
     tooltip: { y: { formatter: (v: number) => `${Math.round(v).toLocaleString()} L` } },
   };
-  const dailyTrendSeries = [
-    { name: 'Actual (L)', type: 'column', data: litresTrend.map((t) => Math.round(t.litres)) },
-    { name: 'Expected (L)', type: 'line', data: trendExpected },
-  ];
+  const trend7Series = [{ name: 'Litres', data: trend7.map((t) => Math.round(t.litres)) }];
   const buildOpsHref = (path: string, extra?: Record<string, string>) => {
     const params = new URLSearchParams({
       from: rangeDateFrom,
@@ -537,71 +607,60 @@ export default function MccManagerDashboardSection({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiTile
-          label={collectionsStatLabel(periodKey)}
-          value={formatL(litresPeriod)}
+          label={isSingleDay ? 'Total litres today' : collectionsStatLabel(periodKey)}
+          value={formatL(totalLitresDisplay)}
           sub={
-            litres7Avg > 0.01
-              ? `7d avg ${formatL(litres7Avg)}/d`
-              : 'No history yet'
+            changePct != null
+              ? `${changePct >= 0 ? '+' : ''}${changePct}% vs yesterday`
+              : litres7Avg > 0.01
+                ? `7d avg ${formatL(litres7Avg)}/d`
+                : 'No history yet'
           }
           icon={faBox}
-          accent={intakeVsAvg === 'good' ? 'green' : intakeVsAvg === 'amber' ? 'amber' : intakeVsAvg === 'bad' ? 'red' : 'blue'}
+          accent={changePct != null && changePct >= 0 ? 'green' : changePct != null ? 'red' : 'blue'}
           href={buildCollectionsHref()}
         />
         <KpiTile
-          label="Deliveries logged / expected"
-          value={deliveryExpected > 0 ? `${deliveryLogged}/${deliveryExpected}` : '0/0'}
-          sub={
-            deliveryExpected > 0
-              ? `${deliveryPct}% of expected`
-              : profileExpectedDeliveries == null
-                ? 'Set expected deliveries'
-                : 'No expected routes'
-          }
+          label="Deliveries logged"
+          value={String(deliveryLogged)}
+          sub={deliveryExpected > 0 ? `of ${deliveryExpected} expected` : 'Set expected deliveries'}
           icon={faClipboardList}
           accent={deliveryPct >= 95 ? 'green' : deliveryPct >= 80 ? 'amber' : 'red'}
           href={buildOpsHref('/operations/gate')}
+          progressPct={deliveryExpected > 0 ? deliveryPct : null}
         />
         <KpiTile
-          label="Via Umucunda"
-          value={formatL(umucundaL)}
-          sub={splitTotal > 0 ? `${pctUmu}% of intake` : 'No split yet'}
-          icon={faChartLine}
-          accent="blue"
-          href={buildOpsHref('/operations/gate', { source_type: 'umucunda' })}
-        />
-        <KpiTile
-          label="Direct Farmer"
+          label="Direct farmer"
           value={formatL(directL)}
-          sub={splitTotal > 0 ? `${pctDirect}% of intake` : 'No split yet'}
+          sub={splitTotal > 0 ? `${pctDirect}% of total` : 'No intake yet'}
           icon={faCheck}
           accent="green"
           href={buildCollectionsHref()}
         />
         <KpiTile
-          label={rejectionsStatLabel(periodKey)}
+          label="Via collectors"
+          value={formatL(umucundaL)}
+          sub={splitTotal > 0 ? `${pctUmu}% of total` : 'No intake yet'}
+          icon={faChartLine}
+          accent="blue"
+          href={buildOpsHref('/operations/gate')}
+        />
+        <KpiTile
+          label="Rejected today"
           value={formatL(rejectedLitres)}
-          sub={`${gateRejections.length} gate • ${rejectedMilkInPeriod.length} sale`}
+          sub={rejectedPctOfTotal != null ? `${rejectedPctOfTotal}% of total` : `${gateRejections.length} gate tests`}
           icon={faTriangleExclamation}
           accent={rejectedLitres > 0 ? 'amber' : 'green'}
           href={buildOpsHref('/operations/traceability', { outcome: 'rejected' })}
         />
         <KpiTile
-          label="Unresolved Sources"
-          value={String(unresolvedGateRejections.length)}
-          sub={unresolvedGateRejections.length > 0 ? 'Needs follow-up' : 'No pending approvals'}
-          icon={faTriangleExclamation}
-          accent={unresolvedGateRejections.length > 0 ? 'red' : 'green'}
-          href={buildOpsHref('/operations/traceability', { outcome: 'rejected' })}
-        />
-        <KpiTile
-          label="Tank Capacity Used"
-          value={tankPct == null ? '—' : `${tankPct}%`}
+          label="Tank capacity used"
+          value={tankPctLabel}
           sub={
             tankCapacityLitres > 0
-              ? `${Math.round(tankLitres).toLocaleString()} / ${tankCapacityLitres.toLocaleString()} L`
+              ? `${Math.round(tankLitresUsed).toLocaleString()} / ${tankCapacityLitres.toLocaleString()} L`
               : 'Set tank capacity'
           }
           icon={faClock}
@@ -609,12 +668,12 @@ export default function MccManagerDashboardSection({
           href={buildOpsHref('/operations/gate')}
         />
         <KpiTile
-          label="Manifest Compliance"
-          value={manifestRows.length ? `${manifestPct}%` : mccLoading ? '…' : '100%'}
-          sub={manifestRows.length ? `${submittedCount}/${manifestRows.length} submitted` : 'No manifests'}
-          icon={faClipboardList}
-          accent={manifestPct >= 90 ? 'green' : manifestPct >= 80 ? 'amber' : 'red'}
-          href={buildOpsHref('/operations/manifests')}
+          label="Staff on shift"
+          value={String(onDutyCount)}
+          sub={`of ${staffRows.length} scheduled`}
+          icon={faUserFriends}
+          accent={onDutyCount > 0 ? 'green' : 'amber'}
+          href={buildOpsHref('/operations/staff')}
         />
         <KpiTile
           label="Wallet balance"
@@ -622,242 +681,480 @@ export default function MccManagerDashboardSection({
           sub="Available"
           icon={faWallet}
           accent="slate"
-          href={buildOpsHref('/finance/transactions')}
-        />
-        <KpiTile
-          label="Staff on shift"
-          value={String(onDutyCount)}
-          sub={`${staffRows.length} scheduled`}
-          icon={faUserFriends}
-          accent={onDutyCount > 0 ? 'green' : 'amber'}
-          href={buildOpsHref('/operations/staff')}
+          href="/finance"
         />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
-        <section className={PANEL}>
-          <SectionHeader number={1} title="Delivery source breakdown (litres)" />
-          <p className={PANEL_DESC}>Direct vs Umucunda (gate day).</p>
-          {splitTotal <= 0 ? (
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+          <section className={`${PANEL} lg:col-span-2 min-h-[320px]`}>
+            <SectionHeader number={1} title="Daily collection trend (litres)" />
+            <p className={PANEL_DESC}>Last 7 days ending {rangeDateTo}.</p>
+            <div className="flex-1 min-h-[220px]">
+              {trend7.length === 0 ? (
+                <p className={EMPTY}>{mccLoading ? 'Loading…' : 'No gate intake in this window.'}</p>
+              ) : (
+                <div className="h-full min-h-[220px]">
+                  <Chart options={trend7Options} series={trend7Series} type="area" height="100%" />
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section className={`${PANEL} min-h-[320px]`}>
+            <SectionHeader number={2} title="Collection source mix (today)" />
+            <p className={PANEL_DESC}>Direct farmers vs collectors.</p>
+            <div className="flex-1 flex items-center justify-center min-h-[220px] w-full">
+              {splitTotal <= 0 ? (
+                <p className={EMPTY}>{mccLoading ? 'Loading…' : `No gate intake (${rangeDateTo}).`}</p>
+              ) : (
+                <div className="w-full max-w-[280px] mx-auto">
+                  <Chart options={deliveryShareOptions} series={donutSeries} type="donut" height={240} />
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
+          <section className={PANEL_ROW}>
+            <SectionHeader number={3} title="Quality summary (today)" />
+            <p className={PANEL_DESC}>Gate milk test outcomes.</p>
+            <div className="flex-1 flex flex-col justify-center">
+              {quality && (quality.accepted_pct != null || quality.rejected_pct != null) ? (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-xs font-medium text-gray-600 mb-1">
+                      <span>Accepted ({quality.accepted_pct ?? 0}%)</span>
+                      <span>Rejected ({quality.rejected_pct ?? 0}%)</span>
+                    </div>
+                    <div className="h-3 flex overflow-hidden rounded-sm bg-gray-100">
+                      <div
+                        className="bg-emerald-500"
+                        style={{ width: `${quality.accepted_pct ?? 0}%` }}
+                      />
+                      <div
+                        className="bg-amber-500"
+                        style={{ width: `${quality.rejected_pct ?? 0}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-700 mb-2">Top rejection causes</p>
+                    <ul className="space-y-1.5 text-sm text-gray-700">
+                      {rejectionCauses.length === 0 ? (
+                        <li className="text-gray-500">None recorded today</li>
+                      ) : (
+                        rejectionCauses.map((c) => (
+                          <li key={c.cause} className="flex justify-between gap-2">
+                            <span className="truncate">{c.cause}</span>
+                            <span className="tabular-nums text-gray-500 shrink-0">{c.count}</span>
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                <p className={EMPTY}>No completed milk tests today.</p>
+              )}
+            </div>
+          </section>
+
+          <section className={PANEL_ROW}>
+            <SectionHeader number={4} title="Tank & cooling status" />
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 py-2">
+              <div
+                className="relative flex h-32 w-32 shrink-0 items-center justify-center rounded-full border-4 border-gray-100"
+                style={{
+                  background: `conic-gradient(${tankTone === 'red' ? '#ef4444' : tankTone === 'amber' ? '#f59e0b' : '#10b981'} ${tankRingVisualPct}%, #f3f4f6 0)`,
+                }}
+              >
+                <span className="rounded-full bg-white px-3 py-1 text-xl font-bold text-gray-900">
+                  {tankPctLabel}
+                </span>
+              </div>
+              <div className="grid w-full grid-cols-2 gap-2 text-sm">
+                <div className="rounded-sm border border-gray-200 p-2.5 text-center sm:text-left">
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500">Temperature</p>
+                  <p className="font-semibold text-emerald-700 mt-0.5">{temperatureValue}</p>
+                </div>
+                <div className="rounded-sm border border-gray-200 p-2.5 text-center sm:text-left">
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500">Generator</p>
+                  <p className="font-semibold text-gray-900 mt-0.5">{generatorLabel}</p>
+                </div>
+                <div className="rounded-sm border border-gray-200 p-2.5 text-center sm:text-left">
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500">Fuel level</p>
+                  <p className="font-semibold text-gray-900 mt-0.5">{fuelPct != null ? `${Math.round(fuelPct)}%` : '—'}</p>
+                </div>
+                <div className="rounded-sm border border-gray-200 p-2.5 text-center sm:text-left">
+                  <p className="text-[10px] uppercase tracking-wide text-gray-500">Power</p>
+                  <p className="font-semibold text-gray-900 mt-0.5">{powerStatusLabel}</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className={PANEL_ROW}>
+            <SectionHeader number={5} title="Recent deliveries" />
+            <p className={PANEL_DESC}>Latest gate arrivals.</p>
+            <div className="flex-1 flex flex-col min-h-0">
+              {recentDeliveries.length === 0 ? (
+                <p className={EMPTY}>No deliveries logged.</p>
+              ) : (
+                <ul className="space-y-2 flex-1 overflow-y-auto max-h-[200px] pr-0.5">
+                  {recentDeliveries.map((d) => (
+                    <li key={d.id} className="rounded-sm border border-gray-100 bg-gray-50/80 px-3 py-2">
+                      <div className="flex justify-between gap-2 text-sm font-medium text-gray-900">
+                        <span className="truncate">{d.source_name}</span>
+                        <span className="tabular-nums shrink-0">{formatL(d.litres)}</span>
+                      </div>
+                      <div className="mt-0.5 flex justify-between text-xs text-gray-500">
+                        <span>{d.source_type_label}</span>
+                        <span>{formatTimeAgo(d.arrived_at)}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <Link
+              href={buildOpsHref('/operations/gate')}
+              className="mt-auto pt-4 inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline"
+            >
+              All gate deliveries
+              <Icon icon={faArrowRight} size="xs" />
+            </Link>
+          </section>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+        <section className={`${PANEL_ROW} min-h-[360px]`}>
+          <SectionHeader number={6} title="MCC profile (from onboarding)" />
+          <p className={PANEL_DESC}>Wizard completion and operational baseline.</p>
+          <div className="flex-1 flex flex-col min-h-[240px]">
+            <MccOnboardingProfilePanel
+              variant="compact"
+              profile={onboardingProfile ?? null}
+              coolingTanks={coolingTanks}
+              completion={onboardingCompletion}
+              accountName={accountLabel}
+            />
+          </div>
+          <Link
+            href="/operations/mcc-profile"
+            className="mt-auto pt-4 inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline"
+          >
+            Full MCC profile
+            <Icon icon={faArrowRight} size="xs" />
+          </Link>
+        </section>
+
+        <section className={PANEL_ROW}>
+          <SectionHeader number={7} title="Cooling tanks (from onboarding)" />
+          <p className={PANEL_DESC}>
+            {onboardingProfile?.source_submission_code
+              ? `Synced from submission ${onboardingProfile.source_submission_code}.`
+              : 'Tank inventory declared during MCC onboarding.'}
+          </p>
+          {coolingTanks.length === 0 ? (
             <p className={EMPTY}>
-              {mccLoading
-                ? 'Loading…'
-                : `No gate intake (${rangeDateTo}).`}
+              {hasOnboardingProfile
+                ? 'No individual tanks recorded.'
+                : 'No onboarding data synced yet. In admin, link this account to the MCC onboarding submission.'}
             </p>
           ) : (
-            <div>
-              <Chart options={deliveryShareOptions} series={donutSeries} type="donut" height={240} />
-              <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
-                <span>{formatL(directL)} direct</span>
-                <span>{formatL(umucundaL)} Umucunda</span>
-              </div>
+            <div className="flex-1 min-h-0 overflow-x-auto">
+              <table className="w-full min-w-[420px] border-collapse">
+                <thead>
+                  <tr>
+                    <th className={TH}>Tank</th>
+                    <th className={TH}>Capacity (L)</th>
+                    <th className={TH}>Year / age</th>
+                    <th className={TH}>Condition</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {coolingTanks.map((t, idx) => (
+                    <tr key={`${t.tank_number ?? 'tank'}-${idx}`}>
+                      <td className={TD}>{t.tank_number?.trim() || `Tank ${idx + 1}`}</td>
+                      <td className={TD}>
+                        {t.capacity_litres != null ? Math.round(t.capacity_litres).toLocaleString() : '—'}
+                      </td>
+                      <td className={TD_MUTED}>{t.year_or_age?.trim() || '—'}</td>
+                      <td className={TD_MUTED}>{t.condition?.trim() || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td className={`${TD} font-semibold`} colSpan={1}>
+                      Total
+                    </td>
+                    <td className={`${TD} font-semibold`} colSpan={3}>
+                      {tankCapacityLitres > 0
+                        ? `${Math.round(tankCapacityLitres).toLocaleString()} L`
+                        : '—'}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           )}
         </section>
 
-        <section className={PANEL}>
-          <SectionHeader number={2} title="Manifest compliance tracker" />
-          <p className={PANEL_DESC}>Expected, submitted, payment hold.</p>
-          {manifestRows.length === 0 ? (
-            <p className={EMPTY}>No manifests ({rangeDateTo}).</p>
-          ) : (
-            <div className="overflow-x-auto -mx-1">
-              <table className="w-full min-w-[420px]">
-                <thead>
-                  <tr>
-                    <th className={TH}>Collector / route</th>
-                    <th className={`${TH} text-right`}>Expected (L)</th>
-                    <th className={TH}>Submitted</th>
-                    <th className={TH}>Payment hold</th>
-                    <th className={TH}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {manifestRows.map((row) => (
-                    <tr key={row.id} className="hover:bg-gray-50/80">
-                      <td className={TD}>
-                        <div className="font-medium text-gray-900">{row.route_label}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">{row.manifest_ref}</div>
-                      </td>
-                      <td className={`${TD} text-right tabular-nums`}>{Math.round(row.expected_litres).toLocaleString()}</td>
-                      <td className={TD}>
-                        <span className={badgeSubmitted(row.submitted)}>
-                          {row.submitted ? 'On time' : 'Not submitted'}
-                        </span>
-                      </td>
-                      <td className={TD_MUTED}>
-                        {row.payment_hold ? <span className="text-amber-700 font-medium">On hold</span> : 'No'}
-                      </td>
-                      <td className={TD_MUTED}>
-                        {row.status}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="mt-auto pt-3 flex justify-center">
-            <Link href={buildOpsHref('/operations/manifests')} className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
-              All manifests
-              <Icon icon={faArrowRight} size="xs" />
-            </Link>
-          </div>
-        </section>
-
-        <section className={PANEL}>
-          <SectionHeader number={3} title="Rejection events & traceability status" />
-          <p className={PANEL_DESC}>Rejected gate tests ({rangeDateTo}).</p>
-          {gateRejections.length === 0 ? (
-            <p className={EMPTY}>No gate rejections.</p>
-          ) : (
-            <div className="overflow-x-auto -mx-1">
-              <table className="w-full min-w-[460px]">
-                <thead>
-                  <tr>
-                    <th className={TH}>Source</th>
-                    <th className={`${TH} text-right`}>Vol (L)</th>
-                    <th className={TH}>Cause</th>
-                    <th className={TH}>Farms</th>
-                    <th className={TH}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {gateRejections.slice(0, 6).map((r) => (
-                    <tr key={r.test_result_id} className="hover:bg-gray-50/80">
-                      <td className={TD}>{r.source_label}</td>
-                      <td className={`${TD} text-right tabular-nums`}>{r.volume_litres}</td>
-                      <td className={TD}>
-                        <span title={r.rejection_cause}>
-                          {r.rejection_cause}
-                        </span>
-                      </td>
-                      <td className={TD}>
-                        <span className="text-gray-600" title={r.farms_summary}>
-                          {r.farms_summary}
-                        </span>
-                      </td>
-                      <td className={TD}>
-                        <span className={badgeNeutral()}>{resolutionLabel(r.resolution_status)}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          <div className="mt-auto pt-3 flex justify-center">
-            <Link href={buildOpsHref('/operations/traceability', { outcome: 'rejected' })} className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
-              Rejection log
-              <Icon icon={faArrowRight} size="xs" />
-            </Link>
-          </div>
-        </section>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-stretch">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 items-stretch">
         <section className={PANEL}>
-          <SectionHeader number={4} title="Tank capacity & cooling status" />
-          <div className="space-y-4">
-            <div className="rounded-sm border border-gray-200 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">{tankTitle}</span>
-                <span className="text-sm font-semibold text-gray-900">{tankPct == null ? '—' : `${tankPct}%`}</span>
-              </div>
-              <div className="mt-2 h-2.5 overflow-hidden rounded-sm bg-gray-100">
-                <div
-                  className={`h-full rounded-sm ${tankTone === 'red' ? 'bg-red-500' : tankTone === 'amber' ? 'bg-amber-500' : tankTone === 'green' ? 'bg-emerald-500' : 'bg-gray-300'}`}
-                  style={{ width: `${tankPct ?? 0}%` }}
-                />
-              </div>
-              <p className="mt-2 text-xs text-gray-500">
-                {tankCapacityLitres > 0
-                  ? `${Math.round(tankLitres).toLocaleString()} / ${tankCapacityLitres.toLocaleString()} L`
-                  : 'Tank capacity not set'}
-              </p>
+          <SectionHeader number={8} title="Top farmers (this month)" />
+          {topFarmers.length === 0 ? (
+            <p className={EMPTY}>No farmer collections this month.</p>
+          ) : (
+            <div className="overflow-x-auto -mx-1">
+              <table className="w-full min-w-[280px]">
+                <thead>
+                  <tr>
+                    <th className={TH}>Farmer</th>
+                    <th className={`${TH} text-right`}>Litres</th>
+                    <th className={`${TH} text-right`}>Del.</th>
+                    <th className={TH}>Quality</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topFarmers.map((f) => (
+                    <tr key={f.supplier_account_id} className="hover:bg-gray-50/80">
+                      <td className={TD}>{f.name}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{f.litres.toLocaleString()}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{f.deliveries}</td>
+                      <td className={TD_MUTED}>
+                        {f.quality_grade !== '—' && f.quality_score_pct != null
+                          ? `${f.quality_grade} (${f.quality_score_pct}%)`
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-sm border border-gray-200 p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Temperature</p>
-                <p className="mt-1 text-sm font-semibold text-emerald-700">{temperatureValue}</p>
-              </div>
-              <div className="rounded-sm border border-gray-200 p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Power status</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">{powerStatusLabel}</p>
-              </div>
-              <div className="rounded-sm border border-gray-200 p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Generator</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">{generatorLabel}</p>
-              </div>
-              <div className="rounded-sm border border-gray-200 p-3">
-                <p className="text-xs uppercase tracking-wide text-gray-500">Capacity status</p>
-                <p className="mt-1 text-sm font-semibold text-gray-900">
-                  {tankPct == null ? 'Not set' : tankTone === 'red' ? 'Critical' : tankTone === 'amber' ? 'Watch' : 'Safe'}
-                </p>
-              </div>
-            </div>
-            <p className="text-xs text-gray-500">
-              {tankCapacityLitres > 0
-                ? 'Target: keep below 85% by evening intake close.'
-                : 'Set tank capacity in operational profile to enable utilization targets.'}
-            </p>
-          </div>
+          )}
         </section>
 
         <section className={PANEL}>
-          <SectionHeader number={5} title="Staff on shift" />
-          <p className={PANEL_DESC}>Gate-facing roles. Changes sync to employee access.</p>
+          <SectionHeader number={9} title="Top collectors (this month)" />
+          {topCollectors.length === 0 ? (
+            <p className={EMPTY}>No collector intake this month.</p>
+          ) : (
+            <div className="overflow-x-auto -mx-1">
+              <table className="w-full min-w-[280px]">
+                <thead>
+                  <tr>
+                    <th className={TH}>Collector</th>
+                    <th className={`${TH} text-right`}>Litres</th>
+                    <th className={`${TH} text-right`}>Farms</th>
+                    <th className={TH}>Compliance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topCollectors.map((c, i) => (
+                    <tr key={`${c.name}-${i}`} className="hover:bg-gray-50/80">
+                      <td className={TD}>{c.name}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{c.litres.toLocaleString()}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{c.farms_served}</td>
+                      <td className={TD_MUTED}>{c.compliance_pct}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className={PANEL}>
+          <SectionHeader number={10} title="Staff on shift" />
           {mccLoading && staffRows.length === 0 ? (
             <p className={EMPTY}>Loading roster…</p>
           ) : staffRows.length === 0 ? (
-            <p className={EMPTY}>No gate-role staff on this account.</p>
+            <p className={EMPTY}>No gate staff linked.</p>
           ) : (
             <div className="overflow-x-auto -mx-1">
-              <table className="w-full min-w-[360px]">
+              <table className="w-full min-w-[300px]">
                 <thead>
                   <tr>
                     <th className={TH}>Name</th>
                     <th className={TH}>Role</th>
-                    <th className={`${TH} text-right`}>Task completion</th>
-                    <th className={TH}>Hours</th>
-                    <th className={`${TH} text-right`}>Reassign</th>
+                    <th className={TH}>Shift</th>
+                    <th className={TH}>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {staffRows.map((row) => (
+                  {staffRows.slice(0, 6).map((row) => (
                     <tr key={row.user_account_id} className="hover:bg-gray-50/80">
-                      <td className={`${TD} font-medium`}>{row.name}</td>
+                      <td className={TD}>{row.name}</td>
+                      <td className={TD_MUTED}>{staffRoleLabel(row.role)}</td>
+                      <td className={TD_MUTED}>Day</td>
                       <td className={TD}>
-                        <span className="inline-flex rounded-sm border border-gray-200 bg-gray-50 px-2 py-1 text-xs font-semibold text-gray-700">
-                          {staffRoleLabel(row.role)}
+                        <span className={row.on_duty ? badgeSubmitted(true) : badgeNeutral()}>
+                          {row.on_duty ? 'On shift' : 'Off'}
                         </span>
                       </td>
-                      <td className={`${TD} text-right`}>
-                        <div className="inline-flex items-center gap-2 min-w-[78px]">
-                          <div className="h-1.5 w-14 rounded-sm bg-gray-100 overflow-hidden">
-                            <div
-                              className="h-full rounded-sm bg-emerald-500"
-                              style={{ width: `${Math.max(6, Math.min(100, row.tasks_done))}%` }}
-                            />
-                          </div>
-                          <span className="text-xs tabular-nums text-gray-700">{row.tasks_done}%</span>
-                        </div>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <Link href={buildOpsHref('/operations/staff')} className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
+            View staff
+            <Icon icon={faArrowRight} size="xs" />
+          </Link>
+        </section>
+
+        <section className={PANEL}>
+          <SectionHeader number={11} title="Quick actions" />
+          <div className="grid grid-cols-2 gap-2">
+            {canViewAnalytics && onQuickAction ? (
+              <button
+                type="button"
+                onClick={() => onQuickAction('transaction')}
+                className="flex flex-col items-center gap-2 rounded-sm border border-gray-200 p-3 text-center hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
+              >
+                <Icon icon={faReceipt} className="text-[var(--primary)]" />
+                <span className="text-xs font-semibold text-gray-800">Record expense</span>
+              </button>
+            ) : null}
+            {canManageUsers ? (
+              <Link
+                href={buildOpsHref('/operations/staff')}
+                className="flex flex-col items-center gap-2 rounded-sm border border-gray-200 p-3 text-center no-underline hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
+              >
+                <Icon icon={faUsers} className="text-[var(--primary)]" />
+                <span className="text-xs font-semibold text-gray-800">Staff</span>
+              </Link>
+            ) : null}
+            {canCreateCollections && onQuickAction ? (
+              <button
+                type="button"
+                onClick={() => onQuickAction('collection')}
+                className="flex flex-col items-center gap-2 rounded-sm border border-gray-200 p-3 text-center hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
+              >
+                <Icon icon={faPlus} className="text-[var(--primary)]" />
+                <span className="text-xs font-semibold text-gray-800">New collection</span>
+              </button>
+            ) : null}
+            <Link
+              href="/finance"
+              className="flex flex-col items-center gap-2 rounded-sm border border-gray-200 p-3 text-center no-underline hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
+            >
+              <Icon icon={faWallet} className="text-[var(--primary)]" />
+              <span className="text-xs font-semibold text-gray-800">Payments</span>
+            </Link>
+            <Link
+              href={buildOpsHref('/operations/manifests')}
+              className="flex flex-col items-center gap-2 rounded-sm border border-gray-200 p-3 text-center no-underline hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
+            >
+              <Icon icon={faFileAlt} className="text-[var(--primary)]" />
+              <span className="text-xs font-semibold text-gray-800">Manifests</span>
+            </Link>
+            {canCreateSales && onQuickAction ? (
+              <button
+                type="button"
+                onClick={() => onQuickAction('sale')}
+                className="flex flex-col items-center gap-2 rounded-sm border border-gray-200 p-3 text-center hover:border-[var(--primary)] hover:bg-[var(--primary)]/5"
+              >
+                <Icon icon={faChartLine} className="text-[var(--primary)]" />
+                <span className="text-xs font-semibold text-gray-800">New sale</span>
+              </button>
+            ) : null}
+          </div>
+        </section>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+        <section className={`${PANEL} lg:col-span-4`}>
+          <SectionHeader number={10} title="Collection by route (today)" />
+          {routes.length === 0 ? (
+            <p className={EMPTY}>No routes for {rangeDateTo}.</p>
+          ) : (
+            <div className="overflow-x-auto -mx-1">
+              <table className="w-full min-w-[400px]">
+                <thead>
+                  <tr>
+                    <th className={TH}>Route</th>
+                    <th className={TH}>Collector</th>
+                    <th className={`${TH} text-right`}>Farms</th>
+                    <th className={`${TH} text-right`}>Litres</th>
+                    <th className={TH}>Compliance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {routes.map((r) => (
+                    <tr key={r.route_label} className="hover:bg-gray-50/80">
+                      <td className={TD}>{r.route_label}</td>
+                      <td className={TD_MUTED}>{r.collector_name}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{r.farms_count}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{r.litres.toLocaleString()}</td>
+                      <td className={TD_MUTED}>{r.compliance_pct}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className={`${PANEL} lg:col-span-5`}>
+          <SectionHeader number={11} title="Rejections requiring follow-up" />
+          {gateRejections.length === 0 ? (
+            <p className={EMPTY}>No rejections for {rangeDateTo}.</p>
+          ) : (
+            <div className="overflow-x-auto -mx-1">
+              <table className="w-full min-w-[560px]">
+                <thead>
+                  <tr>
+                    <th className={TH}>Delivered by</th>
+                    <th className={`${TH} text-right`}>Vol (L)</th>
+                    <th className={TH}>Cause</th>
+                    <th className={TH}>Elapsed</th>
+                    <th className={TH}>Status</th>
+                    <th className={`${TH} text-right`}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gateRejections.map((r) => (
+                    <tr key={r.test_result_id} className="hover:bg-gray-50/80">
+                      <td className={TD}>{r.source_label}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{r.volume_litres}</td>
+                      <td className={TD}>
+                        <span className="line-clamp-1" title={r.rejection_cause}>
+                          {r.rejection_cause}
+                        </span>
                       </td>
                       <td className={TD_MUTED}>
-                        {row.shift_started_at
-                          ? `${((Date.now() - new Date(row.shift_started_at).getTime()) / 3600000).toFixed(1)}h`
-                          : '—'}
+                        {r.hours_elapsed != null ? `${r.hours_elapsed}h` : '—'}
+                      </td>
+                      <td className={TD}>
+                        <span className={badgeNeutral()}>{r.follow_up_status ?? resolutionLabel(r.resolution_status)}</span>
                       </td>
                       <td className={`${TD} text-right`}>
-                        {canReassignGateStaff ? (
+                        {r.resolution_status === 'resolved' ? (
+                          <span className="text-xs text-gray-400">Done</span>
+                        ) : canApproveTraceability ? (
                           <button
                             type="button"
-                            className="rounded-sm border border-gray-300 bg-white px-2.5 py-1 text-xs text-[var(--primary)] hover:bg-[var(--primary)]/5"
+                            onClick={() => approveResolution(r.test_result_id)}
+                            className="rounded-sm border border-[var(--primary)] bg-white px-2.5 py-1 text-xs font-medium text-[var(--primary)] hover:bg-[var(--primary)]/5"
                           >
-                            Reassign
+                            Review
                           </button>
                         ) : (
-                          <span className="text-xs text-gray-400">—</span>
+                          <Link
+                            href={buildOpsHref('/operations/traceability', { outcome: 'rejected' })}
+                            className="text-xs font-semibold text-[var(--primary)] hover:underline"
+                          >
+                            View
+                          </Link>
                         )}
                       </td>
                     </tr>
@@ -866,21 +1163,63 @@ export default function MccManagerDashboardSection({
               </table>
             </div>
           )}
-          <div className="mt-auto pt-3 flex justify-start">
-            <Link href={buildOpsHref('/operations/staff')} className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
-              View full staff schedule
-              <Icon icon={faArrowRight} size="xs" />
-            </Link>
-          </div>
         </section>
 
+        <section className={`${PANEL} lg:col-span-3`}>
+          <SectionHeader number={14} title="Payments overview" />
+          {payments ? (
+            <ul className="space-y-3 text-sm flex-1">
+              <li className="flex justify-between border-b border-gray-100 pb-2">
+                <span className="text-gray-600">Payments this week</span>
+                <span className="font-semibold text-gray-900">
+                  {formatMoney(payments.payments_week_amount, mcc?.wallet?.currency ?? 'RWF')}
+                  <span className="text-gray-500 font-normal"> ({payments.payments_week_count})</span>
+                </span>
+              </li>
+              <li className="flex justify-between border-b border-gray-100 pb-2">
+                <span className="text-gray-600">Payments yesterday</span>
+                <span className="font-semibold text-gray-900">
+                  {formatMoney(payments.payments_yesterday_amount, mcc?.wallet?.currency ?? 'RWF')}
+                </span>
+              </li>
+              <li className="flex justify-between border-b border-gray-100 pb-2">
+                <span className="text-gray-600">Pending payments</span>
+                <span className="font-semibold text-amber-800">
+                  {formatMoney(payments.pending_payments_amount, mcc?.wallet?.currency ?? 'RWF')}
+                  <span className="font-normal text-gray-500"> ({payments.pending_payments_count})</span>
+                </span>
+              </li>
+              <li className="flex justify-between border-b border-gray-100 pb-2">
+                <span className="text-gray-600">Holds (quality)</span>
+                <span className="font-semibold text-gray-900">{payments.holds_quality_count}</span>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-gray-600">Holds (other)</span>
+                <span className="font-semibold text-gray-900">{payments.holds_other_count}</span>
+              </li>
+              <li className="flex justify-between pt-2 border-t border-gray-200">
+                <span className="text-gray-700 font-medium">Wallet balance</span>
+                <span className="font-bold text-gray-900">{walletValue}</span>
+              </li>
+            </ul>
+          ) : (
+            <p className={EMPTY}>Payment summary unavailable.</p>
+          )}
+          <Link href="/finance" className="mt-auto pt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
+            View payments
+            <Icon icon={faArrowRight} size="xs" />
+          </Link>
+        </section>
+      </div>
+
+      {alerts.length > 0 ? (
         <section className={PANEL}>
-          <SectionHeader number={6} title="Alerts queue" />
-          <ul className="space-y-2 flex-1">
-            {alerts.map((a) => (
+          <SectionHeader number={15} title="Alerts" />
+          <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {alerts.slice(0, 4).map((a) => (
               <li
                 key={a.id}
-                className={`flex gap-3 rounded-sm border px-3 py-2.5 text-sm ${
+                className={`rounded-sm border px-3 py-2 text-sm ${
                   a.tone === 'critical'
                     ? 'border-red-200 bg-red-50/90'
                     : a.tone === 'warn'
@@ -888,86 +1227,13 @@ export default function MccManagerDashboardSection({
                       : 'border-gray-200 bg-gray-50/90'
                 }`}
               >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm bg-white/80 text-xs font-semibold text-gray-500 border border-gray-200">
-                  {a.priority}
-                </span>
-                <div className="min-w-0">
-                  <div className="font-semibold text-gray-900">{a.title}</div>
-                  <div className="text-gray-600 mt-0.5 leading-snug">{a.detail}</div>
-                </div>
+                <span className="font-semibold text-gray-900">{a.title}</span>
+                <p className="text-gray-600 mt-0.5 text-xs">{a.detail}</p>
               </li>
             ))}
           </ul>
-          <Link href="/alerts" className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--primary)] hover:underline">
-            View all alerts
-            <Icon icon={faArrowRight} size="xs" />
-          </Link>
         </section>
-      </div>
-
-      <section className={PANEL}>
-        <SectionHeader number={7} title="Daily litres trend (last 14 days)" />
-        {litresTrend.length === 0 ? (
-          <p className={EMPTY}>No trend data available for current period.</p>
-        ) : (
-          <div className="h-64">
-            <Chart options={dailyTrendOptions} series={dailyTrendSeries} type="line" height="100%" />
-          </div>
-        )}
-      </section>
-
-      <section className={PANEL}>
-        <SectionHeader number={8} title="Rejection source resolution actions" />
-        <p className={PANEL_DESC}>Manager action queue for unresolved gate test sources.</p>
-        {gateRejections.length === 0 ? (
-          <p className={EMPTY}>No actionable gate rejections for {rangeDateTo}.</p>
-        ) : (
-          <div className="overflow-x-auto -mx-1">
-            <table className="w-full min-w-[560px]">
-              <thead>
-                <tr>
-                  <th className={TH}>Source</th>
-                  <th className={`${TH} text-right`}>Vol (L)</th>
-                  <th className={TH}>Cause</th>
-                  <th className={TH}>Status</th>
-                  <th className={`${TH} text-right`}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gateRejections.map((r) => (
-                  <tr key={r.test_result_id} className="hover:bg-gray-50/80">
-                    <td className={TD}>{r.source_label}</td>
-                    <td className={`${TD} text-right tabular-nums`}>{r.volume_litres}</td>
-                    <td className={TD}>
-                      <span title={r.rejection_cause}>
-                        {r.rejection_cause}
-                      </span>
-                    </td>
-                    <td className={TD}>
-                      <span className={badgeNeutral()}>{resolutionLabel(r.resolution_status)}</span>
-                    </td>
-                    <td className={`${TD} text-right`}>
-                      {r.resolution_status === 'resolved' ? (
-                        <span className="text-sm text-gray-400">Done</span>
-                      ) : canApproveTraceability ? (
-                        <button
-                          type="button"
-                          onClick={() => approveResolution(r.test_result_id)}
-                          className="rounded-sm border border-[var(--primary)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--primary)] hover:bg-[var(--primary)]/5 transition-colors"
-                        >
-                          Approve
-                        </button>
-                      ) : (
-                        <span className="text-xs text-gray-400">View only</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      ) : null}
     </div>
   );
 }

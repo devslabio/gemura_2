@@ -34,6 +34,8 @@ import {
   faUserFriends,
   faCog,
   faUser,
+  faWallet,
+  faIdCard,
 } from '@/app/components/Icon';
 
 /** Account types that see user/operations menu (filtered by role + permissions) */
@@ -144,6 +146,23 @@ export const MEMBERS_NAV_PERMISSIONS: readonly string[] = [
   'update_suppliers',
   'view_suppliers',
 ];
+
+/** Manager sidebar group order: original operations groups + mockup sections. */
+export const MCC_MANAGER_NAV_GROUP_ORDER = [
+  'Overview',
+  'Milk & collections',
+  'MCC operations',
+  'Quality & rejections',
+  'Tank & infrastructure',
+  'Contacts',
+  'MCC profile',
+  'Reports',
+  'Payments',
+  'Finance & payroll',
+  'Inventory',
+  'Users',
+  'Settings',
+] as const;
 
 /**
  * Sidebar for `regional_supervisor`: read-only oversight of assigned provinces/districts.
@@ -384,6 +403,83 @@ export const OPERATIONS_NAV_ITEMS: NavItem[] = [
   { icon: faHandHoldingDollar, label: 'Loans', href: '/loans', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
   { icon: faChartLine, label: 'Finance', href: '/finance', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
   { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'operations', navGroup: 'Finance & payroll', requiresPermission: 'view_analytics' },
+];
+
+const MCC_MANAGER_GATE_PERMS = [
+  'mcc_view_operations',
+  'mcc_view_own_operations',
+  'view_collections',
+  'mcc_floor_operations',
+] as const;
+
+/** Extra manager links from dashboard mockup (kept alongside full `OPERATIONS_NAV_ITEMS`). */
+const MCC_MANAGER_REFERENCE_EXTRAS: NavItem[] = [
+  {
+    icon: faEye,
+    label: 'Quality & rejections',
+    href: '/operations/traceability',
+    section: 'operations',
+    navGroup: 'Quality & rejections',
+    requiresAnyPermission: ['mcc_view_operations', 'mcc_manage_operations'],
+  },
+  {
+    icon: faTruck,
+    label: 'Tank & infrastructure',
+    href: '/operations/gate',
+    section: 'operations',
+    navGroup: 'Tank & infrastructure',
+    requiresAnyPermission: [...MCC_MANAGER_GATE_PERMS],
+  },
+  {
+    icon: faIdCard,
+    label: 'MCC profile',
+    href: '/operations/mcc-profile',
+    section: 'operations',
+    navGroup: 'MCC profile',
+    requiresPermission: 'dashboard.view',
+  },
+  {
+    icon: faChartBar,
+    label: 'Reports',
+    href: '/finance',
+    section: 'operations',
+    navGroup: 'Reports',
+    requiresPermission: 'view_analytics',
+  },
+  {
+    icon: faWallet,
+    label: 'Payments',
+    href: '/finance/transactions',
+    section: 'operations',
+    navGroup: 'Payments',
+    requiresPermission: 'view_analytics',
+  },
+  {
+    icon: faUserFriends,
+    label: 'Users',
+    href: '/members',
+    section: 'operations',
+    navGroup: 'Users',
+    requiresAnyPermission: [...MEMBERS_NAV_PERMISSIONS],
+  },
+  {
+    icon: faCog,
+    label: 'Settings',
+    href: '/settings',
+    section: 'operations',
+    navGroup: 'Settings',
+    requiresPermission: 'dashboard.view',
+  },
+];
+
+/**
+ * MCC manager: all standard operations tabs plus mockup labels (Gate deliveries, Milk tests, Members, Finance, Charges, etc.).
+ */
+export const MCC_MANAGER_NAV_ITEMS: NavItem[] = [
+  ...OPERATIONS_NAV_ITEMS.filter((item) => !item.vetQualityDeskOnly).map((item) =>
+    item.navGroup === 'Sales & milk' ? { ...item, navGroup: 'Milk & collections' } : item,
+  ),
+  ...MCC_MANAGER_REFERENCE_EXTRAS,
 ];
 
 /**

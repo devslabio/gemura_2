@@ -23,6 +23,7 @@ import {
   type RoleCode,
 } from './roles-permissions.config';
 import { composeUserFullName, splitIntoFirstLast } from '../../common/utils/user-name.util';
+import { mccNamesLikelyMatch } from '../mcc-manager/mcc-onboarding-profile.util';
 import { saleAtBoundsUtcInclusive, utcCalendarDatesBetweenInclusive } from '../../common/utils/sale-at-bounds.util';
 import * as ExcelJS from 'exceljs';
 import {
@@ -390,6 +391,84 @@ export class AdminService {
         source: 'onboarding',
       },
     });
+  }
+
+  /**
+   * Copies wizard `section_payload` into account operational tables used by the manager dashboard.
+   * Safe to call after link (with tenant) or approve; idempotent upsert.
+   */
+  async applyOnboardingToAccountOperationalProfile(
+    targetAccountId: string,
+    submission: { id: string; submission_code: string; section_payload: Prisma.JsonValue },
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await this.syncMccOperationalDataFromOnboarding(tx, targetAccountId, submission);
+    });
+  }
+
+  /**
+   * When an MCC was linked/approved but operational profile rows are missing, seed from the latest
+   * approved onboarding submission for this tenant (manager dashboard tank capacity, etc.).
+   */
+  async tryBootstrapOperationalProfileFromLinkedOnboarding(targetAccountId: string): Promise<boolean> {
+    const [profile, tankCount] = await Promise.all([
+      this.prisma.mccOperationalProfile.findUnique({
+        where: { account_id: targetAccountId },
+        select: { source_submission_id: true },
+      }),
+      this.prisma.mccCoolingTankProfile.count({ where: { account_id: targetAccountId } }),
+    ]);
+    if (profile?.source_submission_id && tankCount > 0) {
+      return false;
+    }
+
+    const account = await this.prisma.account.findUnique({
+      where: { id: targetAccountId },
+      select: { name: true, code: true },
+    });
+
+    const submission =
+      (await this.prisma.mccOnboardingSubmission.findFirst({
+        where: {
+          linked_account_id: targetAccountId,
+          review_status: { not: MccOnboardingReviewStatus.rejected },
+        },
+        orderBy: [{ reviewed_at: 'desc' }, { created_at: 'desc' }],
+        select: {
+          id: true,
+          submission_code: true,
+          section_payload: true,
+        },
+      })) ??
+      (account?.name
+        ? await this.prisma.mccOnboardingSubmission.findFirst({
+            where: {
+              review_status: { not: MccOnboardingReviewStatus.rejected },
+              business_name: { equals: account.name, mode: 'insensitive' },
+            },
+            orderBy: [{ reviewed_at: 'desc' }, { created_at: 'desc' }],
+            select: {
+              id: true,
+              submission_code: true,
+              section_payload: true,
+            },
+          })
+        : null);
+
+    if (!submission) {
+      return false;
+    }
+
+    await this.applyOnboardingToAccountOperationalProfile(targetAccountId, submission);
+
+    if (account) {
+      await this.prisma.mccOnboardingSubmission.updateMany({
+        where: { id: submission.id, linked_account_id: { not: targetAccountId } },
+        data: { linked_account_id: targetAccountId },
+      });
+    }
+
+    return true;
   }
 
   private async getUserOperationalStats(userIds: string[]) {
@@ -6335,6 +6414,31 @@ export class AdminService {
 
     let linkedAccountId: string | null = null;
 
+    const tenantMemberships = await this.prisma.userAccount.findMany({
+      where: {
+        user_id: uid,
+        status: 'active',
+        account: { status: 'active', type: { in: ['tenant', 'branch'] } },
+      },
+      include: {
+        account: { select: { id: true, code: true, name: true, type: true, status: true } },
+      },
+      orderBy: { created_at: 'asc' },
+    });
+
+    if (!aid) {
+      if (tenantMemberships.length === 1) {
+        linkedAccountId = tenantMemberships[0].account_id;
+      } else if (tenantMemberships.length > 1) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message:
+            'This user belongs to multiple MCC tenant accounts. Select the tenant account that matches this onboarding (same name as the business), then save the link.',
+        });
+      }
+    }
+
     if (aid) {
       const membership = await this.prisma.userAccount.findFirst({
         where: {
@@ -6376,6 +6480,24 @@ export class AdminService {
       linkedAccountId = membership.account.id;
     }
 
+    if (linkedAccountId) {
+      const linkedAccount = await this.prisma.account.findUnique({
+        where: { id: linkedAccountId },
+        select: { name: true, code: true },
+      });
+      if (
+        linkedAccount?.name &&
+        submission.business_name &&
+        !mccNamesLikelyMatch(linkedAccount.name, submission.business_name)
+      ) {
+        throw new BadRequestException({
+          code: 400,
+          status: 'error',
+          message: `Account "${linkedAccount.name}" (${linkedAccount.code ?? '—'}) does not match onboarding business "${submission.business_name}". Choose the tenant the manager actually uses (e.g. their dashboard account), not a duplicate created during approve.`,
+        });
+      }
+    }
+
     const updated = await this.prisma.mccOnboardingSubmission.update({
       where: { id: submissionId },
       data: {
@@ -6388,10 +6510,20 @@ export class AdminService {
       },
     });
 
+    if (linkedAccountId) {
+      await this.applyOnboardingToAccountOperationalProfile(linkedAccountId, {
+        id: submission.id,
+        submission_code: submission.submission_code,
+        section_payload: submission.section_payload,
+      });
+    }
+
     return {
       code: 200,
       status: 'success',
-      message: linkedAccountId ? 'Submission linked to user and tenant.' : 'Submission linked to user.',
+      message: linkedAccountId
+        ? 'Submission linked to user and tenant. Operational profile synced — managers on this account will see onboarding tanks and profile on their dashboard.'
+        : 'Submission linked to user only (no tenant). Select the MCC tenant account to sync onboarding data to the manager dashboard.',
       data: updated,
     };
   }
@@ -6792,6 +6924,18 @@ export class AdminService {
             code: 400,
             status: 'error',
             message: 'Only tenant or branch accounts can be linked for MCC KYC.',
+          });
+        }
+
+        if (
+          membership.account.name &&
+          submission.business_name &&
+          !mccNamesLikelyMatch(membership.account.name, submission.business_name)
+        ) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: `Account "${membership.account.name}" does not match onboarding business "${submission.business_name}". Use the tenant the manager logs into.`,
           });
         }
 

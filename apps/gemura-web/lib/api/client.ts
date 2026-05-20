@@ -17,6 +17,13 @@ export function getApiBaseUrl(): string {
 
 const API_BASE_URL = getApiBaseUrl();
 
+/** Pre-login routes (MCC onboarding wizard) must not send auth or redirect on 401. */
+function isPublicApiPath(url?: string): boolean {
+  if (!url) return false;
+  const path = url.split('?')[0];
+  return path.includes('/public/');
+}
+
 class ApiClient {
   private client: AxiosInstance;
 
@@ -35,7 +42,7 @@ class ApiClient {
     // Request interceptor - add auth token
     this.client.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
-        if (typeof window !== 'undefined') {
+        if (typeof window !== 'undefined' && !isPublicApiPath(config.url)) {
           const token = localStorage.getItem('gemura-auth-token');
           if (token && config.headers) {
             config.headers.Authorization = `Bearer ${token}`;
@@ -53,6 +60,10 @@ class ApiClient {
       (response) => response,
       (error: AxiosError) => {
         if (error.response?.status === 401) {
+          const requestUrl = error.config?.url;
+          if (isPublicApiPath(requestUrl)) {
+            return Promise.reject(error);
+          }
           // Unauthorized - clear auth and redirect to login
           if (typeof window !== 'undefined') {
             localStorage.removeItem('gemura-auth-token');
