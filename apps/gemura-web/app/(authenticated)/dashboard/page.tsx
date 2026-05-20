@@ -35,7 +35,9 @@ import CreateCustomerForm from '../customers/CreateCustomerForm';
 import CreateSupplierForm from '../suppliers/CreateSupplierForm';
 import CreateInventoryForm from '../inventory/CreateInventoryForm';
 import dynamic from 'next/dynamic';
-import MccManagerDashboardSection from '@/app/components/manager/MccManagerDashboardSection';
+import MccManagerDashboardSection, {
+  type ManagerQuickAction,
+} from '@/app/components/manager/MccManagerDashboardSection';
 import RegionalSupervisorDashboard from '@/app/components/supervisor/RegionalSupervisorDashboard';
 import VeterinaryQualityStrip from '@/app/components/VeterinaryQualityStrip';
 import VeterinaryQualityDesk from '@/app/components/VeterinaryQualityDesk';
@@ -188,6 +190,7 @@ function BusinessDashboard() {
   const canViewAnalytics = hasPermission('view_analytics');
   const canCreateSales = hasPermission('create_sales');
   const canCreateCollections = hasPermission('create_collections');
+  const canManageUsers = hasPermission('manage_users');
   const canCreateSuppliers = hasPermission('create_suppliers');
   const canCreateCustomers = hasPermission('create_customers');
   const canManageInventory = hasPermission('manage_inventory');
@@ -471,6 +474,12 @@ function BusinessDashboard() {
     setRefreshKey((k) => k + 1);
   };
 
+  const handleManagerQuickAction = useCallback((action: ManagerQuickAction) => {
+    if (action === 'sale') setQuickActionModal('sale');
+    else if (action === 'collection') setQuickActionModal('collection');
+    else if (action === 'transaction') setQuickActionModal('transaction');
+  }, []);
+
   const handleRecordTransactionSubmit = async () => {
     const amount = Number(recordAmount);
     if (!recordDescription.trim() || Number.isNaN(amount) || amount <= 0) {
@@ -631,6 +640,11 @@ function BusinessDashboard() {
           periodKey={period}
           rangeDateFrom={dateRange.date_from}
           rangeDateTo={dateRange.date_to}
+          onQuickAction={handleManagerQuickAction}
+          canCreateSales={canCreateSales}
+          canCreateCollections={canCreateCollections}
+          canViewAnalytics={canViewAnalytics}
+          canManageUsers={canManageUsers}
         />
       ) : (
         <>

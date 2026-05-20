@@ -14,6 +14,8 @@ import {
   ADMIN_NAV_GROUP_ORDER,
   OPERATIONS_NAV_ITEMS,
   OPERATIONS_NAV_GROUP_ORDER,
+  MCC_MANAGER_NAV_ITEMS,
+  MCC_MANAGER_NAV_GROUP_ORDER,
   REGIONAL_SUPERVISOR_NAV_ITEMS,
   REGIONAL_SUPERVISOR_NAV_GROUP_ORDER,
   EXTERNAL_SUPPLIER_NAV_ITEMS,
@@ -172,12 +174,11 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     // Operations: business account types, filter by role/permissions
     if (isOperationsRole(role) && isBusinessAccount(accountType)) {
       if (role === 'manager') {
-        OPERATIONS_NAV_ITEMS.forEach((item) => {
-          if (!includeOperationsNavItem(item)) return;
+        MCC_MANAGER_NAV_ITEMS.forEach((item) => {
           if (!navItemAllowed(item)) return;
           items.push(item);
         });
-        return buildNavSidebarGroups(items, OPERATIONS_NAV_GROUP_ORDER);
+        return buildNavSidebarGroups(items, MCC_MANAGER_NAV_GROUP_ORDER);
       }
 
       if (role === 'accountant') {

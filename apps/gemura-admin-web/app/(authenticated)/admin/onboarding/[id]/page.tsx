@@ -226,6 +226,12 @@ export default function OnboardingSubmissionDetailPage() {
   const [linkUserResults, setLinkUserResults] = useState<Array<{ id: string; name: string; phone: string }>>([]);
   const [linkUserPickId, setLinkUserPickId] = useState<string | null>(null);
   const [linkUserPickLabel, setLinkUserPickLabel] = useState('');
+  const [linkAccountPickId, setLinkAccountPickId] = useState<string | null>(null);
+  const [linkAccountOptions, setLinkAccountOptions] = useState<
+    Array<{ id: string; name: string; code: string | null; type: string }>
+  >([]);
+  const [linkAccountLoading, setLinkAccountLoading] = useState(false);
+  const [linkExistingAccountId, setLinkExistingAccountId] = useState('');
   const [opsConfig, setOpsConfig] = useState<OnboardingOperationalConfigData | null>(null);
   const [opsLoading, setOpsLoading] = useState(false);
   const [opsSaving, setOpsSaving] = useState(false);
@@ -277,9 +283,56 @@ export default function OnboardingSubmissionDetailPage() {
     setLinkUserPickId(submission.linked_user_id ?? null);
     const lu = submission.linked_user as { name?: string; phone?: string } | undefined;
     setLinkUserPickLabel(lu?.name ? `${lu.name} · ${lu.phone || '—'}` : '');
+    setLinkAccountPickId(submission.linked_account_id ?? null);
     setLinkUserSearch('');
     setLinkUserResults([]);
-  }, [submission?.id, submission?.linked_user_id]);
+  }, [submission?.id, submission?.linked_user_id, submission?.linked_account_id]);
+
+  useEffect(() => {
+    if (!linkUserPickId || !currentAccount?.account_id) {
+      setLinkAccountOptions([]);
+      return;
+    }
+    let cancelled = false;
+    setLinkAccountLoading(true);
+    adminApi
+      .getUserById(linkUserPickId, currentAccount.account_id)
+      .then((res) => {
+        if (cancelled || res.code !== 200 || !res.data) return;
+        const memberships = (res.data.user_accounts ?? []) as Array<{
+          account_id: string;
+          status: string;
+          account?: { id: string; name: string; code: string | null; type: string; status?: string };
+        }>;
+        const tenants = memberships
+          .filter(
+            (m) =>
+              m.status === 'active' &&
+              m.account &&
+              ['tenant', 'branch'].includes(m.account.type) &&
+              (m.account.status === undefined || m.account.status === 'active'),
+          )
+          .map((m) => ({
+            id: m.account!.id,
+            name: m.account!.name,
+            code: m.account!.code,
+            type: m.account!.type,
+          }));
+        setLinkAccountOptions(tenants);
+        if (tenants.length === 1 && !linkAccountPickId) {
+          setLinkAccountPickId(tenants[0].id);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLinkAccountOptions([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLinkAccountLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [linkUserPickId, currentAccount?.account_id, linkAccountPickId]);
 
   useEffect(() => {
     if (!submission?.id || !submission?.linked_account_id) {
@@ -383,9 +436,15 @@ export default function OnboardingSubmissionDetailPage() {
     setActing(true);
     setTempPassword(null);
     try {
-      const body: { password?: string; linkExistingUserId?: string; reviewNotes?: string } = {};
+      const body: {
+        password?: string;
+        linkExistingUserId?: string;
+        linkExistingAccountId?: string;
+        reviewNotes?: string;
+      } = {};
       if (approvePassword.trim().length >= 8) body.password = approvePassword.trim();
       if (linkUserId.trim()) body.linkExistingUserId = linkUserId.trim();
+      if (linkExistingAccountId.trim()) body.linkExistingAccountId = linkExistingAccountId.trim();
       if (reviewNotes.trim()) body.reviewNotes = reviewNotes.trim();
       const res = await adminApi.approveOnboardingSubmission(id, body, currentAccount?.account_id);
       if (res.code === 200) {
@@ -409,11 +468,18 @@ export default function OnboardingSubmissionDetailPage() {
       useToastStore.getState().error('Search and select a user to link.');
       return;
     }
+    if (linkAccountOptions.length > 0 && !linkAccountPickId) {
+      useToastStore.getState().error('Select the MCC tenant account this manager uses (must match the business name).');
+      return;
+    }
     setLinkSaving(true);
     try {
       const res = await adminApi.linkOnboardingSubmission(
         id,
-        { linkUserId: linkUserPickId },
+        {
+          linkUserId: linkUserPickId,
+          ...(linkAccountPickId ? { linkAccountId: linkAccountPickId } : {}),
+        },
         currentAccount?.account_id,
       );
       if (res.code === 200) {
@@ -728,6 +794,8 @@ export default function OnboardingSubmissionDetailPage() {
                 onClick={() => {
                   setLinkUserPickId(null);
                   setLinkUserPickLabel('');
+                  setLinkAccountPickId(null);
+                  setLinkAccountOptions([]);
                   setLinkUserSearch('');
                   setLinkUserResults([]);
                 }}
@@ -758,6 +826,7 @@ export default function OnboardingSubmissionDetailPage() {
                         onClick={() => {
                           setLinkUserPickId(u.id);
                           setLinkUserPickLabel(`${u.name} · ${u.phone}`);
+                          setLinkAccountPickId(null);
                           setLinkUserSearch('');
                           setLinkUserResults([]);
                         }}
@@ -773,13 +842,48 @@ export default function OnboardingSubmissionDetailPage() {
             </>
           )}
         </div>
-        <p className="text-xs text-gray-400 mt-3 max-w-md leading-relaxed">
-          Clears a tenant link on this row if one exists. Does not approve or reject.
+        {linkUserPickId && (
+          <div className="mt-4 max-w-md space-y-2">
+            <label className="block text-xs font-medium text-gray-700">
+              MCC tenant account <span className="text-red-600">*</span>
+            </label>
+            {linkAccountLoading ? (
+              <p className="text-xs text-gray-400">Loading accounts…</p>
+            ) : linkAccountOptions.length === 0 ? (
+              <p className="text-xs text-amber-700">
+                No active tenant/branch membership for this user. Add them to the correct MCC account first, or
+                approve with “existing account UUID” below.
+              </p>
+            ) : (
+              <select
+                className="w-full border border-gray-200 rounded-sm px-3 py-2.5 text-sm"
+                value={linkAccountPickId ?? ''}
+                onChange={(e) => setLinkAccountPickId(e.target.value || null)}
+                disabled={linkSaving}
+              >
+                <option value="">Select tenant account…</option>
+                {linkAccountOptions.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.code ?? a.type})
+                  </option>
+                ))}
+              </select>
+            )}
+            {submission?.business_name && (
+              <p className="text-xs text-gray-500">
+                Must match onboarding business: <strong>{submission.business_name}</strong>
+              </p>
+            )}
+          </div>
+        )}
+        <p className="text-xs text-gray-400 mt-3 max-w-lg leading-relaxed">
+          Link the <strong>manager user</strong> and their <strong>live MCC tenant</strong> (e.g. MCC NYANZA), not a
+          duplicate account created during approve. Syncs tanks and profile to the manager dashboard.
         </p>
         <button
           type="button"
           className="btn btn-primary mt-3 w-full sm:w-auto min-w-[8.5rem]"
-          disabled={linkSaving || !linkUserPickId}
+          disabled={linkSaving || !linkUserPickId || (linkAccountOptions.length > 0 && !linkAccountPickId)}
           onClick={onSaveLink}
         >
           {linkSaving ? 'Saving…' : 'Save link'}
@@ -1275,8 +1379,8 @@ export default function OnboardingSubmissionDetailPage() {
           <div className="bg-white border border-gray-200 rounded-sm p-6 space-y-3">
             <h3 className="font-semibold text-gray-900">Approve</h3>
             <p className="text-xs text-gray-600">
-              Creates a new tenant account, default wallet, and MCC user (or links an existing user when their phone
-              matches the manager phone — optional user UUID below).
+              Prefer <strong>KYC link</strong>: set user UUID + tenant account UUID below (no new duplicate tenant).
+              Leave both empty only for brand-new MCCs that need a new tenant created.
             </p>
             <label className="block text-xs text-gray-600">Optional password (min 8 chars)</label>
             <input
@@ -1288,12 +1392,20 @@ export default function OnboardingSubmissionDetailPage() {
               onChange={(e) => setApprovePassword(e.target.value)}
               disabled={acting}
             />
-            <label className="block text-xs text-gray-600">Link existing user UUID (optional)</label>
+            <label className="block text-xs text-gray-600">Existing manager user UUID</label>
             <input
               className="w-full border border-gray-200 rounded-sm px-3 py-2 text-xs font-mono"
-              placeholder="Phone must match submission manager phone"
+              placeholder="Manager who logs into Gemura"
               value={linkUserId}
               onChange={(e) => setLinkUserId(e.target.value)}
+              disabled={acting}
+            />
+            <label className="block text-xs text-gray-600">Existing MCC tenant account UUID</label>
+            <input
+              className="w-full border border-gray-200 rounded-sm px-3 py-2 text-xs font-mono"
+              placeholder="e.g. MCC NYANZA — same name as wizard"
+              value={linkExistingAccountId}
+              onChange={(e) => setLinkExistingAccountId(e.target.value)}
               disabled={acting}
             />
             <label className="block text-xs text-gray-600">Internal notes (optional)</label>

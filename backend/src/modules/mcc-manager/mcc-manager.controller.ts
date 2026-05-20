@@ -38,6 +38,17 @@ export class MccManagerController {
     return this.mccManager.getManagerOverview(user, accountId, d);
   }
 
+  @Get('operational-profile')
+  @RequireAnyPermission(['mcc_view_operations', 'mcc_view_own_operations', 'dashboard.view'])
+  @ApiOperation({
+    summary: 'MCC operational profile from onboarding',
+    description: 'Tank inventory, onboarding baseline fields, and profile completion percentage.',
+  })
+  @ApiQuery({ name: 'account_id', required: true })
+  async operationalProfile(@CurrentUser() user: User, @Query('account_id') accountId: string) {
+    return this.mccManager.getOperationalProfile(user, accountId);
+  }
+
   @Patch('test-results/:testResultId/resolution')
   @RequireAnyPermission(['mcc_manage_operations'])
   @ApiOperation({
