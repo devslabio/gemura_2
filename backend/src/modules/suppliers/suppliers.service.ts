@@ -1119,7 +1119,11 @@ export class SuppliersService {
     const normalizedBankAccountNumber = dto.bank_account_number?.trim() || null;
     const pricePerLiter = Number(dto.price_per_liter);
 
-    const { first_name, last_name } = splitIntoFirstLast(dto.name.trim());
+    const trimmedName = dto.name.trim();
+    const { first_name: fnPart, last_name: lnPart } = splitIntoFirstLast(trimmedName);
+    const first_name = (fnPart || trimmedName || 'User').trim();
+    const last_name = (lnPart || '-').trim();
+    const userDisplayName = composeUserFullName(first_name, last_name);
 
     const { newUser, account } = await this.prisma.$transaction(async (tx) => {
       const nu = await tx.user.create({
@@ -1127,7 +1131,7 @@ export class SuppliersService {
           code: userCode,
           first_name,
           last_name,
-          name: composeUserFullName(first_name, last_name) || dto.name.trim(),
+          name: userDisplayName,
           phone: normalizedPhone,
           nid: dto.nid,
           address: normalizedAddress,
@@ -1138,7 +1142,6 @@ export class SuppliersService {
           account_type: appAccountType,
           supplier_segment: segment,
           registration_type: 'onboarded',
-          default_account_id: null,
           created_by: agentUser.id,
         },
       });
@@ -1146,7 +1149,7 @@ export class SuppliersService {
       const acc = await tx.account.create({
         data: {
           code: accountCode,
-          name: dto.name.trim(),
+          name: userDisplayName,
           bank_name: normalizedBankName,
           bank_account_number: normalizedBankAccountNumber,
           type: 'tenant',

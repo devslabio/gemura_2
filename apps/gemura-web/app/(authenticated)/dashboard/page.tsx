@@ -100,18 +100,35 @@ function getPeriodRange(period: PeriodKey, customFrom?: string, customTo?: strin
   return { date_from: toYYYYMMDD(start), date_to: toYYYYMMDD(end) };
 }
 
+/** Allows regional supervisors to render without blocking on platform-wide `/stats/overview`. */
+function emptySupervisorPlaceholderOverview(date_from: string, date_to: string): OverviewResponse['data'] {
+  return {
+    summary: {
+      collection: { liters: 0, value: 0, transactions: 0 },
+      rejections: { liters: 0, value: 0, transactions: 0 },
+      sales: { liters: 0, value: 0, transactions: 0 },
+      suppliers: { active: 0, inactive: 0 },
+      customers: { active: 0, inactive: 0 },
+    },
+    breakdown_type: 'day',
+    chart_period: '',
+    breakdown: [],
+    recent_transactions: [],
+    date_range: { from: date_from, to: date_to },
+  };
+}
+
 function BusinessDashboard() {
   const { currentAccount } = useAuthStore();
   const { hasPermission, hasAnyPermission } = usePermission();
   const accountType = currentAccount?.account_type ?? '';
-  const role = (currentAccount?.role ?? '').toLowerCase();
+  const role = (currentAccount?.role ?? '').trim().toLowerCase().replace(/\s+/g, '_');
   const isVeterinaryRole = ['veterinary', 'veterinarian', 'veternary', 'agent', 'veterinary_officer'].includes(role);
   // Login `account_type` is Prisma Account.type (tenant | branch | admin), not User.account_type (mcc).
   const orgType = (accountType ?? '').toLowerCase();
   const showMccOpsDashboard =
     (orgType === 'tenant' || orgType === 'branch' || orgType === 'mcc') &&
     hasAnyPermission(['mcc_view_operations', 'mcc_view_own_operations', 'view_collections']);
-  const isRegionalSupervisorRole = ['leadership', 'regulator', 'regional_supervisor'].includes(role);
   /** Demo Manager (`manager`) and similar: dedicated MCC overview on the Overview tab. */
   const isMccManagerOverview = showMccOpsDashboard && role === 'manager';
   const [loading, setLoading] = useState(true);
@@ -209,6 +226,9 @@ function BusinessDashboard() {
   }, [dashboardTab, showVetQualityStrip]);
 
   const tabs: { id: DashboardTab; label: string }[] = useMemo(() => {
+    if (role === 'regional_supervisor') {
+      return [{ id: 'overview', label: 'Regional overview' }];
+    }
     if (isVeterinaryRole) {
       return [
         { id: 'overview', label: 'Overview' },
@@ -226,6 +246,7 @@ function BusinessDashboard() {
     }
     return available;
   }, [
+    role,
     showMccOpsDashboard,
     canViewSales,
     canViewCollections,
@@ -248,6 +269,14 @@ function BusinessDashboard() {
 
   useEffect(() => {
     let cancelled = false;
+    if (role === 'regional_supervisor') {
+      setError('');
+      setOverview(emptySupervisorPlaceholderOverview(dateRange.date_from, dateRange.date_to));
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
     setLoading(true);
     setError('');
     statsApi
@@ -275,7 +304,7 @@ function BusinessDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [accountType, currentAccount?.account_id, dateRange.date_from, dateRange.date_to, refreshKey]);
+  }, [role, accountType, currentAccount?.account_id, dateRange.date_from, dateRange.date_to, refreshKey]);
   // MCC manager panel data — shown on Overview for manager roles (loaded when operations dashboard tab applies).
   useEffect(() => {
     if (!showMccOpsDashboard || !currentAccount?.account_id) {
@@ -501,16 +530,17 @@ function BusinessDashboard() {
 
   return (
     <div className="-mt-1 space-y-4">
-      {/* Header: tab row — Overview, Sales, … — plus period */}
+      {/* Header: tab row — Overview, Sales, … — plus period (regional supervisors: no duplicate title; use sidebar + KPIs) */}
+      {role !== 'regional_supervisor' && (
       <div className="mb-3 pb-3 border-b-2 border-gray-200">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-1 min-w-0 gap-1 overflow-x-auto">
-            {tabs.map(({ id, label }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setDashboardTab(id)}
-                className={`
+            <div className="flex flex-1 min-w-0 gap-1 overflow-x-auto">
+              {tabs.map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setDashboardTab(id)}
+                  className={`
                   flex items-center gap-1.5 py-2 px-4 rounded-t border-b-2 border-transparent
                   text-[13px] font-medium whitespace-nowrap transition-all duration-200
                   ${dashboardTab === id
@@ -518,55 +548,56 @@ function BusinessDashboard() {
                     : 'text-gray-500 border-b-2 border-transparent bg-transparent hover:text-[var(--primary)] hover:bg-[var(--primary)]/5'
                   }
                 `}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="relative flex-shrink-0">
+              <select
+                value={period}
+                onChange={(e) => {
+                  const v = e.target.value as PeriodKey;
+                  setPeriod(v);
+                  if (v === 'custom' && !customFrom && !customTo) {
+                    const n = new Date();
+                    setCustomFrom(toYYYYMMDD(new Date(n.getFullYear(), n.getMonth(), 1)));
+                    setCustomTo(toYYYYMMDD(n));
+                  }
+                }}
+                title={periodLabel}
+                className="min-w-0 w-[120px] border border-gray-300 rounded py-0.5 pl-1.5 pr-6 text-xs text-gray-900 bg-white focus:ring-1 focus:ring-[var(--primary)] focus:border-[var(--primary)]"
               >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="relative flex-shrink-0">
-            <select
-              value={period}
-              onChange={(e) => {
-                const v = e.target.value as PeriodKey;
-                setPeriod(v);
-                if (v === 'custom' && !customFrom && !customTo) {
-                  const n = new Date();
-                  setCustomFrom(toYYYYMMDD(new Date(n.getFullYear(), n.getMonth(), 1)));
-                  setCustomTo(toYYYYMMDD(n));
-                }
-              }}
-              title={periodLabel}
-              className="min-w-0 w-[120px] border border-gray-300 rounded py-0.5 pl-1.5 pr-6 text-xs text-gray-900 bg-white focus:ring-1 focus:ring-[var(--primary)] focus:border-[var(--primary)]"
-            >
-              <option value="day">Day</option>
-              <option value="month">Month</option>
-              <option value="week">Week</option>
-              <option value="quarter">Quarter</option>
-              <option value="year">Year</option>
-              <option value="custom">Custom</option>
-            </select>
-            {period === 'custom' && (
-              <div className="absolute top-full right-0 z-10 mt-0.5 py-1.5 px-1.5 bg-white border border-gray-200 rounded shadow-lg flex items-center gap-1.5">
-                <input
-                  type="date"
-                  value={customFrom}
-                  max={new Date().toISOString().slice(0, 10)}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  className="border border-gray-300 rounded px-1.5 py-0.5 text-xs w-28"
-                />
-                <span className="text-gray-400 text-[10px]">–</span>
-                <input
-                  type="date"
-                  value={customTo}
-                  max={new Date().toISOString().slice(0, 10)}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  className="border border-gray-300 rounded px-1.5 py-0.5 text-xs w-28"
-                />
-              </div>
-            )}
+                <option value="day">Day</option>
+                <option value="month">Month</option>
+                <option value="week">Week</option>
+                <option value="quarter">Quarter</option>
+                <option value="year">Year</option>
+                <option value="custom">Custom</option>
+              </select>
+              {period === 'custom' && (
+                <div className="absolute top-full right-0 z-10 mt-0.5 py-1.5 px-1.5 bg-white border border-gray-200 rounded shadow-lg flex items-center gap-1.5">
+                  <input
+                    type="date"
+                    value={customFrom}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    className="border border-gray-300 rounded px-1.5 py-0.5 text-xs w-28"
+                  />
+                  <span className="text-gray-400 text-[10px]">–</span>
+                  <input
+                    type="date"
+                    value={customTo}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    className="border border-gray-300 rounded px-1.5 py-0.5 text-xs w-28"
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Overview — business snapshot: totals, trends, quick actions (all accounts including MCC) */}
       {dashboardTab === 'quality' &&
@@ -579,9 +610,9 @@ function BusinessDashboard() {
           />
         )}
 
-      {dashboardTab === 'overview' && isRegionalSupervisorRole && <RegionalSupervisorDashboard />}
+      {dashboardTab === 'overview' && role === 'regional_supervisor' && <RegionalSupervisorDashboard />}
 
-      {dashboardTab === 'overview' && !isRegionalSupervisorRole && (
+      {dashboardTab === 'overview' && role !== 'regional_supervisor' && (
         <>
       {showVetQualityStrip && currentAccount?.account_id ? (
         <VeterinaryQualityStrip

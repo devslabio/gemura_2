@@ -44,11 +44,33 @@ export class TokenGuard implements CanActivate {
     // Note: token is not unique in schema, so we use findFirst
     const user = await this.prisma.user.findFirst({
       where: { token },
-      include: {
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        phone: true,
+        email: true,
+        token: true,
+        status: true,
+        /** Required by PermissionGuard when request body/query has no account_id */
+        default_account_id: true,
         user_accounts: {
           where: { status: 'active' },
-          include: {
-            account: true,
+          select: {
+            id: true,
+            user_id: true,
+            account_id: true,
+            status: true,
+            account: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                type: true,
+                status: true,
+                parent_id: true,
+              },
+            },
           },
         },
       },

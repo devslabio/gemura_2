@@ -73,5 +73,26 @@ export class SupervisorController {
       region_id: regionId?.trim() || undefined,
     });
   }
+
+  @Get('dashboard')
+  @RequirePermission('view_regional_accounts')
+  @ApiOperation({ summary: 'Aggregated regional supervisor dashboard (live ops data)' })
+  @ApiQuery({ name: 'district_location_id', required: false })
+  @ApiQuery({ name: 'region_id', required: false })
+  @ApiQuery({ name: 'days', required: false, description: 'Trend window in days (7–90, default 14).' })
+  async getDashboard(
+    @CurrentUser() user: User,
+    @CurrentAccount() accountId: string,
+    @Query('district_location_id') districtLocationId?: string,
+    @Query('region_id') regionId?: string,
+    @Query('days') daysRaw?: string,
+  ) {
+    const days = Math.min(90, Math.max(7, Number.parseInt(daysRaw ?? '14', 10) || 14));
+    return this.supervisor.getDashboard(user, accountId, {
+      district_location_id: districtLocationId?.trim() || undefined,
+      region_id: regionId?.trim() || undefined,
+      days,
+    });
+  }
 }
 

@@ -31,4 +31,12 @@ export const locationsApi = {
     apiClient.get<LocationsListResponse>('/locations', { params: { parent_id: parentId } }),
 
   getPath: (id: string) => apiClient.get<LocationPathResponse>(`/locations/${id}/path`),
+
+  /** Pre-login MCC onboarding wizard (no auth required). */
+  getProvincesPublic: () => apiClient.get<LocationsListResponse>('/public/locations/provinces'),
+
+  getChildrenPublic: (parentId: string) =>
+    apiClient.get<LocationsListResponse>('/public/locations', { params: { parent_id: parentId } }),
+
+  getPathPublic: (id: string) => apiClient.get<LocationPathResponse>(`/public/locations/${id}/path`),
 };

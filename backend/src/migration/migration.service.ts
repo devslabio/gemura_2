@@ -8,7 +8,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as mysql from 'mysql2/promise';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { composeUserFullName, splitIntoFirstLast } from '../common/utils/user-name.util';
 
 @Injectable()

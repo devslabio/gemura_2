@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { User } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import { composeUserFullName } from '../../common/utils/user-name.util';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { CreateAnimalDto } from './dto/create-animal.dto';
 import { UpdateAnimalDto } from './dto/update-animal.dto';
 import { CreateAnimalWeightDto } from './dto/create-animal-weight.dto';

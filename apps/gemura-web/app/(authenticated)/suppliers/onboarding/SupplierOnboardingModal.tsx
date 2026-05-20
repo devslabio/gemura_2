@@ -637,9 +637,14 @@ export default function SupplierOnboardingModal({
       const apiMsg = (ax.response?.data as { message?: string } | undefined)?.message;
       if (status === 404 || status === 405 || status === 501) {
         try {
+          const fullName = (parsed.name || '').trim();
+          const si = fullName.indexOf(' ');
+          const first_name = (si === -1 ? fullName || 'User' : fullName.slice(0, si)).trim();
+          const last_name = (si === -1 ? '-' : fullName.slice(si + 1)).trim() || '-';
           const adminRes = await adminApi.createUser(
             {
-              name: parsed.name,
+              first_name,
+              last_name,
               phone: parsed.phone,
               email: parsed.email,
               password: parsed.password,

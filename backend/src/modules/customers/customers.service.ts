@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { User } from '@prisma/client';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import { randomBytes } from 'crypto';
 import { composeUserFullName, splitIntoFirstLast } from '../../common/utils/user-name.util';
 

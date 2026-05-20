@@ -177,11 +177,19 @@ export const useAuthStore = create<AuthStore>()(
         currentAccount: state.currentAccount,
         isAuthenticated: state.isAuthenticated,
       }),
-      onRehydrateStorage: () => (state) => {
-        (state as any)?.setHasHydrated?.(true);
-        if ((state as any)?.token && typeof window !== "undefined") {
-          localStorage.setItem("gemura-auth-token", (state as any).token);
+      /**
+       * Persist callback order: middleware calls the *returned* fn after merging storage into the store.
+       * That `state` snapshot does not reliably include store actions (`setHasHydrated`), which caused
+       * `_hasHydrated` to stay false → Authenticated layout "Loading..." forever after login/navigation.
+       */
+      onRehydrateStorage: () => (_persistedSlice, error) => {
+        if (!error && typeof window !== "undefined") {
+          const t = (_persistedSlice as { token?: string | null } | undefined)?.token;
+          if (t) localStorage.setItem("gemura-auth-token", t);
         }
+        queueMicrotask(() => {
+          useAuthStore.getState().setHasHydrated(true);
+        });
       },
     },
   ),

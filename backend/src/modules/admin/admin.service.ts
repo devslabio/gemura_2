@@ -11,7 +11,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ImmisService } from '../immis/immis.service';
 import { LocationsService } from '../locations/locations.service';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import {
   ROLES,
   PERMISSIONS,
@@ -471,6 +471,38 @@ export class AdminService {
     return new Set<string>();
   }
 
+  private isMissingRelationError(error: unknown): boolean {
+    const msg = error instanceof Error ? error.message : String(error ?? '');
+    return (
+      msg.includes('42P01') ||
+      (msg.includes('relation "') && msg.includes('does not exist')) ||
+      (msg.includes('The table `') && msg.includes('does not exist'))
+    );
+  }
+
+  private optionalRelationFallback<T>(error: unknown, fallback: T): T {
+    if (this.isMissingRelationError(error)) return fallback;
+    throw error;
+  }
+
+  /** Legacy DBs may store `user_accounts.role` as a PG enum; Prisma can throw on values like `collector`. Read as text. */
+  private async legacyMembershipRolesByUserIds(
+    accountId: string,
+    userIds: string[],
+  ): Promise<Map<string, string | null>> {
+    if (!userIds.length) return new Map();
+    const rows = await this.prisma.$queryRaw<Array<{ user_id: string; role: string | null }>>(
+      Prisma.sql`
+        SELECT ua.user_id::text AS user_id, ua.role::text AS role
+        FROM user_accounts ua
+        WHERE ua.account_id::text = ${String(accountId)}
+          AND ua.status::text = 'active'
+          AND ua.user_id::text IN (${Prisma.join(userIds)})
+      `,
+    );
+    return new Map(rows.map((r) => [r.user_id, r.role]));
+  }
+
   private async hasPlatformRolePermission(platformRoleId: string | null, permissionCode: string): Promise<boolean> {
     if (!platformRoleId) return false;
     const role = await this.prisma.platformRole.findUnique({
@@ -494,13 +526,30 @@ export class AdminService {
     accountId: string,
     requiredPermission = 'manage_users',
   ): Promise<void> {
-    const userAccount = await this.prisma.userAccount.findFirst({
-      where: {
-        user_id: user.id,
-        account_id: accountId,
-        status: 'active',
-      },
-    });
+    const memberships = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        user_id: string;
+        account_id: string;
+        role: string | null;
+        status: string;
+        permissions: unknown;
+      }>
+    >(Prisma.sql`
+      SELECT
+        ua.id,
+        ua.user_id,
+        ua.account_id,
+        ua.role,
+        ua.status,
+        ua.permissions
+      FROM user_accounts ua
+      WHERE ua.user_id::text = ${String(user.id)}
+        AND ua.account_id::text = ${String(accountId)}
+        AND ua.status = 'active'
+      LIMIT 1
+    `);
+    const userAccount = memberships[0];
 
     if (!userAccount) {
       throw new ForbiddenException({
@@ -511,7 +560,7 @@ export class AdminService {
     }
 
     // System admin and admin have all permissions
-    if (isPlatformSuperAdminRole(userAccount.role)) {
+    if (isPlatformSuperAdminRole(userAccount.role ?? '')) {
       return;
     }
 
@@ -529,12 +578,10 @@ export class AdminService {
     }
 
     const granted = this.permissionSetFromPayload(parsedPermissions);
-    const roleDefaults = ROLE_DEFAULT_PERMISSIONS[userAccount.role as RoleCode] ?? [];
+    const roleDefaults = ROLE_DEFAULT_PERMISSIONS[(userAccount.role ?? '') as RoleCode] ?? [];
     let hasPermission = granted.has(requiredPermission) || roleDefaults.includes(requiredPermission);
 
-    if (!hasPermission) {
-      hasPermission = await this.hasPlatformRolePermission(userAccount.platform_role_id ?? null, requiredPermission);
-    }
+    // Legacy DB compatibility: some deployments don't have platform_role_id yet.
 
     if (!hasPermission) {
       throw new ForbiddenException({
@@ -636,13 +683,35 @@ export class AdminService {
       where.account_type = accountType;
     }
 
-    if (role) {
-      where.user_accounts = {
-        some: {
-          account_id: accountId,
-          role,
-        },
-      };
+    if (role?.trim()) {
+      const roleTrimmed = role.trim();
+      const roleMatches = await this.prisma.$queryRaw<Array<{ user_id: string }>>(
+        Prisma.sql`
+          SELECT ua.user_id::text AS user_id
+          FROM user_accounts ua
+          WHERE ua.account_id::text = ${String(accountId)}
+            AND ua.status::text = 'active'
+            AND ua.role::text = ${roleTrimmed}
+        `,
+      );
+      const roleUserIds = roleMatches.map((r) => r.user_id).filter(Boolean);
+      if (!roleUserIds.length) {
+        return {
+          code: 200,
+          status: 'success',
+          message: 'Users retrieved successfully.',
+          data: {
+            users: [],
+            pagination: {
+              page,
+              limit,
+              total: 0,
+              totalPages: 0,
+            },
+          },
+        };
+      }
+      where.id = { in: [...new Set(roleUserIds)] };
     }
 
     const [users, total] = await Promise.all([
@@ -702,11 +771,19 @@ export class AdminService {
   async getUserById(user: User, accountId: string, userId: string) {
     await this.checkAdminPermission(user, accountId);
 
-    const targetUser = await this.prisma.user.findUnique({
+    const rawUser = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
         user_accounts: {
-          include: {
+          select: {
+            id: true,
+            user_id: true,
+            account_id: true,
+            permissions: true,
+            status: true,
+            created_at: true,
+            created_by: true,
+            updated_by: true,
             account: {
               select: {
                 id: true,
@@ -721,13 +798,30 @@ export class AdminService {
       },
     });
 
-    if (!targetUser) {
+    if (!rawUser) {
       throw new NotFoundException({
         code: 404,
         status: 'error',
         message: 'User not found.',
       });
     }
+
+    const roleMeta = await this.prisma.$queryRaw<Array<{ id: string; role: string | null }>>(
+      Prisma.sql`
+        SELECT ua.id::text AS id, ua.role::text AS role
+        FROM user_accounts ua
+        WHERE ua.user_id::text = ${String(userId)}
+      `,
+    );
+    const roleByUaId = new Map(roleMeta.map((r) => [r.id, r.role]));
+
+    const enrichedUserAccounts = rawUser.user_accounts.map((row) => ({
+      ...row,
+      role: roleByUaId.get(row.id) ?? null,
+      platform_role_id: null as string | null,
+    }));
+
+    const targetUser = { ...rawUser, user_accounts: enrichedUserAccounts };
 
     const ua =
       targetUser.user_accounts?.find((row) => row.account_id === accountId && row.status === 'active') ?? null;
@@ -2358,7 +2452,7 @@ export class AdminService {
           ORDER BY collections_liters DESC
           LIMIT 6
         `,
-        ),
+        ).catch((error) => this.optionalRelationFallback(error, [])),
         this.prisma.$queryRaw<
           Array<{
             account_id: string;
@@ -2393,7 +2487,7 @@ export class AdminService {
           ORDER BY deliveries_count DESC, liters_today DESC
           LIMIT 6
         `,
-        ),
+        ).catch((error) => this.optionalRelationFallback(error, [])),
         this.prisma.mccOnboardingSubmission.findMany({
           where: { review_status: 'pending' },
           orderBy: { created_at: 'desc' },
@@ -2559,7 +2653,7 @@ export class AdminService {
                 arrived_at: { gte: bounds.gte, lte: bounds.lte },
               },
               _count: true,
-            }),
+            }).catch((error) => this.optionalRelationFallback(error, [])),
             this.prisma.payrollRun.groupBy({
               by: ['account_id'],
               where: {
@@ -2576,7 +2670,7 @@ export class AdminService {
                 created_at: { gte: bounds.gte, lte: bounds.lte },
               },
               _count: true,
-            }),
+            }).catch((error) => this.optionalRelationFallback(error, [])),
             this.prisma.loan.groupBy({
               by: ['lender_account_id'],
               where: {
@@ -2600,16 +2694,24 @@ export class AdminService {
           ])
         : [[], [], [], [], []];
 
-    const milkByAccount = new Map(milkCounts.map((r) => [r.mcc_account_id, this.normalizeGroupCount(r)]));
+    const milkEntries: Array<[string, number]> = [];
+    for (const r of milkCounts) {
+      if (!r.mcc_account_id) continue;
+      milkEntries.push([r.mcc_account_id, this.normalizeGroupCount(r)]);
+    }
+    const milkByAccount = new Map<string, number>(milkEntries);
     const payrollEntries: Array<[string, number]> = [];
     for (const r of payrollCounts) {
       if (!r.account_id) continue;
       payrollEntries.push([r.account_id, this.normalizeGroupCount(r)]);
     }
     const payrollByAccount = new Map<string, number>(payrollEntries);
-    const manifestByAccount = new Map(
-      manifestCounts.map((r) => [r.mcc_account_id, this.normalizeGroupCount(r)]),
-    );
+    const manifestEntries: Array<[string, number]> = [];
+    for (const r of manifestCounts) {
+      if (!r.mcc_account_id) continue;
+      manifestEntries.push([r.mcc_account_id, this.normalizeGroupCount(r)]);
+    }
+    const manifestByAccount = new Map<string, number>(manifestEntries);
     const loanByAccount = new Map(
       loanCounts.map((r) => [r.lender_account_id, this.normalizeGroupCount(r)]),
     );
@@ -3215,7 +3317,9 @@ export class AdminService {
       this.prisma.milkSale.count({
         where: { sale_at: dateFilter, status: { not: 'deleted' } },
       }),
-      this.prisma.mccGateDelivery.count({ where: { arrived_at: dateFilter } }),
+      this.prisma.mccGateDelivery
+        .count({ where: { arrived_at: dateFilter } })
+        .catch((error) => this.optionalRelationFallback(error, 0)),
       this.prisma.payrollRun.count({ where: { created_at: dateFilter } }),
       this.prisma.supplierCustomer.count({ where: { created_at: dateFilter } }),
       this.prisma.feedPost.count({
@@ -3275,7 +3379,7 @@ export class AdminService {
           GROUP BY 1
           ORDER BY 1
         `,
-      ),
+      ).catch((error) => this.optionalRelationFallback(error, [])),
     ]);
 
     const auditDistinctUsers = Number(auditDistinctRows[0]?.c ?? 0n);

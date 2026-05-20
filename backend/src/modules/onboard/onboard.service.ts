@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { Prisma, User } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { SubmitMccOnboardingDto } from './dto/submit-mcc-onboarding.dto';
-import * as bcrypt from 'bcrypt';
+import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { composeUserFullName } from '../../common/utils/user-name.util';
 

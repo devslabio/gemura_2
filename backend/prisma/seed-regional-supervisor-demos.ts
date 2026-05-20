@@ -1,41 +1,50 @@
 import { LocationType, PrismaClient } from '@prisma/client';
 
-/** District codes from `seed-locations.ts` (Rwanda sample hierarchy). */
+/**
+ * One demo regional supervisor per province (Rwanda hierarchy from `seed-locations.ts`).
+ * Each user’s scope =
+ * districts in `districtCodes`; those districts must belong only to `provinceLabel`’s province.
+ */
 export const REGIONAL_SUPERVISOR_DEMO_DISTRICTS = [
   {
     phone: '250788409050',
-    code: 'U_RS_DEMO_1',
-    name: 'Demo Supervisor Kigali',
+    code: 'U_RS_KIGALI',
+    name: 'Regional Supervisor · Kigali City',
     email: 'supervisor.kigali@gemura.rw',
+    provinceLabel: 'Kigali City',
     districtCodes: ['01-01', '01-02', '01-03'] as const,
   },
   {
     phone: '250788409051',
-    code: 'U_RS_DEMO_2',
-    name: 'Demo Supervisor South & West',
-    email: 'supervisor.southwest@gemura.rw',
-    districtCodes: ['02-01', '02-02', '03-01'] as const,
+    code: 'U_RS_SOUTH',
+    name: 'Regional Supervisor · Southern Province',
+    email: 'supervisor.south@gemura.rw',
+    provinceLabel: 'Southern Province',
+    districtCodes: ['02-01', '02-02'] as const,
   },
   {
     phone: '250788409052',
-    code: 'U_RS_DEMO_3',
-    name: 'Demo Supervisor Western & North',
-    email: 'supervisor.westnorth@gemura.rw',
-    districtCodes: ['03-02', '04-01', '04-02'] as const,
+    code: 'U_RS_WEST',
+    name: 'Regional Supervisor · Western Province',
+    email: 'supervisor.west@gemura.rw',
+    provinceLabel: 'Western Province',
+    districtCodes: ['03-01', '03-02'] as const,
   },
   {
     phone: '250788409053',
-    code: 'U_RS_DEMO_4',
-    name: 'Demo Supervisor East (+ shared Huye)',
-    email: 'supervisor.east@gemura.rw',
-    districtCodes: ['05-01', '05-02', '02-01'] as const,
+    code: 'U_RS_NORTH',
+    name: 'Regional Supervisor · Northern Province',
+    email: 'supervisor.north@gemura.rw',
+    provinceLabel: 'Northern Province',
+    districtCodes: ['04-01', '04-02'] as const,
   },
   {
     phone: '250788409054',
-    code: 'U_RS_DEMO_5',
-    name: 'Demo Supervisor North',
-    email: 'supervisor.north@gemura.rw',
-    districtCodes: ['04-01', '04-02'] as const,
+    code: 'U_RS_EAST',
+    name: 'Regional Supervisor · Eastern Province',
+    email: 'supervisor.east@gemura.rw',
+    provinceLabel: 'Eastern Province',
+    districtCodes: ['05-01', '05-02'] as const,
   },
 ] as const;
 
@@ -52,7 +61,7 @@ export async function seedRegionalSupervisorDemos(
   userNameFields: UserNameFields,
   demoPasswordLabel: string,
 ): Promise<void> {
-  console.log('👥 Creating regional_supervisor demo users (multi-district scope)...');
+  console.log('👥 Creating regional_supervisor demo users (one province each: Kigali, South, West, North, East)...');
   for (const row of REGIONAL_SUPERVISOR_DEMO_DISTRICTS) {
     const u = await prisma.user.upsert({
       where: { phone: row.phone },
@@ -98,8 +107,20 @@ export async function seedRegionalSupervisorDemos(
         code: { in: [...row.districtCodes] },
         location_type: LocationType.DISTRICT,
       },
-      select: { id: true, code: true },
+      select: { id: true, code: true, name: true, parent_id: true },
     });
+    const province = await prisma.location.findFirst({
+      where: { name: row.provinceLabel, location_type: LocationType.PROVINCE },
+      select: { id: true, name: true },
+    });
+    const wrongParent = province
+      ? districts.filter((d) => d.parent_id && d.parent_id !== province.id)
+      : [];
+    if (wrongParent.length) {
+      console.warn(
+        `⚠️  ${row.code}: districts not under ${row.provinceLabel}: ${wrongParent.map((d) => d.code).join(', ')}`,
+      );
+    }
     if (districts.length !== row.districtCodes.length) {
       console.warn(
         `⚠️  ${row.code}: expected ${row.districtCodes.length} districts, found ${districts.length}. Run: npx ts-node prisma/seed-locations.ts`,
@@ -115,7 +136,7 @@ export async function seedRegionalSupervisorDemos(
         skipDuplicates: true,
       });
     }
-    console.log(`   ✅ ${row.name}: ${districts.map((d) => d.code).join(', ')}`);
+    console.log(`   ✅ ${row.name}: ${districts.map((d) => `${d.name} (${d.code})`).join(', ')}`);
   }
   console.log(`✅ Regional supervisor demos on ${mainAccount.code ?? mainAccount.id} (password: ${demoPasswordLabel})`);
 }

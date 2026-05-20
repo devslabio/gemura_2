@@ -21,6 +21,15 @@ export default function AuthenticatedLayout({ children }: { children: React.Reac
     if (saved === 'true') setSidebarCollapsed(true);
   }, []);
 
+  /** Backup if persist hydrate finishes before/onFinishHydration (Next dev / hydration edge cases). */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const finish = () => useAuthStore.getState().setHasHydrated(true);
+    const unsub = useAuthStore.persist.onFinishHydration(finish);
+    if (useAuthStore.persist.hasHydrated()) finish();
+    return unsub;
+  }, []);
+
   const handleSidebarClose = useCallback(() => {
     setSidebarOpen(false);
   }, []);
