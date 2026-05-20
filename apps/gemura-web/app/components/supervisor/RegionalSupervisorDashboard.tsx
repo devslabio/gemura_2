@@ -1,26 +1,24 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Icon, {
   faBuilding,
   faChartLine,
   faClipboardList,
-  faDownload,
   faTriangleExclamation,
   faUserFriends,
   faCheck,
   faClock,
-  faChevronDown,
 } from '@/app/components/Icon';
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import {
   supervisorApi,
   type SupervisorDashboardData,
-  type SupervisorScope,
 } from '@/lib/api/supervisor';
+import { getSupervisorRollingDateRangeUtc } from '@/lib/utils/regionalSupervisorNavHref';
 import { useAuthStore } from '@/store/auth';
 
 const Chart = dynamic(() => import('react-apexcharts'), { ssr: false });
@@ -49,6 +47,15 @@ function SectionHeader({ number, title }: { number: number; title: string }) {
         {number}
       </span>
       <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+    </div>
+  );
+}
+
+function SectionHeaderLite({ title, hint }: { title: string; hint?: string }) {
+  return (
+    <div className="mb-3">
+      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      {hint ? <p className="text-xs text-gray-500 mt-0.5">{hint}</p> : null}
     </div>
   );
 }
@@ -173,24 +180,50 @@ export default function RegionalSupervisorDashboard({
   districtCount: _districtCount = 5,
   mccCount: _mccCount = 5,
 }: RegionalSupervisorDashboardProps) {
+  const router = useRouter();
+  const pathname = usePathname() ?? '/dashboard';
   const searchParams = useSearchParams();
   const regionId = searchParams?.get('region_id')?.trim() || '';
   const districtId = searchParams?.get('district_id')?.trim() || '';
   const apiAccountId = useAuthStore((s) => s.currentAccount?.account_id?.trim()) || undefined;
 
+  const applyTerritoryQuery = useCallback(
+    (next: { provinceId?: string; districtId?: string | '' }) => {
+      const p = new URLSearchParams(searchParams?.toString() ?? '');
+      if (next.provinceId !== undefined) {
+        if (next.provinceId) p.set('region_id', next.provinceId);
+        else {
+          p.delete('region_id');
+          p.delete('district_id');
+        }
+      }
+      if (next.districtId !== undefined) {
+        if (next.districtId) p.set('district_id', next.districtId);
+        else p.delete('district_id');
+      }
+      const qs = p.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
+
   /** ~30-day window for list pages (sales, collections, gate, manifests, traceability). */
-  const drillDownRange = useMemo(() => {
-    const to = new Date();
-    const from = new Date();
-    from.setUTCDate(from.getUTCDate() - 30);
-    const iso = (d: Date) => d.toISOString().slice(0, 10);
-    return { from: iso(from), to: iso(to) };
-  }, []);
+  const drillDownRange = useMemo(() => getSupervisorRollingDateRangeUtc(), []);
 
   const withQuery = (path: string, params: Record<string, string>) => {
     const q = new URLSearchParams(params).toString();
     return q ? `${path}?${q}` : path;
   };
+
+  const mergeScopeParams = useCallback(
+    (params: Record<string, string>) => {
+      const merged = { ...params };
+      if (regionId) merged.region_id = regionId;
+      if (districtId) merged.district_id = districtId;
+      return merged;
+    },
+    [regionId, districtId],
+  );
 
   const [dashboard, setDashboard] = useState<SupervisorDashboardData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -198,6 +231,24 @@ export default function RegionalSupervisorDashboard({
 
   const scope = dashboard?.scope ?? null;
   const summary = dashboard?.summary ?? null;
+
+  /** After first dashboard load — fix invalid URL; single-province: ensure region_id set (header also syncs). */
+  useEffect(() => {
+    const provinces = scope?.provinces ?? [];
+    if (!provinces.length) return;
+    const badRegion = Boolean(regionId) && !provinces.some((p) => p.id === regionId);
+    if (badRegion) {
+      const fallback = provinces[0]?.id ?? '';
+      if (fallback) applyTerritoryQuery({ provinceId: fallback, districtId: '' });
+      else applyTerritoryQuery({ provinceId: '', districtId: '' });
+      return;
+    }
+    const onlyOneProvince = provinces.length === 1;
+    const autoPid = provinces[0]?.id;
+    if (!badRegion && onlyOneProvince && autoPid && !regionId && !districtId)
+      applyTerritoryQuery({ provinceId: autoPid });
+  }, [scope, regionId, districtId, pathname, applyTerritoryQuery]);
+
   const accounts = dashboard?.portfolio ?? [];
   const mapPins = dashboard?.map_pins ?? [];
   const interventions = dashboard?.interventions ?? [];
@@ -207,6 +258,35 @@ export default function RegionalSupervisorDashboard({
   const trend = dashboard?.trend ?? { date_labels: [], series: [] };
 
   const [activityTab, setActivityTab] = useState(0);
+
+  const healthRollup = useMemo(() => {
+    let good = 0;
+    let fair = 0;
+    let atRisk = 0;
+    for (const row of accounts) {
+      if (row.health_status === 'good') good++;
+      else if (row.health_status === 'fair') fair++;
+      else atRisk++;
+    }
+    return { good, fair, atRisk };
+  }, [accounts]);
+
+  const districtRollup = useMemo(() => {
+    type Row = { districtKey: string; label: string; mcc: number; atRisk: number; gateL: number };
+    const m = new Map<string, Row>();
+    for (const row of accounts) {
+      const districtKey = row.operational_district_id || row.operational_district_label || '__unknown';
+      const label = row.operational_district_label || 'Unknown district';
+      const prev = m.get(districtKey);
+      const next: Row = prev ?? { districtKey, label, mcc: 0, atRisk: 0, gateL: 0 };
+      next.mcc += 1;
+      if (row.health_status === 'at_risk') next.atRisk += 1;
+      next.gateL += row.gate_litres_14d ?? 0;
+      m.set(districtKey, next);
+    }
+    return [...m.values()].sort((a, b) => b.gateL - a.gateL);
+  }, [accounts]);
+
   const filteredActivities = useMemo(() => {
     if (activityTab === 0) return activities;
     const kind = ACTIVITY_KIND_BY_TAB[activityTab];
@@ -264,7 +344,8 @@ export default function RegionalSupervisorDashboard({
   const effectiveDistrictCount = useMemo(() => {
     if (!scope) return 0;
     if (districtId) return 1;
-    if (regionId) return scope.districts.filter((d) => d.province_id === regionId).length;
+    const provinceKey = scope.provinces.length === 1 ? scope.provinces[0].id : regionId;
+    if (provinceKey) return scope.districts.filter((d) => d.province_id === provinceKey).length;
     return scope.districts.length;
   }, [scope, regionId, districtId]);
 
@@ -319,7 +400,7 @@ export default function RegionalSupervisorDashboard({
             sub={`${effectiveDistrictCount} districts`}
             icon={faBuilding}
             accent="blue"
-            href="/suppliers"
+            href={withQuery('/suppliers', mergeScopeParams({}))}
           />
           <KpiStrip
             label="Members"
@@ -327,7 +408,7 @@ export default function RegionalSupervisorDashboard({
             sub="Active memberships"
             icon={faUserFriends}
             accent="slate"
-            href="/members"
+            href={withQuery('/members', mergeScopeParams({}))}
           />
           <KpiStrip
             label="Milk sales (count)"
@@ -335,7 +416,7 @@ export default function RegionalSupervisorDashboard({
             sub="Transactions as supplier"
             icon={faChartLine}
             accent="green"
-            href={withQuery('/sales', { date_from: drillDownRange.from, date_to: drillDownRange.to })}
+            href={withQuery('/sales', mergeScopeParams({ date_from: drillDownRange.from, date_to: drillDownRange.to }))}
           />
           <KpiStrip
             label="Milk collections (count)"
@@ -343,7 +424,7 @@ export default function RegionalSupervisorDashboard({
             sub="Transactions as customer"
             icon={faClipboardList}
             accent="blue"
-            href={withQuery('/collections', { date_from: drillDownRange.from, date_to: drillDownRange.to })}
+            href={withQuery('/collections', mergeScopeParams({ date_from: drillDownRange.from, date_to: drillDownRange.to }))}
           />
           <KpiStrip
             label="Manifest acceptance"
@@ -351,7 +432,7 @@ export default function RegionalSupervisorDashboard({
             sub="Accepted share of resolved manifests (accepted + rejected)"
             icon={faClipboardList}
             accent="blue"
-            href={withQuery('/operations/manifests', { from: drillDownRange.from, to: drillDownRange.to })}
+            href={withQuery('/operations/manifests', mergeScopeParams({ from: drillDownRange.from, to: drillDownRange.to }))}
           />
           <KpiStrip
             label="Gate test rejection"
@@ -359,11 +440,11 @@ export default function RegionalSupervisorDashboard({
             sub="Rejected share of completed milk tests at gate"
             icon={faTriangleExclamation}
             accent="amber"
-            href={withQuery('/operations/traceability', {
+            href={withQuery('/operations/traceability', mergeScopeParams({
               from: drillDownRange.from,
               to: drillDownRange.to,
               outcome: 'rejected',
-            })}
+            }))}
           />
           <KpiStrip
             label="Tank utilization"
@@ -371,7 +452,7 @@ export default function RegionalSupervisorDashboard({
             sub="Mean tank fill % from latest facility snapshots"
             icon={faBuilding}
             accent="green"
-            href={withQuery('/operations/gate', { from: drillDownRange.from, to: drillDownRange.to })}
+            href={withQuery('/operations/gate', mergeScopeParams({ from: drillDownRange.from, to: drillDownRange.to }))}
           />
           <KpiStrip
             label="Open gate shifts"
@@ -379,9 +460,71 @@ export default function RegionalSupervisorDashboard({
             sub="Staff shifts without an end time"
             icon={faClipboardList}
             accent="slate"
-            href="/operations/shifts"
+            href={withQuery('/operations/shifts', mergeScopeParams({}))}
           />
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <section className={`${PANEL}`}>
+          <SectionHeaderLite
+            title="Portfolio health"
+            hint="Good / fair / at risk from gate volume, manifests, milk tests, shifts, and tank snapshots (same rules as the portfolio table)."
+          />
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-sm border border-emerald-100 bg-emerald-50/80 px-3 py-3 text-center">
+              <div className="text-2xl font-bold tabular-nums text-emerald-900">{loading ? '—' : healthRollup.good}</div>
+              <div className="text-xs font-semibold text-emerald-800 mt-1">Good</div>
+            </div>
+            <div className="rounded-sm border border-amber-100 bg-amber-50/80 px-3 py-3 text-center">
+              <div className="text-2xl font-bold tabular-nums text-amber-950">{loading ? '—' : healthRollup.fair}</div>
+              <div className="text-xs font-semibold text-amber-900 mt-1">Fair</div>
+            </div>
+            <div className="rounded-sm border border-red-100 bg-red-50/80 px-3 py-3 text-center">
+              <div className="text-2xl font-bold tabular-nums text-red-900">{loading ? '—' : healthRollup.atRisk}</div>
+              <div className="text-xs font-semibold text-red-800 mt-1">At risk</div>
+            </div>
+          </div>
+        </section>
+
+        <section className={`${PANEL} min-h-0`}>
+          <SectionHeaderLite
+            title="District rollup"
+            hint="Operational districts for MCCs in this filter — compare volumes and where attention is needed."
+          />
+          <div className={`min-h-0 -mx-1 ${SCROLL_TABLE}`}>
+            <table className="w-full min-w-[340px]">
+              <thead>
+                <tr>
+                  <th className={TH}>District</th>
+                  <th className={`${TH} text-right`}>MCCs</th>
+                  <th className={`${TH} text-right`}>At risk</th>
+                  <th className={`${TH} text-right`}>14d gate (L)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {districtRollup.length === 0 ? (
+                  <tr>
+                    <td className={TD_MUTED} colSpan={4}>
+                      {loading ? 'Loading…' : 'No districts with MCCs in this scope.'}
+                    </td>
+                  </tr>
+                ) : (
+                  districtRollup.map((row) => (
+                    <tr key={row.districtKey} className="hover:bg-gray-50/80">
+                      <td className={`${TD} font-medium text-gray-900`}>{row.label}</td>
+                      <td className={`${TD} text-right tabular-nums`}>{row.mcc}</td>
+                      <td className={`${TD} text-right tabular-nums ${row.atRisk > 0 ? 'text-red-700 font-medium' : ''}`}>
+                        {row.atRisk}
+                      </td>
+                      <td className={`${TD} text-right tabular-nums`}>{Math.round(row.gateL).toLocaleString()}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
 
       {/* Row 1 */}
@@ -389,10 +532,13 @@ export default function RegionalSupervisorDashboard({
         <section className={`${PANEL} xl:col-span-5 min-h-0`}>
           <SectionHeader number={1} title="MCC portfolio snapshot" />
           <div className={`min-h-0 -mx-1 ${SCROLL_TABLE}`}>
-            <table className="w-full min-w-[640px]">
+            <table className="w-full min-w-[800px]">
               <thead>
                 <tr>
                   <th className={`${TH} min-w-[14rem]`}>MCC</th>
+                  <th className={`${TH}`}>Health</th>
+                  <th className={`${TH} text-right`}>14d gate (L)</th>
+                  <th className={`${TH}`}>14d trend</th>
                   <th className={`${TH} text-right`}>Members</th>
                   <th className={`${TH} text-right`}>Sales</th>
                   <th className={`${TH} text-right`}>Collections</th>
@@ -403,7 +549,7 @@ export default function RegionalSupervisorDashboard({
               <tbody>
                 {accounts.length === 0 ? (
                   <tr>
-                    <td className={`${TD_MUTED}`} colSpan={6}>
+                    <td className={`${TD_MUTED}`} colSpan={9}>
                       {loading ? 'Loading…' : 'No MCCs found in this scope.'}
                     </td>
                   </tr>
@@ -417,6 +563,7 @@ export default function RegionalSupervisorDashboard({
                       collections: 0,
                       farms: 0,
                     };
+                    const spark = row.sparkline_14d?.length ? row.sparkline_14d : [0, 0];
                     return (
                     <tr key={row.id} className="hover:bg-gray-50/80">
                       <td className={`${TD} font-medium whitespace-nowrap`}>
@@ -426,6 +573,15 @@ export default function RegionalSupervisorDashboard({
                         >
                           {row.name}
                         </Link>
+                      </td>
+                      <td className={TD}>
+                        <StatusPill kind={row.health_status} />
+                      </td>
+                      <td className={`${TD} text-right tabular-nums`}>
+                        {row.gate_litres_14d.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </td>
+                      <td className={TD}>
+                        <MiniSparkline values={spark} />
                       </td>
                       <td className={`${TD} text-right tabular-nums`}>{m.members.toLocaleString()}</td>
                       <td className={`${TD} text-right tabular-nums`}>{m.sales.toLocaleString()}</td>
@@ -439,7 +595,7 @@ export default function RegionalSupervisorDashboard({
               </tbody>
             </table>
           </div>
-          <Link href="/suppliers" className="mt-3 text-xs font-semibold text-[var(--primary)] hover:underline">
+          <Link href={withQuery('/suppliers', mergeScopeParams({}))} className="mt-3 text-xs font-semibold text-[var(--primary)] hover:underline">
             View all MCCs →
           </Link>
         </section>
@@ -613,8 +769,8 @@ export default function RegionalSupervisorDashboard({
               </tbody>
             </table>
           </div>
-          <Link href="/dashboard" className="mt-3 text-xs font-semibold text-[var(--primary)] hover:underline">
-            Open scoreboard detail →
+          <Link href={withQuery('/operations/shifts', mergeScopeParams({}))} className="mt-3 text-xs font-semibold text-[var(--primary)] hover:underline">
+            Review shifts →
           </Link>
         </section>
       </div>

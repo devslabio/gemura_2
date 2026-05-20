@@ -10,6 +10,7 @@
  */
 
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
+import type { RegionalSupervisorNavQuery } from '@/lib/utils/regionalSupervisorNavHref';
 import {
   faHome,
   faUsers,
@@ -31,6 +32,8 @@ import {
   faRightFromBracket,
   faChartBar,
   faUserFriends,
+  faCog,
+  faUser,
 } from '@/app/components/Icon';
 
 /** Account types that see user/operations menu (filtered by role + permissions) */
@@ -73,6 +76,8 @@ export interface NavItem {
   requiresAnyPermission?: string[];
   /** When true, sidebar shows this link only for veterinary-style roles that see the dashboard Quality desk. */
   vetQualityDeskOnly?: boolean;
+  /** Regional supervisor sidebar: merge `region_id` / `district_id` from current URL (+ optional rolling dates). */
+  regionalSupervisorQuery?: RegionalSupervisorNavQuery;
 }
 
 /** Sub-views for the dashboard “Operations” tab (also used at `/operations/*` via sidebar). */
@@ -138,6 +143,121 @@ export const MEMBERS_NAV_PERMISSIONS: readonly string[] = [
   'create_suppliers',
   'update_suppliers',
   'view_suppliers',
+];
+
+/**
+ * Sidebar for `regional_supervisor`: read-only oversight of assigned provinces/districts.
+ * Drops tenant-only tools (customers, SKU inventory, staff roster, app settings).
+ * Sidebar links preserve `region_id` / `district_id` (+ default date ranges on list-heavy routes).
+ */
+export const REGIONAL_SUPERVISOR_NAV_GROUP_ORDER = [
+  'Regional oversight',
+  'Territory & members',
+  'Field oversight',
+  'Milk movements',
+  'Your account',
+] as const;
+
+export const REGIONAL_SUPERVISOR_NAV_ITEMS: NavItem[] = [
+  {
+    icon: faChartBar,
+    label: 'Regional overview',
+    href: '/dashboard',
+    section: 'operations',
+    navGroup: 'Regional oversight',
+    requiresPermission: 'dashboard.view',
+    regionalSupervisorQuery: 'geo',
+  },
+  {
+    icon: faBuilding,
+    label: 'Supervised producers',
+    href: '/suppliers',
+    section: 'operations',
+    navGroup: 'Territory & members',
+    requiresPermission: 'view_suppliers',
+    regionalSupervisorQuery: 'geo',
+  },
+  {
+    icon: faUserFriends,
+    label: 'Cooperative members',
+    href: '/members',
+    section: 'operations',
+    navGroup: 'Territory & members',
+    requiresAnyPermission: [...MEMBERS_NAV_PERMISSIONS],
+    regionalSupervisorQuery: 'geo',
+  },
+  {
+    icon: faTruck,
+    label: 'Gate deliveries',
+    href: '/operations/gate',
+    section: 'operations',
+    navGroup: 'Field oversight',
+    requiresAnyPermission: ['mcc_view_operations', 'view_collections'],
+    regionalSupervisorQuery: 'geo_ops_dates',
+  },
+  {
+    icon: faList,
+    label: 'Manifests',
+    href: '/operations/manifests',
+    section: 'operations',
+    navGroup: 'Field oversight',
+    requiresAnyPermission: ['mcc_view_operations', 'view_collections'],
+    regionalSupervisorQuery: 'geo_ops_dates',
+  },
+  {
+    icon: faEye,
+    label: 'Milk tests',
+    href: '/operations/traceability',
+    section: 'operations',
+    navGroup: 'Field oversight',
+    requiresAnyPermission: ['mcc_view_operations', 'mcc_manage_operations'],
+    regionalSupervisorQuery: 'geo_ops_dates',
+  },
+  {
+    icon: faClock,
+    label: 'Gate shifts',
+    href: '/operations/shifts',
+    section: 'operations',
+    navGroup: 'Field oversight',
+    requiresAnyPermission: ['mcc_view_operations'],
+    regionalSupervisorQuery: 'geo',
+  },
+  {
+    icon: faReceipt,
+    label: 'Milk sales',
+    href: '/sales',
+    section: 'operations',
+    navGroup: 'Milk movements',
+    requiresPermission: 'view_sales',
+    regionalSupervisorQuery: 'geo_sales_dates',
+  },
+  {
+    icon: faBox,
+    label: 'Milk collections',
+    href: '/collections',
+    section: 'operations',
+    navGroup: 'Milk movements',
+    requiresAnyPermission: ['view_collections', 'mcc_view_operations'],
+    regionalSupervisorQuery: 'geo_sales_dates',
+  },
+  {
+    icon: faRightFromBracket,
+    label: 'Incoming transfers',
+    href: '/transfers/incoming',
+    section: 'operations',
+    navGroup: 'Milk movements',
+    requiresPermission: 'view_collections',
+    regionalSupervisorQuery: 'geo',
+  },
+  {
+    icon: faUser,
+    label: 'My profile',
+    href: '/profile',
+    section: 'operations',
+    navGroup: 'Your account',
+    requiresPermission: 'dashboard.view',
+    regionalSupervisorQuery: 'none',
+  },
 ];
 
 /**

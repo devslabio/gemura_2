@@ -594,8 +594,10 @@ async function main() {
   console.log('   250788409024 collector · 250788409025 viewer · 250788409026 agent');
   console.log('👤 supplier role (own tenant + supplierCustomer link to Main MCC; role slug supplier):');
   console.log('   250788409034 supplier@gemura.rw');
-  console.log('👤 regional_supervisor (multi-district):');
-  console.log('   250788409050 Kigali · 250788409051 South&West · 250788409052 West&North · 250788409053 East');
+  console.log('👤 regional_supervisor (one seeded province each; drill down by district on /dashboard):');
+  console.log(
+    '   250788409050 Kigali · 250788409051 Southern · 250788409052 Western · 250788409053 Northern · 250788409054 Eastern',
+  );
   console.log(`👤 customer (own account): 250788409027`);
   console.log(`📧 Main email: ${mainUser.email}`);
   console.log(`🎫 Token: ${authToken}`);

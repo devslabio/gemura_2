@@ -207,6 +207,8 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
     'dashboard.view',
     'view_sales',
     'view_collections',
+    'view_suppliers',
+    'view_customers',
     'mcc_view_operations',
     'view_inventory',
     'view_analytics',
@@ -323,7 +325,7 @@ export const ROLE_DESCRIPTIONS: Record<RoleCode, string> = {
   leadership: 'Governance view with aggregate analytics and operational monitoring',
   regulator: 'Read-only compliance and traceability oversight access',
   regional_supervisor:
-    'Regional oversight: aggregate dashboard and operational visibility aligned with assigned districts (admin-managed)',
+    'Regional oversight: monitor all MCCs in assigned provinces/districts — portfolio health, gate volume, manifests, milk tests, and trade activity (read-focused; district scope is admin-managed)',
   umucunda_a:
     'Umucunda route operator: own gate deliveries & manifests (linked supplier), sales/collections; no site-wide MCC roster or inventory',
   umucunda_b:

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuthStore } from '@/store/auth';
@@ -14,6 +14,8 @@ import {
   ADMIN_NAV_GROUP_ORDER,
   OPERATIONS_NAV_ITEMS,
   OPERATIONS_NAV_GROUP_ORDER,
+  REGIONAL_SUPERVISOR_NAV_ITEMS,
+  REGIONAL_SUPERVISOR_NAV_GROUP_ORDER,
   EXTERNAL_SUPPLIER_NAV_ITEMS,
   EXTERNAL_CUSTOMER_NAV_ITEMS,
   EXTERNAL_FARMER_NAV_ITEMS,
@@ -25,6 +27,7 @@ import {
   isExternalSupplier,
   isExternalCustomer,
 } from '@/lib/config/nav.config';
+import { buildRegionalSupervisorNavHref } from '@/lib/utils/regionalSupervisorNavHref';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -38,6 +41,7 @@ const FORCE_OPERATIONS_DASHBOARD =
 
 export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user, currentAccount } = useAuthStore();
   const { canManageUsers, isAdmin, canViewDashboard, hasPermission, hasAnyPermission } = usePermission();
   const [userName, setUserName] = useState('User');
@@ -125,6 +129,15 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
         EXTERNAL_CUSTOMER_NAV_ITEMS.forEach((item) => items.push(item));
       }
       return buildNavSidebarGroups(items, EXTERNAL_NAV_GROUP_ORDER);
+    }
+
+    /** Regional supervisors: scoped navigation focused on overseeing MCCs in their provinces/districts. */
+    if (role === 'regional_supervisor' && isBusinessAccount(accountType)) {
+      REGIONAL_SUPERVISOR_NAV_ITEMS.forEach((item) => {
+        if (!navItemAllowed(item)) return;
+        items.push(item);
+      });
+      return buildNavSidebarGroups(items, REGIONAL_SUPERVISOR_NAV_GROUP_ORDER);
     }
 
     const showAdminDashboard = canViewDashboard() || isAdmin();
@@ -236,6 +249,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     navItemAllowed,
     includeOperationsNavItem,
     limitedOpsHrefAllowed,
+    searchParams,
   ]);
 
   const isActive = (href?: string) => {
@@ -399,7 +413,17 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
                 )}
                 <ul className="list-none p-0 m-0 flex flex-col">
                   {group.items.map((item) => {
-                    const parentActive = isActive(item.href);
+                    const linkHref =
+                      role === 'regional_supervisor' &&
+                      isBusinessAccount(accountType) &&
+                      item.regionalSupervisorQuery !== undefined
+                        ? buildRegionalSupervisorNavHref(
+                            item.href,
+                            item.regionalSupervisorQuery,
+                            searchParams,
+                          )
+                        : item.href || '#';
+                    const parentActive = isActive(linkHref);
                     const rowClass = `
                       flex items-center gap-3 min-h-[44px] px-4 sm:px-5 md:px-7 py-3 sm:py-4 w-full text-left
                       transition-all duration-200
@@ -410,9 +434,9 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
                       }
                     `;
                     return (
-                      <li key={`${group.title}-${item.href}`} className="my-0.5">
+                      <li key={`${group.title}-${item.href}-${item.label}`} className="my-0.5">
                         <Link
-                          href={item.href || '#'}
+                          href={linkHref}
                           onClick={handleLinkClick}
                           className={rowClass}
                           title={collapsed ? item.label : undefined}

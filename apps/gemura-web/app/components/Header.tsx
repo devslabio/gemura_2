@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth';
@@ -135,8 +135,24 @@ export default function Header({
   const notifications: any[] = [];
   const unreadCount = 0;
 
+  const regionalSupervisorRole =
+    (currentAccount?.role || '').trim().toLowerCase().replace(/\s+/g, '_') === 'regional_supervisor';
+
+  /** Province/district scope for supervisors on oversight routes (matches trimmed regional sidebar). */
+  const SUPERVISOR_SCOPED_APP_PREFIXES = [
+    '/dashboard',
+    '/suppliers',
+    '/members',
+    '/operations',
+    '/sales',
+    '/collections',
+    '/transfers',
+  ] as const;
+
   const showSupervisorGeoFilters =
-    pathname?.startsWith('/dashboard') && (currentAccount?.role || '').toLowerCase() === 'regional_supervisor';
+    regionalSupervisorRole &&
+    !!pathname &&
+    SUPERVISOR_SCOPED_APP_PREFIXES.some((p) => pathname.startsWith(p));
 
   const [scope, setScope] = useState<SupervisorScope | null>(null);
   const [scopeLoading, setScopeLoading] = useState(false);
@@ -146,31 +162,37 @@ export default function Header({
 
   const provinces = scope?.provinces ?? [];
   const allDistricts = scope?.districts ?? [];
+  const singleProvince = provinces.length === 1 ? provinces[0] : null;
+  const effectiveProvinceId = singleProvince?.id ?? selectedProvinceId;
 
   const districts = useMemo(() => {
-    if (!selectedProvinceId) return allDistricts;
-    return allDistricts.filter((d) => d.province_id === selectedProvinceId);
-  }, [allDistricts, selectedProvinceId]);
+    if (!effectiveProvinceId) return [];
+    return allDistricts.filter((d) => d.province_id === effectiveProvinceId);
+  }, [allDistricts, effectiveProvinceId]);
 
   const selectedProvinceLabel = useMemo(() => {
-    if (!selectedProvinceId) return 'All regions';
-    return provinces.find((p) => p.id === selectedProvinceId)?.name ?? 'All regions';
-  }, [provinces, selectedProvinceId]);
+    if (singleProvince) return singleProvince.name;
+    if (!selectedProvinceId) return scopeLoading ? '' : 'Province';
+    return provinces.find((p) => p.id === selectedProvinceId)?.name ?? 'Province';
+  }, [provinces, selectedProvinceId, singleProvince, scopeLoading]);
 
   const selectedDistrictLabel = useMemo(() => {
     if (!selectedDistrictId) return 'All districts';
     return allDistricts.find((d) => d.id === selectedDistrictId)?.name ?? 'All districts';
   }, [allDistricts, selectedDistrictId]);
 
-  const setGeoQuery = (next: { region_id?: string; district_id?: string }) => {
-    const p = new URLSearchParams(searchParams?.toString() || '');
-    if (typeof next.region_id === 'string' && next.region_id.length > 0) p.set('region_id', next.region_id);
-    else p.delete('region_id');
-    if (typeof next.district_id === 'string' && next.district_id.length > 0) p.set('district_id', next.district_id);
-    else p.delete('district_id');
-    const q = p.toString();
-    router.replace(q ? `${pathname}?${q}` : pathname);
-  };
+  const setGeoQuery = useCallback(
+    (next: { region_id?: string; district_id?: string }) => {
+      const p = new URLSearchParams(searchParams?.toString() || '');
+      if (typeof next.region_id === 'string' && next.region_id.length > 0) p.set('region_id', next.region_id);
+      else p.delete('region_id');
+      if (typeof next.district_id === 'string' && next.district_id.length > 0) p.set('district_id', next.district_id);
+      else p.delete('district_id');
+      const q = p.toString();
+      router.replace(q ? `${pathname}?${q}` : pathname);
+    },
+    [router, pathname, searchParams],
+  );
 
   const closeGeoMenus = () => {
     setRegionOpen(false);
@@ -208,33 +230,48 @@ export default function Header({
   }, [showSupervisorGeoFilters, currentAccount?.account_id]);
 
   useEffect(() => {
-    if (!showSupervisorGeoFilters) return;
-    if (!scope) return;
-    const regionId = searchParams?.get('region_id')?.trim() || '';
-    const districtId = searchParams?.get('district_id')?.trim() || '';
+    if (!showSupervisorGeoFilters || !scope) return;
+    const plist = scope.provinces;
+    const dlist = scope.districts;
+    const regionFromUrl = searchParams?.get('region_id')?.trim() ?? '';
+    const districtFromUrl = searchParams?.get('district_id')?.trim() ?? '';
+    const provinceIdsOk = new Set(plist.map((p) => p.id));
+    const districtById = new Map(dlist.map((d) => [d.id, d]));
 
-    const scopedDistrictIds = new Set(scope.districts.map((d) => d.id));
-    const scopedProvinceIds = new Set(scope.provinces.map((p) => p.id));
-
-    const nextDistrictOk = districtId && scopedDistrictIds.has(districtId);
-    const nextRegionOk = regionId && scopedProvinceIds.has(regionId);
-
-    if (nextDistrictOk) {
-      const d = scope.districts.find((x) => x.id === districtId);
-      setSelectedDistrictId(districtId);
-      setSelectedProvinceId(d?.province_id ?? '');
-      return;
-    }
-    if (nextRegionOk) {
-      setSelectedProvinceId(regionId);
+    if (plist.length === 0) {
+      setSelectedProvinceId('');
       setSelectedDistrictId('');
       return;
     }
 
-    // Default: show all scoped districts (no query filter).
-    setSelectedProvinceId('');
-    setSelectedDistrictId('');
-  }, [showSupervisorGeoFilters, scope, searchParams]);
+    if (plist.length === 1) {
+      const pid = plist[0].id;
+      setSelectedProvinceId(pid);
+      const dRow = districtFromUrl ? districtById.get(districtFromUrl) : undefined;
+      const districtOk = !!(dRow && dRow.province_id === pid);
+      const nextDistrict = districtOk ? districtFromUrl : '';
+      setSelectedDistrictId(nextDistrict);
+
+      const urlBroken = regionFromUrl !== pid || (districtFromUrl.length > 0 && !districtOk);
+      if (urlBroken)
+        setGeoQuery({ region_id: pid, district_id: nextDistrict || undefined });
+      return;
+    }
+
+    // Multiple provinces in scope (legacy/admin): pick one province — never show "all regions" districts mixed.
+    const regionOk = regionFromUrl.length > 0 && provinceIdsOk.has(regionFromUrl);
+    const chosenPid = regionOk ? regionFromUrl : plist[0].id;
+    setSelectedProvinceId(chosenPid);
+
+    const dRow2 = districtFromUrl ? districtById.get(districtFromUrl) : undefined;
+    const districtOk2 = !!(dRow2 && dRow2.province_id === chosenPid);
+    const nextDistrict2 = districtOk2 ? districtFromUrl : '';
+    setSelectedDistrictId(nextDistrict2);
+
+    const urlBroken2 =
+      !regionOk || (districtFromUrl.length > 0 && !districtOk2) || regionFromUrl !== chosenPid;
+    if (urlBroken2) setGeoQuery({ region_id: chosenPid, district_id: nextDistrict2 || undefined });
+  }, [showSupervisorGeoFilters, scope, searchParams, setGeoQuery]);
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50 safe-area-inset">
@@ -274,70 +311,66 @@ export default function Header({
 
         {showSupervisorGeoFilters && (
           <div className="flex items-center gap-2 flex-shrink-0 min-w-0">
-            <div className="relative" ref={regionRef}>
-              <button
-                type="button"
-                onClick={() => {
-                  setRegionOpen((v) => !v);
-                  setDistrictOpen(false);
-                  setUserMenuOpen(false);
-                  setNotificationsOpen(false);
-                  setAccountSwitcherOpen(false);
-                }}
-                className="flex items-center gap-2 min-w-0 max-w-[220px] px-3 py-2 min-h-[44px] rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 hover:border-gray-300 transition-colors"
-                aria-label="Region"
-                aria-expanded={regionOpen}
+            {singleProvince ? (
+              <div
+                className="flex items-center min-w-0 max-w-[220px] px-3 py-2 min-h-[44px] rounded-lg bg-gray-50 border border-gray-200"
+                title="Your supervision is scoped to this province"
               >
                 <span className="text-sm font-semibold text-gray-900 truncate">
                   {scopeLoading ? 'Loading…' : selectedProvinceLabel}
                 </span>
-                <Icon
-                  icon={faChevronDown}
-                  className={`text-gray-400 transition-transform ${regionOpen ? 'rotate-180' : ''}`}
-                  size="sm"
-                />
-              </button>
-              {regionOpen && (
-                <div className="absolute left-0 top-full mt-2 w-64 bg-white rounded-xl border border-gray-200 shadow-lg shadow-gray-200/50 py-1 z-[1000]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedProvinceId('');
-                      setSelectedDistrictId('');
-                      setGeoQuery({ region_id: '', district_id: '' });
-                      closeGeoMenus();
-                    }}
-                    className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left text-sm rounded-lg mx-1 transition-colors ${
-                      !selectedProvinceId ? 'bg-[var(--primary)]/10 text-[var(--primary)]' : 'text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="truncate font-medium">All regions</span>
-                    {!selectedProvinceId ? <Icon icon={faCheck} className="text-[var(--primary)] shrink-0" size="sm" /> : null}
-                  </button>
-                  {provinces.map((opt) => {
-                    const active = opt.id === selectedProvinceId;
-                    return (
-                      <button
-                        key={opt.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedProvinceId(opt.id);
-                          setSelectedDistrictId('');
-                          setGeoQuery({ region_id: opt.id, district_id: '' });
-                          closeGeoMenus();
-                        }}
-                        className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left text-sm rounded-lg mx-1 transition-colors ${
-                          active ? 'bg-[var(--primary)]/10 text-[var(--primary)]' : 'text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        <span className="truncate font-medium">{opt.name}</span>
-                        {active ? <Icon icon={faCheck} className="text-[var(--primary)] shrink-0" size="sm" /> : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+              </div>
+            ) : (
+              <div className="relative" ref={regionRef}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRegionOpen((v) => !v);
+                    setDistrictOpen(false);
+                    setUserMenuOpen(false);
+                    setNotificationsOpen(false);
+                    setAccountSwitcherOpen(false);
+                  }}
+                  className="flex items-center gap-2 min-w-0 max-w-[220px] px-3 py-2 min-h-[44px] rounded-lg bg-gray-50 hover:bg-gray-100 border border-gray-200 hover:border-gray-300 transition-colors"
+                  aria-label="Province"
+                  aria-expanded={regionOpen}
+                >
+                  <span className="text-sm font-semibold text-gray-900 truncate">
+                    {scopeLoading ? 'Loading…' : selectedProvinceLabel || 'Province'}
+                  </span>
+                  <Icon
+                    icon={faChevronDown}
+                    className={`text-gray-400 transition-transform ${regionOpen ? 'rotate-180' : ''}`}
+                    size="sm"
+                  />
+                </button>
+                {regionOpen && provinces.length > 1 ? (
+                  <div className="absolute left-0 top-full mt-2 w-64 bg-white rounded-xl border border-gray-200 shadow-lg shadow-gray-200/50 py-1 z-[1000]">
+                    {provinces.map((opt) => {
+                      const active = opt.id === selectedProvinceId;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedProvinceId(opt.id);
+                            setSelectedDistrictId('');
+                            setGeoQuery({ region_id: opt.id, district_id: '' });
+                            closeGeoMenus();
+                          }}
+                          className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left text-sm rounded-lg mx-1 transition-colors ${
+                            active ? 'bg-[var(--primary)]/10 text-[var(--primary)]' : 'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <span className="truncate font-medium">{opt.name}</span>
+                          {active ? <Icon icon={faCheck} className="text-[var(--primary)] shrink-0" size="sm" /> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            )}
 
             <div className="relative" ref={districtRef}>
               <button
@@ -372,7 +405,10 @@ export default function Header({
                       type="button"
                       onClick={() => {
                         setSelectedDistrictId('');
-                        setGeoQuery({ region_id: selectedProvinceId, district_id: '' });
+                        setGeoQuery({
+                          region_id: effectiveProvinceId || selectedProvinceId,
+                          district_id: '',
+                        });
                         closeGeoMenus();
                       }}
                       className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left text-sm rounded-lg mx-1 transition-colors ${
@@ -390,7 +426,10 @@ export default function Header({
                           type="button"
                           onClick={() => {
                             setSelectedDistrictId(opt.id);
-                            setGeoQuery({ region_id: selectedProvinceId, district_id: opt.id });
+                            setGeoQuery({
+                              region_id: effectiveProvinceId || selectedProvinceId,
+                              district_id: opt.id,
+                            });
                             closeGeoMenus();
                           }}
                           className={`w-full flex items-center justify-between gap-3 px-3 py-2 text-left text-sm rounded-lg mx-1 transition-colors ${
