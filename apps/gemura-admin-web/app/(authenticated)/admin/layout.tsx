@@ -6,8 +6,8 @@ import { usePermission } from '@/hooks/usePermission';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { canManageUsers, isAdmin, canViewDashboard } = usePermission();
-  const allowed = canViewDashboard() || canManageUsers() || isAdmin();
+  const { canAccessAdminPortal } = usePermission();
+  const allowed = canAccessAdminPortal();
 
   useEffect(() => {
     if (!allowed) router.replace('/dashboard');

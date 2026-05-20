@@ -8,6 +8,7 @@
 export const ROLES = [
   'system_admin',
   'admin',
+  'operator',
   'manager',
   'veterinary_officer',
   'casual_laborer',
@@ -149,6 +150,17 @@ export const ACCOUNT_MEMBERSHIP_LIST_PERMISSIONS: readonly string[] = [
 export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
   system_admin: PERMISSIONS.map((p) => p.code),
   admin: PERMISSIONS.map((p) => p.code),
+  operator: [
+    'dashboard.view',
+    'view_regional_accounts',
+    'view_sales',
+    'view_collections',
+    'mcc_view_operations',
+    'view_suppliers',
+    'view_customers',
+    'view_inventory',
+    'view_analytics',
+  ],
   manager: [
     'dashboard.view',
     'manage_users',
@@ -299,6 +311,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
 export const ROLE_LABELS: Record<RoleCode, string> = {
   system_admin: 'System admin',
   admin: 'Admin',
+  operator: 'Platform operator',
   manager: 'Manager',
   veterinary_officer: 'Veterinary officer',
   casual_laborer: 'Casual laborer',
@@ -318,6 +331,8 @@ export const ROLE_LABELS: Record<RoleCode, string> = {
 export const ROLE_DESCRIPTIONS: Record<RoleCode, string> = {
   system_admin: 'Full platform access; all permissions',
   admin: 'Administrative access; manage users and settings',
+  operator:
+    'Platform-wide read-only oversight: MCC directory, milk KPIs, finance summaries, and audit visibility — no user/role administration',
   manager: 'Full operational access; sales, collections, inventory, analytics; can manage team members',
   veterinary_officer: 'Quality testing and collection intake supervision with inventory visibility',
   casual_laborer:

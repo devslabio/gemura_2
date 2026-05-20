@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Icon, { faEye, faEyeSlash, faEnvelope, faLock, faPhone } from '@/app/components/Icon';
 import AuthHeroPanel from '@/app/components/AuthHeroPanel';
 import { useAuthStore } from '@/store/auth';
+import { PermissionService } from '@/lib/services/permission.service';
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -63,7 +64,11 @@ export default function AdminLoginPage() {
       }
 
       await new Promise((resolve) => setTimeout(resolve, 100));
-      router.push('/dashboard');
+      if (PermissionService.canViewOperatorDashboard()) {
+        router.push('/admin/operator');
+      } else {
+        router.push('/dashboard');
+      }
     } catch (err: any) {
       setError(err?.message || 'Login failed. Please try again.');
     } finally {

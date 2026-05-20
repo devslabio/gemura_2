@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 
+import AdminPagePeriodBar from '@/app/components/AdminPagePeriodBar';
 import FilterBar, { FilterBarActions, FilterBarExport, FilterBarGroup } from '@/app/components/FilterBar';
 import type { ExportColumn } from '@/app/components/FilterBar';
 import { ADMIN_REPORT_PAGE_SIZES } from '@/hooks/useAdminReportNavigation';
@@ -13,6 +14,8 @@ type AdminReportListChromeProps<T extends object> = {
   headerRight?: ReactNode;
   /** When false, date inputs are hidden (e.g. portfolio-wide lists). */
   showDateFilters?: boolean;
+  /** When false, hides the period dropdown (e.g. portfolio-wide lists). */
+  showPeriodToolbar?: boolean;
   dateFrom?: string;
   dateTo?: string;
   pageSize: number;
@@ -30,7 +33,8 @@ export default function AdminReportListChrome<T extends object>({
   title,
   periodHint,
   headerRight,
-  showDateFilters = true,
+  showDateFilters = false,
+  showPeriodToolbar = true,
   dateFrom = '',
   dateTo = '',
   pageSize,
@@ -50,7 +54,10 @@ export default function AdminReportListChrome<T extends object>({
           <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
           {periodHint ? <p className="mt-1 text-sm text-gray-600">{periodHint}</p> : null}
         </div>
-        {headerRight ? <div className="flex shrink-0 flex-wrap items-center gap-2">{headerRight}</div> : null}
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {showPeriodToolbar ? <AdminPagePeriodBar /> : null}
+          {headerRight}
+        </div>
       </div>
 
       <FilterBar>

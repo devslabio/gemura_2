@@ -17,6 +17,12 @@ export function isPlatformSuperAdminRole(role: string | null | undefined): boole
   return r === 'system_admin' || r === 'admin' || r === 'owner';
 }
 
+/** Gemura platform operator — dedicated overview dashboard (not MCC floor staff). */
+export function isPlatformOperatorRole(role: string | null | undefined): boolean {
+  return canonicalPlatformRoleSlug(role) === 'operator';
+}
+
+/** Compare role slugs treating legacy `owner` as `system_admin` and DOC/UI aliases → canonical platform slugs. */
 export function platformRolesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
   return canonicalPlatformRoleSlug(a) === canonicalPlatformRoleSlug(b);
 }

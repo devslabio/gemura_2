@@ -29,7 +29,7 @@ function MilkManifestsReportInner() {
   const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
   const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
-  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters } =
+  const { apiParams, filterInputs, periodLabel, setPageSize, setPage, clearFilters } =
     useAdminReportNavigation();
 
   const [loading, setLoading] = useState(true);
@@ -69,8 +69,8 @@ function MilkManifestsReportInner() {
   }, [allowed, load, router]);
 
   const periodHint = period
-    ? `Resolved window (UTC): ${new Date(period.start).toLocaleString()} → ${new Date(period.end).toLocaleString()}`
-    : undefined;
+    ? `${periodLabel} · UTC: ${new Date(period.start).toLocaleString()} → ${new Date(period.end).toLocaleString()}`
+    : periodLabel;
 
   const columns: TableColumn<PlatformMilkManifestRow>[] = [
     { key: 'manifest_ref', label: 'Ref', render: (v) => <span className="font-mono text-xs">{String(v)}</span> },
@@ -114,11 +114,7 @@ function MilkManifestsReportInner() {
     <AdminReportListChrome
       title="Milk manifests"
       periodHint={periodHint}
-      dateFrom={filterInputs.dateFrom}
-      dateTo={filterInputs.dateTo}
       pageSize={filterInputs.pageSize}
-      onDateFromChange={setDateFrom}
-      onDateToChange={setDateTo}
       onPageSizeChange={setPageSize}
       onClearFilters={clearFilters}
       exportFilename={`milk-manifests-${new Date().toISOString().split('T')[0]}.csv`}

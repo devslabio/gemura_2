@@ -465,8 +465,12 @@ export function SupplierOnboardingPayloadDisplay({ payload }: { payload: unknown
       >
         <dl>
           <Row label="Recorded type" value={supplierType || (isFarmer ? 'farmer' : 'collector')} />
-          {!isFarmer && p.collector_kind && <Row label="Collector kind" value={str(p.collector_kind)} />}
-          {!isFarmer && draft.collectorKind && <Row label="Collector kind (draft)" value={str(draft.collectorKind)} />}
+          {!isFarmer && p.collector_kind != null ? (
+            <Row label="Collector kind" value={str(p.collector_kind)} />
+          ) : null}
+          {!isFarmer && draft.collectorKind != null ? (
+            <Row label="Collector kind (draft)" value={str(draft.collectorKind)} />
+          ) : null}
           <Row label="National ID photo file ref." value={hasNid ? <span className="font-mono text-xs">{str(p.nid_photo_meta)}</span> : 'Not attached'} />
         </dl>
       </Card>

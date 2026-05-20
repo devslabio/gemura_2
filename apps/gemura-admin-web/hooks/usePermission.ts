@@ -18,6 +18,10 @@ export function usePermission() {
   const canManageUsers = useCallback(() => PermissionService.canManageUsers(), []);
   const canViewPlatformAccounts = useCallback(() => PermissionService.canViewPlatformAccounts(), []);
   const canViewDashboard = useCallback(() => PermissionService.canViewDashboard(), []);
+  const isPlatformOperator = useCallback(() => PermissionService.isPlatformOperator(), []);
+  const canViewOperatorDashboard = useCallback(() => PermissionService.canViewOperatorDashboard(), []);
+  const canViewSystemAdminDashboard = useCallback(() => PermissionService.canViewSystemAdminDashboard(), []);
+  const canAccessAdminPortal = useCallback(() => PermissionService.canAccessAdminPortal(), []);
 
   return {
     hasPermission,
@@ -29,6 +33,10 @@ export function usePermission() {
     canManageUsers,
     canViewPlatformAccounts,
     canViewDashboard,
+    isPlatformOperator,
+    canViewOperatorDashboard,
+    canViewSystemAdminDashboard,
+    canAccessAdminPortal,
     user,
     currentAccount,
   };

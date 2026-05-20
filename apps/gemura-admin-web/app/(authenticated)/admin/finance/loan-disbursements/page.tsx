@@ -31,7 +31,7 @@ function LoanDisbursementsReportInner() {
   const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
   const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
-  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters } =
+  const { apiParams, filterInputs, periodLabel, setPageSize, setPage, clearFilters } =
     useAdminReportNavigation();
 
   const [loading, setLoading] = useState(true);
@@ -102,12 +102,8 @@ function LoanDisbursementsReportInner() {
   return (
     <AdminReportListChrome
       title="Loan disbursements"
-      periodHint="Loans with disbursement date in the selected window."
-      dateFrom={filterInputs.dateFrom}
-      dateTo={filterInputs.dateTo}
+      periodHint={`${periodLabel} · loans disbursed in this window`}
       pageSize={filterInputs.pageSize}
-      onDateFromChange={setDateFrom}
-      onDateToChange={setDateTo}
       onPageSizeChange={setPageSize}
       onClearFilters={clearFilters}
       exportFilename={`loan-disbursements-${new Date().toISOString().split('T')[0]}.csv`}

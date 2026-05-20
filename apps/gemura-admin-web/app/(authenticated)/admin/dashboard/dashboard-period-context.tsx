@@ -52,17 +52,19 @@ export function DashboardPeriodProvider({ children }: { children: ReactNode }) {
         const n = new Date();
         const from = toYYYYMMDD(new Date(n.getFullYear(), n.getMonth(), 1));
         const to = toYYYYMMDD(n);
-        pushQuery((q) => {
-          q.set('period', 'custom');
-          q.set('date_from', from);
-          q.set('date_to', to);
-        });
+      pushQuery((q) => {
+        q.set('period', 'custom');
+        q.set('date_from', from);
+        q.set('date_to', to);
+        q.delete('page');
+      });
         return;
       }
       pushQuery((q) => {
         q.set('period', p);
         q.delete('date_from');
         q.delete('date_to');
+        q.delete('page');
       });
     },
     [pushQuery],
@@ -74,6 +76,7 @@ export function DashboardPeriodProvider({ children }: { children: ReactNode }) {
         q.set('period', 'custom');
         q.set('date_from', from);
         q.set('date_to', to);
+        q.delete('page');
       });
     },
     [pushQuery],

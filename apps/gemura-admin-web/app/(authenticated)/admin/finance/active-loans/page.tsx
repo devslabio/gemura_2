@@ -110,6 +110,7 @@ function ActiveLoansReportInner() {
       title="Active loans"
       periodHint="Portfolio view: all loans with status active (date filters do not apply)."
       showDateFilters={false}
+      showPeriodToolbar={false}
       pageSize={filterInputs.pageSize}
       onPageSizeChange={setPageSize}
       onClearFilters={clearFilters}

@@ -8,6 +8,8 @@ export interface DashboardStats {
   };
   accounts: {
     total: number;
+    /** Active users with account_type mcc (not all accounts). */
+    mcc_users?: number;
   };
   sales: {
     total: number;

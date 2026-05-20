@@ -1,5 +1,9 @@
 import { useAuthStore } from '@/store/auth';
-import { isPlatformSuperAdminRole, platformRolesMatch } from '@/lib/utils/platform-rbac';
+import {
+  isPlatformOperatorRole,
+  isPlatformSuperAdminRole,
+  platformRolesMatch,
+} from '@/lib/utils/platform-rbac';
 
 export class PermissionService {
   static hasPermission(permission: string): boolean {
@@ -57,8 +61,34 @@ export class PermissionService {
     return this.canManageUsers() || this.hasPermission('view_regional_accounts');
   }
 
+  static isPlatformOperator(): boolean {
+    const { currentAccount } = useAuthStore.getState();
+    return isPlatformOperatorRole(currentAccount?.role);
+  }
+
+  /** Read-only admin sections (milk, finance, audit, accounts). Includes platform operators. */
   static canViewDashboard(): boolean {
+    return this.isPlatformOperator() || this.isAdmin() || this.hasPermission('dashboard.view');
+  }
+
+  /** System admin overview tabs at `/admin/dashboard/*` — not for platform operators. */
+  static canViewSystemAdminDashboard(): boolean {
+    if (this.isPlatformOperator()) return false;
     return this.isAdmin() || this.hasPermission('dashboard.view');
+  }
+
+  /** Platform operator home at `/admin/operator` — role `operator` only. */
+  static canViewOperatorDashboard(): boolean {
+    return this.isPlatformOperator();
+  }
+
+  static canAccessAdminPortal(): boolean {
+    return (
+      this.isPlatformOperator() ||
+      this.isAdmin() ||
+      this.hasPermission('dashboard.view') ||
+      this.canManageUsers()
+    );
   }
 }
 

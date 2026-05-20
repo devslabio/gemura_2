@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Fragment, useEffect, useMemo, useState, useCallback } from 'react';
@@ -32,6 +32,7 @@ import Icon, {
 import { getRoleLabel } from '@/lib/utils/role';
 import { adminApi } from '@/lib/api/admin';
 import { PermissionService } from '@/lib/services/permission.service';
+import { periodQuerySuffixFromSearchParams } from '@/lib/dashboard/period-url';
 import type { CSSProperties } from 'react';
 import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 
@@ -53,8 +54,14 @@ interface SidebarProps {
 
 export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange }: SidebarProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const periodQuerySuffix = useMemo(
+    () => periodQuerySuffixFromSearchParams(searchParams),
+    [searchParams],
+  );
   const { user, currentAccount } = useAuthStore();
-  const { canManageUsers, isAdmin, canViewDashboard } = usePermission();
+  const { canManageUsers, isAdmin, canViewDashboard, isPlatformOperator, canViewSystemAdminDashboard } =
+    usePermission();
 
   const [userName, setUserName] = useState('User');
   const [userEmail, setUserEmail] = useState('');
@@ -89,10 +96,78 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     };
   }, [currentAccount?.account_id]);
 
+  const homeHref = isPlatformOperator() ? '/admin/operator' : '/admin/dashboard';
+  const portalSubtitle = 'Admin portal';
+
   const navEntries = useMemo((): NavEntry[] => {
     const entries: NavEntry[] = [];
 
-    if (canViewDashboard() || isAdmin()) {
+    if (isPlatformOperator()) {
+      entries.push({
+        kind: 'link',
+        href: '/admin/operator',
+        label: 'Overview',
+        icon: faChartLine,
+      });
+      entries.push({ kind: 'section', label: 'Platform' });
+      entries.push({ kind: 'link', href: '/admin/accounts', label: 'MCCs', icon: faBuilding });
+      entries.push({
+        kind: 'link',
+        href: '/admin/milk/collections',
+        label: 'Milk collections',
+        icon: faClipboardList,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/milk/rejections',
+        label: 'Quality & rejections',
+        icon: faTriangleExclamation,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/operations/gate-deliveries',
+        label: 'Gate deliveries',
+        icon: faTruck,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/operations/milk-manifests',
+        label: 'Milk manifests',
+        icon: faClipboardList,
+      });
+      entries.push({ kind: 'section', label: 'Finance & credit' });
+      entries.push({
+        kind: 'link',
+        href: '/admin/finance/active-loans',
+        label: 'Active loans',
+        icon: faWallet,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/finance/loan-disbursements',
+        label: 'Loan disbursements',
+        icon: faHandHoldingDollar,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/finance/loan-repayments',
+        label: 'Loan repayments',
+        icon: faHandHoldingDollar,
+      });
+      entries.push({
+        kind: 'link',
+        href: '/admin/finance/charges',
+        label: 'Supplier charges',
+        icon: faReceipt,
+      });
+      entries.push({ kind: 'section', label: 'Reports & system' });
+      entries.push({ kind: 'link', href: '/admin/audit-log', label: 'Audit log', icon: faFileAlt });
+      entries.push({ kind: 'link', href: '/admin/immis', label: 'IMMIS', icon: faUsers });
+      entries.push({ kind: 'link', href: '/admin/farms', label: 'Farms', icon: faWarehouse });
+      return entries;
+    }
+
+    if (canViewSystemAdminDashboard() || isAdmin()) {
       entries.push({
         kind: 'link',
         href: '/admin/dashboard',
@@ -210,10 +285,20 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
     entries.push({ kind: 'link', href: '/admin/accounts', label: 'Accounts', icon: faBuilding });
 
     return entries;
-  }, [canManageUsers, isAdmin, canViewDashboard, onboardingPending]);
+  }, [
+    canManageUsers,
+    isAdmin,
+    canViewDashboard,
+    canViewSystemAdminDashboard,
+    isPlatformOperator,
+    onboardingPending,
+  ]);
 
   const linkIsActive = (href: string) => {
     if (!href) return false;
+    if (href === '/admin/operator') {
+      return pathname === '/admin/operator' || pathname.startsWith('/admin/operator/');
+    }
     if (href === '/admin/dashboard') {
       return pathname === '/admin/dashboard' || pathname.startsWith('/admin/dashboard/');
     }
@@ -273,7 +358,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
         <div className="p-4 sm:p-5 border-b border-[#031a3a] flex-shrink-0 mb-2 sm:mb-4">
           <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'}`}>
             <Link
-              href="/admin/dashboard"
+              href={`${homeHref}${periodQuerySuffix}`}
               className={`flex items-center gap-3 min-h-11 ${collapsed ? 'flex-1 justify-center' : 'flex-1'}`}
               onClick={handleLinkClick}
             >
@@ -283,7 +368,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
               {!collapsed && (
                 <div className="flex flex-col min-w-0">
                   <span className="text-lg sm:text-xl font-semibold text-white leading-tight truncate">Gemura</span>
-                  <span className="text-xs text-white/80 leading-tight hidden sm:block">Admin portal</span>
+                  <span className="text-xs text-white/80 leading-tight hidden sm:block">{portalSubtitle}</span>
                 </div>
               )}
             </Link>
@@ -372,7 +457,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
                   <Fragment key={`nested-${entry.parent.href}`}>
                     <li className="my-0.5">
                       <Link
-                        href={entry.parent.href}
+                        href={`${entry.parent.href}${periodQuerySuffix}`}
                         onClick={handleLinkClick}
                         className={rowClass(parentActive)}
                         title={collapsed ? entry.parent.label : undefined}
@@ -397,7 +482,7 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
                         return (
                           <li key={child.href} className="my-0.5 ml-4 sm:ml-5 border-l border-white/15 pl-1">
                             <Link
-                              href={child.href}
+                              href={`${child.href}${periodQuerySuffix}`}
                               onClick={handleLinkClick}
                               className={rowClass(childActive, true)}
                               title={child.label}
@@ -429,7 +514,12 @@ export default function Sidebar({ isOpen, collapsed, onClose, onCollapsedChange 
 
               return (
                 <li key={entry.href} className="my-0.5">
-                  <Link href={entry.href} onClick={handleLinkClick} className={rowClass} title={collapsed ? entry.label : undefined}>
+                  <Link
+                    href={`${entry.href}${periodQuerySuffix}`}
+                    onClick={handleLinkClick}
+                    className={rowClass}
+                    title={collapsed ? entry.label : undefined}
+                  >
                     <Icon icon={entry.icon} className={active ? 'text-white' : 'text-gray-300'} size="sm" />
                     {!collapsed && (
                       <span className="text-sm font-medium flex-1 whitespace-nowrap overflow-hidden text-ellipsis flex items-center gap-2 min-w-0">

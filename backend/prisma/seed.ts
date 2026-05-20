@@ -102,6 +102,7 @@ async function main() {
     { phone: '250788409024', code: 'U_ROLE_COL', name: 'Demo Collector', role: 'collector', email: 'collector@gemura.rw' },
     { phone: '250788409025', code: 'U_ROLE_VWR', name: 'Demo Viewer', role: 'viewer', email: 'viewer@gemura.rw' },
     { phone: '250788409026', code: 'U_ROLE_AGT', name: 'Demo Agent', role: 'agent', email: 'agent@gemura.rw' },
+    { phone: '250788409035', code: 'U_ROLE_OPR', name: 'Demo Platform Operator', role: 'operator', email: 'operator@gemura.rw' },
   ] as const;
   console.log('👥 Creating platform role demo users (Main MCC)...');
   for (const row of roleDemoOnMain) {
@@ -146,7 +147,7 @@ async function main() {
     });
   }
   console.log(
-    `✅ Role demos on ${mainAccount.code}: admin, manager, veterinary_officer, casual_laborer, leadership, regulator, umucunda_a, umucunda_b, accountant, collector, viewer, agent`,
+    `✅ Role demos on ${mainAccount.code}: admin, manager, operator, veterinary_officer, casual_laborer, leadership, regulator, umucunda_a, umucunda_b, accountant, collector, viewer, agent`,
   );
 
   await seedRegionalSupervisorDemos(prisma, mainAccount, hashedPassword, userNameFields, SEED_DEMO_PASSWORD);

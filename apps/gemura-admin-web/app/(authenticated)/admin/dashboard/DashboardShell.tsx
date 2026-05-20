@@ -4,9 +4,8 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 
+import AdminPagePeriodBar from '@/app/components/AdminPagePeriodBar';
 import { PermissionService } from '@/lib/services/permission.service';
-
-import { DashboardPeriodProvider, useDashboardPeriod } from './dashboard-period-context';
 
 const TABS: Array<{ href: string; label: string; segment: string }> = [
   { href: '/admin/dashboard/overview', label: 'Overview', segment: 'overview' },
@@ -14,49 +13,6 @@ const TABS: Array<{ href: string; label: string; segment: string }> = [
   { href: '/admin/dashboard/finance', label: 'Finance', segment: 'finance' },
   { href: '/admin/dashboard/usage', label: 'Usage', segment: 'usage' },
 ];
-
-function PeriodToolbar() {
-  const { period, customFrom, customTo, periodLabel, setPeriodPreset, setCustomDates } = useDashboardPeriod();
-
-  return (
-    <div className="relative flex-shrink-0">
-      <select
-        value={period}
-        onChange={(e) => setPeriodPreset(e.target.value as typeof period)}
-        title={periodLabel}
-        aria-label="Period"
-        className="min-w-0 w-[128px] rounded border border-gray-300 bg-white py-0.5 pl-1.5 pr-6 text-xs text-gray-900 focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)] focus:outline-none"
-      >
-        <option value="day">Day</option>
-        <option value="week">Week</option>
-        <option value="month">Month</option>
-        <option value="quarter">Quarter</option>
-        <option value="year">Year</option>
-        <option value="custom">Custom</option>
-      </select>
-
-      {period === 'custom' && (
-        <div className="absolute top-full right-0 z-10 mt-0.5 flex items-center gap-1.5 rounded border border-gray-200 bg-white px-1.5 py-1.5 shadow-lg">
-          <input
-            type="date"
-            value={customFrom}
-            max={new Date().toISOString().slice(0, 10)}
-            onChange={(e) => setCustomDates(e.target.value, customTo || e.target.value)}
-            className="border border-gray-300 rounded px-1.5 py-0.5 text-xs w-28"
-          />
-          <span className="text-gray-400 text-[10px]">–</span>
-          <input
-            type="date"
-            value={customTo}
-            max={new Date().toISOString().slice(0, 10)}
-            onChange={(e) => setCustomDates(customFrom || e.target.value, e.target.value)}
-            className="border border-gray-300 rounded px-1.5 py-0.5 text-xs w-28"
-          />
-        </div>
-      )}
-    </div>
-  );
-}
 
 function DashboardChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -89,7 +45,7 @@ function DashboardChrome({ children }: { children: ReactNode }) {
               );
             })}
           </div>
-          <PeriodToolbar />
+          <AdminPagePeriodBar />
         </div>
       </div>
 
@@ -102,12 +58,16 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    if (!PermissionService.canViewDashboard() && !PermissionService.isAdmin()) {
+    if (PermissionService.canViewOperatorDashboard()) {
+      router.replace('/admin/operator');
+      return;
+    }
+    if (!PermissionService.canViewSystemAdminDashboard() && !PermissionService.isAdmin()) {
       router.replace('/dashboard');
     }
   }, [router]);
 
-  if (!PermissionService.canViewDashboard() && !PermissionService.isAdmin()) {
+  if (PermissionService.canViewOperatorDashboard()) {
     return (
       <div className="flex items-center justify-center p-8">
         <p className="text-gray-500 text-sm">Redirecting…</p>
@@ -115,9 +75,13 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
     );
   }
 
-  return (
-    <DashboardPeriodProvider>
-      <DashboardChrome>{children}</DashboardChrome>
-    </DashboardPeriodProvider>
-  );
+  if (!PermissionService.canViewSystemAdminDashboard() && !PermissionService.isAdmin()) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <p className="text-gray-500 text-sm">Redirecting…</p>
+      </div>
+    );
+  }
+
+  return <DashboardChrome>{children}</DashboardChrome>;
 }

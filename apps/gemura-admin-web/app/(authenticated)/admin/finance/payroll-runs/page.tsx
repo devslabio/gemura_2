@@ -31,7 +31,7 @@ function PayrollRunsReportInner() {
   const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
   const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
-  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters } =
+  const { apiParams, filterInputs, periodLabel, setPageSize, setPage, clearFilters } =
     useAdminReportNavigation();
 
   const [loading, setLoading] = useState(true);
@@ -71,8 +71,8 @@ function PayrollRunsReportInner() {
   }, [allowed, load, router]);
 
   const periodHint = period
-    ? `Resolved window (UTC): ${new Date(period.start).toLocaleString()} → ${new Date(period.end).toLocaleString()} · completed runs only`
-    : undefined;
+    ? `${periodLabel} · UTC: ${new Date(period.start).toLocaleString()} → ${new Date(period.end).toLocaleString()} · completed runs only`
+    : periodLabel;
 
   const columns: TableColumn<PlatformPayrollRunRow>[] = [
     {
@@ -110,11 +110,7 @@ function PayrollRunsReportInner() {
     <AdminReportListChrome
       title="Payroll runs"
       periodHint={periodHint}
-      dateFrom={filterInputs.dateFrom}
-      dateTo={filterInputs.dateTo}
       pageSize={filterInputs.pageSize}
-      onDateFromChange={setDateFrom}
-      onDateToChange={setDateTo}
       onPageSizeChange={setPageSize}
       onClearFilters={clearFilters}
       exportFilename={`payroll-runs-${new Date().toISOString().split('T')[0]}.csv`}

@@ -14,6 +14,7 @@ import Icon, {
   faUser,
 } from './Icon';
 import { useAuthStore } from '@/store/auth';
+import { PermissionService } from '@/lib/services/permission.service';
 import { getRoleLabel } from '@/lib/utils/role';
 
 interface HeaderProps {
@@ -58,10 +59,11 @@ export default function Header({ sidebarOpen: _sidebarOpen, sidebarCollapsed: _s
     router.push('/auth/login');
   };
 
-  const profileHref = user?.id ? `/admin/users/${user.id}` : '/admin/users';
-  const settingsHref = user?.id ? `/admin/users/${user.id}/edit` : '/admin/users';
-  const hideAccountDisplay = pathname?.startsWith('/admin/dashboard');
-
+  const isOperator = PermissionService.isPlatformOperator();
+  const profileHref = isOperator ? '/admin/operator' : user?.id ? `/admin/users/${user.id}` : '/admin/users';
+  const settingsHref = isOperator ? '/admin/operator' : user?.id ? `/admin/users/${user.id}/edit` : '/admin/users';
+  /** Platform operators see platform-wide data; hide single-MCC membership badge. */
+  const hideAccountDisplay = isOperator || pathname?.startsWith('/admin/dashboard');
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50 safe-area-inset">
       <div className="flex items-center min-h-[56px] sm:min-h-[64px] md:min-h-[72px] lg:h-20 px-3 sm:px-4 md:px-6 lg:px-8 gap-2 sm:gap-4">

@@ -32,7 +32,7 @@ function LoanRepaymentsReportInner() {
   const { canViewDashboard, canManageUsers, isAdmin } = usePermission();
   const allowed = canViewDashboard() || canManageUsers() || isAdmin();
 
-  const { apiParams, filterInputs, setDateFrom, setDateTo, setPageSize, setPage, clearFilters } =
+  const { apiParams, filterInputs, periodLabel, setPageSize, setPage, clearFilters } =
     useAdminReportNavigation();
 
   const [loading, setLoading] = useState(true);
@@ -72,8 +72,8 @@ function LoanRepaymentsReportInner() {
   }, [allowed, load, router]);
 
   const periodHint = period
-    ? `Resolved window (UTC): ${new Date(period.start).toLocaleString()} → ${new Date(period.end).toLocaleString()}`
-    : undefined;
+    ? `${periodLabel} · UTC: ${new Date(period.start).toLocaleString()} → ${new Date(period.end).toLocaleString()}`
+    : periodLabel;
 
   const columns: TableColumn<PlatformLoanRepaymentRow>[] = [
     {
@@ -101,11 +101,7 @@ function LoanRepaymentsReportInner() {
     <AdminReportListChrome
       title="Loan repayments"
       periodHint={periodHint}
-      dateFrom={filterInputs.dateFrom}
-      dateTo={filterInputs.dateTo}
       pageSize={filterInputs.pageSize}
-      onDateFromChange={setDateFrom}
-      onDateToChange={setDateTo}
       onPageSizeChange={setPageSize}
       onClearFilters={clearFilters}
       exportFilename={`loan-repayments-${new Date().toISOString().split('T')[0]}.csv`}

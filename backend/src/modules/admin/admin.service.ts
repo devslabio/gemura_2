@@ -2885,6 +2885,7 @@ export class AdminService {
       totalUsers,
       activeUsers,
       totalAccounts,
+      totalMccUsers,
       salesInPeriod,
       roll30Rows,
       roll7Rows,
@@ -2908,6 +2909,7 @@ export class AdminService {
       this.prisma.user.count(),
       this.prisma.user.count({ where: { status: 'active' } }),
       this.prisma.account.count({ where: { status: 'active' } }),
+      this.prisma.user.count({ where: { status: 'active', account_type: 'mcc' } }),
       this.prisma.milkSale.findMany({
         where: milkInPeriod,
         select: {
@@ -3021,6 +3023,8 @@ export class AdminService {
         },
         accounts: {
           total: totalAccounts,
+          /** Active users with `users.account_type = mcc` (platform MCC operators/staff). */
+          mcc_users: totalMccUsers,
         },
         sales: {
           total: salesInRange,

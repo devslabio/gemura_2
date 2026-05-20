@@ -62,6 +62,25 @@ export function getEffectiveDateRange(
   return getPeriodRange(period, customFrom || undefined, customTo || undefined);
 }
 
+/** Same-length window immediately before the effective current range (for KPI trend badges). */
+export function getPreviousPeriodRange(
+  period: PeriodKey,
+  customFrom: string,
+  customTo: string,
+): { date_from: string; date_to: string } {
+  const { date_from, date_to } = getEffectiveDateRange(period, customFrom, customTo);
+  const [y1, m1, d1] = date_from.split('-').map(Number);
+  const [y2, m2, d2] = date_to.split('-').map(Number);
+  const start = new Date(y1, (m1 ?? 1) - 1, d1 ?? 1);
+  const end = new Date(y2, (m2 ?? 1) - 1, d2 ?? 1);
+  const days = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1);
+  const priorEnd = new Date(start);
+  priorEnd.setDate(priorEnd.getDate() - 1);
+  const priorStart = new Date(priorEnd);
+  priorStart.setDate(priorStart.getDate() - (days - 1));
+  return { date_from: toYYYYMMDD(priorStart), date_to: toYYYYMMDD(priorEnd) };
+}
+
 const PERIOD_SET = new Set<PeriodKey>(['day', 'week', 'month', 'quarter', 'year', 'custom']);
 
 export function parsePeriodFromSearchParams(searchParams: URLSearchParams): {
@@ -74,6 +93,17 @@ export function parsePeriodFromSearchParams(searchParams: URLSearchParams): {
   const customFrom = searchParams.get('date_from') ?? '';
   const customTo = searchParams.get('date_to') ?? '';
   return { period, customFrom, customTo };
+}
+
+/** Preserve period query when navigating between admin routes (drops page/limit/search). */
+export function periodQuerySuffixFromSearchParams(searchParams: URLSearchParams): string {
+  const p = new URLSearchParams();
+  for (const key of ['period', 'date_from', 'date_to', 'tz_offset_minutes'] as const) {
+    const v = searchParams.get(key);
+    if (v) p.set(key, v);
+  }
+  const s = p.toString();
+  return s ? `?${s}` : '';
 }
 
 export function periodLabel(period: PeriodKey, customFrom: string, customTo: string): string {
