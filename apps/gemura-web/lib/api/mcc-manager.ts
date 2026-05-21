@@ -208,6 +208,7 @@ export interface MccManagerOverviewData {
   wallet: MccManagerWalletSummary | null;
   profile: MccManagerOperationalProfile | null;
   cooling_tanks: MccManagerCoolingTank[];
+  onboarding_completion: OnboardingProfileCompletion | null;
   facility_snapshot: MccManagerFacilitySnapshot | null;
   alerts: MccManagerAlert[];
 }

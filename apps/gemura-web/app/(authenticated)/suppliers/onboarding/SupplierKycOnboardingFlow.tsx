@@ -66,7 +66,7 @@ export default function SupplierKycOnboardingFlow({ open, onClose, onRegistered 
 
   const currentStep = KYC_STEP_KEYS[stepIndex];
   const isReview = currentStep === 'review';
-  const mccName = currentAccount?.name;
+  const mccName = currentAccount?.account_name;
 
   const stepProgressPercent = ((stepIndex + 1) / KYC_STEP_KEYS.length) * 100;
 
