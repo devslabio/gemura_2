@@ -22,6 +22,7 @@ import SupplierDashboardShell from './SupplierDashboardShell';
 import { useSupplierOverview, formatSupplierCurrency } from './useSupplierOverview';
 import SupplierActivityList from './SupplierActivityList';
 import { supplierOperationsApi, type ManagedCollection, type ManagedTransfer } from '@/lib/api/supplierOperations';
+import { getTransferIntakeStats } from './transferRejectionStats';
 import {
   breakdownToSeries,
   chartPeriodLabel,
@@ -56,19 +57,6 @@ function groupCollectionsByDate(collections: ManagedCollection[]) {
   return Object.entries(grouped)
     .sort(([a], [b]) => a.localeCompare(b))
     .slice(-14); // Last 14 days
-}
-
-function getTransferStats(transfers: ManagedTransfer[]) {
-  const submitted = transfers.filter((t) => t.status === 'submitted');
-  const accepted = submitted.filter((t) => t.mcc_status === 'accepted' || t.mcc_status === 'partially_accepted');
-  const rejected = submitted.filter((t) => t.mcc_status === 'rejected');
-  const pending = submitted.filter((t) => t.mcc_status === 'submitted' || !t.mcc_status);
-  
-  const totalSubmittedLiters = submitted.reduce((s, t) => s + t.total_liters, 0);
-  const acceptedLiters = accepted.reduce((s, t) => s + (t.mcc_accepted_liters ?? t.total_liters), 0);
-  const rejectedLiters = rejected.reduce((s, t) => s + t.total_liters, 0);
-  
-  return { submitted: submitted.length, accepted: accepted.length, rejected: rejected.length, pending: pending.length, totalSubmittedLiters, acceptedLiters, rejectedLiters };
 }
 
 export default function FarmerCollectorSupplierDashboard() {
@@ -111,7 +99,7 @@ export default function FarmerCollectorSupplierDashboard() {
 
   const chartData = useMemo(() => groupCollectionsByDate(collections), [collections]);
   const bdSeries = useMemo(() => breakdownToSeries(data?.breakdown), [data?.breakdown]);
-  const transferStats = useMemo(() => getTransferStats(transfers), [transfers]);
+  const transferStats = useMemo(() => getTransferIntakeStats(transfers), [transfers]);
   const qualityGrades = useMemo(() => groupCollectionsByQualityGrade(collections), [collections]);
 
   /** Prefer `/stats/overview` breakdown (matches dashboards date filter); fallback to logged collections split */
@@ -155,9 +143,6 @@ export default function FarmerCollectorSupplierDashboard() {
   const GRADE_COLORS: Record<string, string> = { A: '#10b981', B: '#3b82f6', C: '#f59e0b', D: '#ef4444', UNGRADED: '#94a3b8' };
   const gradeColor = (grade: string) => GRADE_COLORS[grade.toUpperCase()] ?? GRADE_COLORS.UNGRADED;
 
-  const rejLit = Number(data?.summary?.rejections?.liters ?? 0);
-  const rejVal = Number(data?.summary?.rejections?.value ?? 0);
-
   if (loading && !data) {
     return <DashboardSkeleton />;
   }
@@ -166,6 +151,15 @@ export default function FarmerCollectorSupplierDashboard() {
   const lit = Number(summary?.collection?.liters ?? 0);
   const saleLiters = Number(summary?.sales?.liters ?? 0);
   const saleVal = Number(summary?.sales?.value ?? 0);
+  const rejLit = Math.max(
+    Number(summary?.rejections?.liters ?? 0),
+    transferStats.rejectedLiters,
+  );
+  const rejVal =
+    Number(summary?.rejections?.value ?? 0) ||
+    (transferStats.rejectedLiters > 0 && saleLiters > 0
+      ? transferStats.rejectedLiters * (saleVal / saleLiters)
+      : 0);
   const saleTx = Number(summary?.sales?.transactions ?? 0);
   const recentRows = supplierRecentOverviewRows(data?.recent_transactions);
 
@@ -289,7 +283,9 @@ export default function FarmerCollectorSupplierDashboard() {
               <Icon icon={faArrowDown} className="text-red-600" />
             </div>
           </div>
-          <p className="text-xs text-gray-500 mt-2">{transferStats.rejected} transfer{transferStats.rejected !== 1 ? 's' : ''} rejected</p>
+          <p className="text-xs text-gray-500 mt-2">
+            {transferStats.rejected} rejection{transferStats.rejected !== 1 ? 's' : ''} (incl. partial)
+          </p>
         </div>
       </div>
 

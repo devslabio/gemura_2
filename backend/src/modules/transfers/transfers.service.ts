@@ -2,10 +2,14 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../../prisma/prisma.service';
 import { User, SupplierTransferStatus, MilkSaleStatus } from '@prisma/client';
 import { ProcessTransferDto } from './dto/process-transfer.dto';
+import { SuppliersService } from '../suppliers/suppliers.service';
 
 @Injectable()
 export class TransfersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private suppliersService: SuppliersService,
+  ) {}
 
   /**
    * Get incoming transfers for the MCC (user's default account)
@@ -176,7 +180,12 @@ export class TransfersService {
       });
     }
 
-    if (dto.status === 'rejected' && !dto.rejection_reason) {
+    const totalLiters = Number(transfer.total_liters);
+    const acceptedLiters =
+      dto.status === 'rejected' ? 0 : Math.min(totalLiters, Math.max(0, Number(dto.accepted_liters ?? totalLiters)));
+    const rejectedLiters = Math.max(0, totalLiters - acceptedLiters);
+
+    if (dto.status === 'rejected' && !dto.rejection_reason?.trim()) {
       throw new BadRequestException({
         code: 400,
         status: 'error',
@@ -184,9 +193,13 @@ export class TransfersService {
       });
     }
 
-    const totalLiters = Number(transfer.total_liters);
-    const acceptedLiters = dto.status === 'accepted' ? (dto.accepted_liters ?? totalLiters) : 0;
-    const rejectedLiters = totalLiters - acceptedLiters;
+    if (dto.status === 'accepted' && rejectedLiters > 0 && !dto.rejection_reason?.trim()) {
+      throw new BadRequestException({
+        code: 400,
+        status: 'error',
+        message: 'Rejection reason is required when accepting less than the submitted quantity.',
+      });
+    }
 
     let newStatus: SupplierTransferStatus;
     if (dto.status === 'rejected') {
@@ -229,8 +242,8 @@ export class TransfersService {
       const noteParts: string[] = [];
       if (dto.notes) noteParts.push(dto.notes);
       noteParts.push(`From transfer: Own farm ${Number(transfer.own_liters)}L, External ${Number(transfer.external_liters)}L`);
-      if (dto.status === 'rejected' || rejectedLiters > 0) {
-        noteParts.push(`[REJECTED_REASON: ${dto.rejection_reason || 'N/A'}]`);
+      if (rejectedLiters > 0) {
+        noteParts.push(`Rejected at intake: ${rejectedLiters} L — ${dto.rejection_reason || 'N/A'}`);
       }
 
       const milkSale = await this.prisma.milkSale.create({
@@ -273,6 +286,16 @@ export class TransfersService {
           },
         },
       },
+    });
+
+    await this.suppliersService.applyMccTransferOutcome(transfer.supplier_user_id, {
+      db_transfer_id: transferId,
+      status: newStatus,
+      accepted_liters: acceptedLiters,
+      rejected_liters: rejectedLiters,
+      rejection_reason: dto.rejection_reason?.trim() || null,
+      notes: dto.notes?.trim() || null,
+      processed_at: updatedTransfer.processed_at?.toISOString() || new Date().toISOString(),
     });
 
     const data = {

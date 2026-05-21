@@ -285,14 +285,14 @@ export default function ExternalAccountProfileSection() {
       {draftFarmer && (
         <section className="space-y-3">
           <h3 className="text-lg font-semibold text-gray-900 m-0">Your farm onboarding (read-only)</h3>
-          <FarmerOnboardingPreview f={draftFarmer} gpsText={gpsText} hasNidPhoto={hasNid} />
+          <FarmerOnboardingPreview f={draftFarmer} gpsText={gpsText} hasNidPhoto={hasNid} fullPage />
         </section>
       )}
 
       {draftCollector && (
         <section className="space-y-3">
           <h3 className="text-lg font-semibold text-gray-900 m-0">Your collection onboarding (read-only)</h3>
-          <CollectorOnboardingPreview c={draftCollector} gpsText={gpsText} hasNidPhoto={hasNid} />
+          <CollectorOnboardingPreview c={draftCollector} gpsText={gpsText} hasNidPhoto={hasNid} fullPage />
         </section>
       )}
 

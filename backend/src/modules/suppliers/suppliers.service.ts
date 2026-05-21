@@ -1619,30 +1619,141 @@ export class SuppliersService {
     return { code: 200, status: 'success', message: 'OK', data: enrichedTransfers };
   }
 
+  /** Liters already allocated to draft/submitted transfers for a collection. */
+  private litersCommittedOnCollection(
+    collectionId: string,
+    transfers: unknown[],
+    excludeTransferId?: string,
+  ): number {
+    let sum = 0;
+    for (const raw of transfers) {
+      const t = raw as {
+        id?: string;
+        status?: string;
+        lines?: { collection_id?: string; liters?: number }[];
+        collection_ids?: string[];
+      };
+      if (excludeTransferId && t.id === excludeTransferId) continue;
+      if (t.status !== 'draft' && t.status !== 'submitted') continue;
+      const lines = Array.isArray(t.lines) ? t.lines : [];
+      if (lines.length > 0) {
+        for (const line of lines) {
+          if (line.collection_id === collectionId) sum += Number(line.liters) || 0;
+        }
+      } else if (Array.isArray(t.collection_ids) && t.collection_ids.includes(collectionId)) {
+        // Legacy manifests without per-line liters counted full collection at submit time only
+        continue;
+      }
+    }
+    return sum;
+  }
+
+  private availableLitersOnCollection(
+    collection: Record<string, unknown>,
+    transfers: unknown[],
+    excludeTransferId?: string,
+  ): number {
+    const id = String(collection.id || '');
+    const total = Number(collection.liters) || 0;
+    const committed = this.litersCommittedOnCollection(id, transfers, excludeTransferId);
+    return Math.max(0, total - committed);
+  }
+
+  private resolveTransferLines(
+    state: { collections: unknown[]; transfers: unknown[] },
+    dto: CreateManagedTransferDto,
+  ): { collection_id: string; liters: number; source_type: string }[] {
+    const collectionsById = new Map(
+      state.collections.map((c) => {
+        const cc = c as { id: string; source_type?: string };
+        return [cc.id, cc];
+      }),
+    );
+
+    if (dto.lines?.length) {
+      const resolved: { collection_id: string; liters: number; source_type: string }[] = [];
+      for (const line of dto.lines) {
+        const col = collectionsById.get(line.collection_id) as Record<string, unknown> | undefined;
+        if (!col) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: `Collection ${line.collection_id} not found.`,
+          });
+        }
+        if (col.transferred === true) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: 'One or more collections are already fully transferred.',
+          });
+        }
+        const available = this.availableLitersOnCollection(col, state.transfers);
+        const want = Number(line.liters) || 0;
+        if (want <= 0) {
+          throw new BadRequestException({ code: 400, status: 'error', message: 'Transfer liters must be positive.' });
+        }
+        if (want > available + 0.001) {
+          throw new BadRequestException({
+            code: 400,
+            status: 'error',
+            message: `Only ${available.toFixed(1)} L available on collection ${line.collection_id}.`,
+          });
+        }
+        resolved.push({
+          collection_id: line.collection_id,
+          liters: want,
+          source_type: String(col.source_type || 'external_farm'),
+        });
+      }
+      return resolved;
+    }
+
+    const targetIds =
+      dto.collection_ids?.length ?
+        dto.collection_ids
+      : state.collections
+          .filter((c) => {
+            const cc = c as { transferred?: boolean };
+            return !cc.transferred && this.availableLitersOnCollection(cc as Record<string, unknown>, state.transfers) > 0;
+          })
+          .map((c) => (c as { id: string }).id);
+
+    const resolved: { collection_id: string; liters: number; source_type: string }[] = [];
+    for (const cid of targetIds) {
+      const col = collectionsById.get(cid) as Record<string, unknown> | undefined;
+      if (!col || col.transferred === true) continue;
+      const available = this.availableLitersOnCollection(col, state.transfers);
+      if (available <= 0) continue;
+      resolved.push({
+        collection_id: cid,
+        liters: available,
+        source_type: String(col.source_type || 'external_farm'),
+      });
+    }
+    return resolved;
+  }
+
   async createMyTransfer(user: User, dto: CreateManagedTransferDto) {
     const row = await this.getOpsRowOrThrow(user.id);
     const payload = (row.payload || {}) as Record<string, unknown>;
     const state = this.getOpsState(payload);
-    const selected = state.collections.filter((c) => {
-      const cc = c as { id?: string; transferred?: boolean };
-      if (cc.transferred) return false;
-      if (!dto.collection_ids?.length) return true;
-      return dto.collection_ids.includes(cc.id || '');
-    });
-    if (selected.length === 0) {
+    const lines = this.resolveTransferLines(state, dto);
+    if (lines.length === 0) {
       throw new BadRequestException({ code: 400, status: 'error', message: 'No eligible collections to transfer.' });
     }
-    const own = selected
-      .filter((c) => (c as { source_type?: string }).source_type === 'own_farm')
-      .reduce((a, c) => a + (Number((c as { liters?: number }).liters) || 0), 0);
-    const external = selected
-      .filter((c) => (c as { source_type?: string }).source_type === 'external_farm')
-      .reduce((a, c) => a + (Number((c as { liters?: number }).liters) || 0), 0);
+    const own = lines
+      .filter((l) => l.source_type === 'own_farm')
+      .reduce((a, l) => a + l.liters, 0);
+    const external = lines
+      .filter((l) => l.source_type !== 'own_farm')
+      .reduce((a, l) => a + l.liters, 0);
     const now = new Date().toISOString();
     const transfer = {
       id: randomUUID(),
       mcc_account_id: row.mcc_account_id,
-      collection_ids: selected.map((c) => (c as { id: string }).id),
+      collection_ids: lines.map((l) => l.collection_id),
+      lines: lines.map((l) => ({ collection_id: l.collection_id, liters: l.liters })),
       own_liters: own,
       external_liters: external,
       total_liters: own + external,
@@ -1693,13 +1804,36 @@ export class SuppliersService {
     if (transfer.status === 'submitted') {
       return { code: 200, status: 'success', message: 'Transfer already submitted.', data: transfer };
     }
-    const lineIds = Array.isArray(transfer.collection_ids) ? (transfer.collection_ids as string[]) : [];
+    let lines = Array.isArray(transfer.lines)
+      ? (transfer.lines as { collection_id: string; liters: number }[])
+      : [];
+    if (lines.length === 0 && Array.isArray(transfer.collection_ids)) {
+      lines = (transfer.collection_ids as string[]).map((cid) => {
+        const col = state.collections.find((c) => (c as { id?: string }).id === cid) as
+          | Record<string, unknown>
+          | undefined;
+        const liters = col ? this.availableLitersOnCollection(col, state.transfers, dto.id) : 0;
+        return { collection_id: cid, liters };
+      }).filter((l) => l.liters > 0);
+      transfer.lines = lines;
+    }
+
     state.collections = state.collections.map((c) => {
       const cc = c as Record<string, unknown>;
-      if (lineIds.includes(String(cc.id || ''))) {
-        return { ...cc, transferred: true, updated_at: now };
-      }
-      return cc;
+      const cid = String(cc.id || '');
+      const line = lines.find((l) => l.collection_id === cid);
+      if (!line) return cc;
+      const total = Number(cc.liters) || 0;
+      const prevTransferred = Number(cc.liters_transferred) || 0;
+      const nextTransferred = prevTransferred + line.liters;
+      const fullyTransferred = nextTransferred >= total - 0.001;
+      return {
+        ...cc,
+        liters_transferred: nextTransferred,
+        transferred: fullyTransferred,
+        transfer_status: fullyTransferred ? 'fully_transferred' : 'partially_transferred',
+        updated_at: now,
+      };
     });
 
     // Create a SupplierTransfer record in the database for MCC to process
@@ -1721,8 +1855,30 @@ export class SuppliersService {
       },
     });
 
+    const submittedLines = lines as { collection_id: string; liters: number }[];
+    const ownSubmit = submittedLines
+      .filter((l) => {
+        const col = state.collections.find((c) => (c as { id?: string }).id === l.collection_id) as
+          | { source_type?: string }
+          | undefined;
+        return col?.source_type === 'own_farm';
+      })
+      .reduce((a, l) => a + l.liters, 0);
+    const extSubmit = submittedLines
+      .filter((l) => {
+        const col = state.collections.find((c) => (c as { id?: string }).id === l.collection_id) as
+          | { source_type?: string }
+          | undefined;
+        return col?.source_type !== 'own_farm';
+      })
+      .reduce((a, l) => a + l.liters, 0);
+
     state.transfers[idx] = {
       ...transfer,
+      lines: submittedLines,
+      own_liters: ownSubmit,
+      external_liters: extSubmit,
+      total_liters: ownSubmit + extSubmit,
       status: 'submitted',
       submitted_at: now,
       updated_at: now,
@@ -1730,6 +1886,77 @@ export class SuppliersService {
     };
     await this.saveOpsState(user.id, payload, state);
     return { code: 200, status: 'success', message: 'Transfer submitted to MCC.', data: state.transfers[idx] };
+  }
+
+  /**
+   * After MCC processes a supplier transfer, mirror accepted/rejected liters onto supplier collection lines.
+   */
+  async applyMccTransferOutcome(
+    supplierUserId: string,
+    outcome: {
+      db_transfer_id: string;
+      status: string;
+      accepted_liters: number;
+      rejected_liters: number;
+      rejection_reason: string | null;
+      notes: string | null;
+      processed_at: string;
+    },
+  ) {
+    const row = await this.prisma.supplierMilkOnboarding.findUnique({
+      where: { user_id: supplierUserId },
+    });
+    if (!row) return;
+
+    const payload = (row.payload || {}) as Record<string, unknown>;
+    const state = this.getOpsState(payload);
+    const idx = state.transfers.findIndex(
+      (t) => (t as { db_transfer_id?: string }).db_transfer_id === outcome.db_transfer_id,
+    );
+    if (idx < 0) return;
+
+    const transfer = state.transfers[idx] as Record<string, unknown>;
+    const lines = Array.isArray(transfer.lines)
+      ? (transfer.lines as { collection_id: string; liters: number }[])
+      : [];
+    const totalSubmitted = lines.reduce((a, l) => a + (Number(l.liters) || 0), 0) || Number(transfer.total_liters) || 0;
+    const rejectedTotal = Number(outcome.rejected_liters) || 0;
+
+    state.collections = state.collections.map((raw) => {
+      const cc = { ...(raw as Record<string, unknown>) };
+      const line = lines.find((l) => l.collection_id === String(cc.id || ''));
+      if (!line) return cc;
+      const share =
+        outcome.status === 'rejected'
+          ? Number(line.liters) || 0
+          : totalSubmitted > 0
+            ? (Number(line.liters) / totalSubmitted) * rejectedTotal
+            : 0;
+      const rejectedOnLine = Math.round(share * 1000) / 1000;
+      if (rejectedOnLine > 0) {
+        cc.mcc_rejected_liters = (Number(cc.mcc_rejected_liters) || 0) + rejectedOnLine;
+        cc.mcc_rejection_reason = outcome.rejection_reason || cc.mcc_rejection_reason;
+        cc.intake_status =
+          outcome.status === 'rejected' ? 'rejected_at_mcc' : 'partially_rejected_at_mcc';
+      } else if (outcome.status === 'accepted' || outcome.status === 'partially_accepted') {
+        cc.intake_status = 'accepted_at_mcc';
+      }
+      cc.updated_at = outcome.processed_at;
+      return cc;
+    });
+
+    state.transfers[idx] = {
+      ...transfer,
+      mcc_status: outcome.status,
+      mcc_accepted_liters: outcome.accepted_liters,
+      mcc_rejected_liters: outcome.rejected_liters,
+      mcc_rejection_reason: outcome.rejection_reason,
+      mcc_notes: outcome.notes,
+      mcc_processed_at: outcome.processed_at,
+      updated_at: outcome.processed_at,
+    };
+
+    await this.saveOpsState(supplierUserId, payload, state);
   }
 }
 

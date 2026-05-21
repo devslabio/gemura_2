@@ -240,7 +240,14 @@ export class RbacService implements OnModuleInit {
         include: { permission: true },
       });
       let fromRole = links.map((l) => l.permission?.code).filter((c): c is string => typeof c === 'string');
-      const slug = await this.resolveSlugFromPlatformRoleId(userAccount.platform_role_id);
+      const slug =
+        (await this.resolveSlugFromPlatformRoleId(userAccount.platform_role_id)) ??
+        canonicalPlatformRoleSlug(userAccount.role);
+      const roleDefaults =
+        slug && slug in ROLE_DEFAULT_PERMISSIONS
+          ? ROLE_DEFAULT_PERMISSIONS[slug as RoleCode]
+          : [];
+      fromRole = [...new Set([...roleDefaults, ...fromRole])];
       if (slug === 'regional_supervisor') {
         fromRole = [...new Set([...fromRole, 'view_regional_accounts'])];
       }
@@ -249,10 +256,15 @@ export class RbacService implements OnModuleInit {
 
     const legacy = this.permissionsJsonToCodes(userAccount.permissions);
     const slugLegacy = canonicalPlatformRoleSlug(userAccount.role);
+    const roleDefaults =
+      slugLegacy && slugLegacy in ROLE_DEFAULT_PERMISSIONS
+        ? ROLE_DEFAULT_PERMISSIONS[slugLegacy as RoleCode]
+        : [];
+    const merged = [...new Set([...roleDefaults, ...legacy])];
     if (slugLegacy === 'regional_supervisor') {
-      return [...new Set([...legacy, 'view_regional_accounts'])];
+      return [...new Set([...merged, 'view_regional_accounts'])];
     }
-    return legacy;
+    return merged;
   }
 
   private mergeLegacyOverrides(fromRole: string[], permissions: unknown): string[] {

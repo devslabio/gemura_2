@@ -15,6 +15,11 @@ export interface ManagedCollection {
   farm_name?: string;
   source_type: 'own_farm' | 'external_farm';
   liters: number;
+  liters_transferred?: number;
+  mcc_rejected_liters?: number;
+  mcc_rejection_reason?: string | null;
+  intake_status?: string;
+  transfer_status?: string;
   quality_grade?: string;
   notes?: string;
   status: string;
@@ -22,6 +27,11 @@ export interface ManagedCollection {
   collected_at: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface TransferCollectionLine {
+  collection_id: string;
+  liters: number;
 }
 
 export interface ManagedProduction {
@@ -37,6 +47,7 @@ export interface ManagedTransfer {
   id: string;
   mcc_account_id?: string | null;
   collection_ids: string[];
+  lines?: TransferCollectionLine[];
   own_liters: number;
   external_liters: number;
   total_liters: number;
@@ -96,8 +107,11 @@ export const supplierOperationsApi = {
     apiClient.post<ApiListResponse<ManagedProduction>>('/suppliers/my-production', data),
 
   getTransfers: () => apiClient.get<ApiListResponse<ManagedTransfer[]>>('/suppliers/my-transfers'),
-  createTransfer: (data: { collection_ids?: string[]; notes?: string }) =>
-    apiClient.post<ApiListResponse<ManagedTransfer>>('/suppliers/my-transfers', data),
+  createTransfer: (data: {
+    collection_ids?: string[];
+    lines?: TransferCollectionLine[];
+    notes?: string;
+  }) => apiClient.post<ApiListResponse<ManagedTransfer>>('/suppliers/my-transfers', data),
   submitTransfer: (id: string) =>
     apiClient.post<ApiListResponse<ManagedTransfer>>('/suppliers/my-transfers/submit', { id }),
 };

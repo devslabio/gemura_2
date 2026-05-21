@@ -486,7 +486,7 @@ export const MCC_MANAGER_NAV_ITEMS: NavItem[] = [
  * External (supplier account): Dashboard, supplier tools, Accounts.
  */
 export const EXTERNAL_SUPPLIER_NAV_ITEMS: NavItem[] = [
-  { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'external_supplier', navGroup: 'Account' },
+  { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'external_supplier', navGroup: 'Supplier' },
   { icon: faWarehouse, label: 'Farms', href: '/supplier/farms', section: 'external_supplier', navGroup: 'Supplier' },
   { icon: faClipboardList, label: 'Collections', href: '/supplier/collections', section: 'external_supplier', navGroup: 'Supplier' },
   { icon: faChartLine, label: 'Production', href: '/supplier/production', section: 'external_supplier', navGroup: 'Supplier' },
@@ -494,7 +494,8 @@ export const EXTERNAL_SUPPLIER_NAV_ITEMS: NavItem[] = [
   { icon: faDollarSign, label: 'Accounts', href: '/accounts', section: 'external_supplier', navGroup: 'Account' },
 ];
 
-export const EXTERNAL_NAV_GROUP_ORDER = ['Account', 'Supplier', 'Farmer'] as const;
+/** Account (wallet/settlement) last; operational tabs first. */
+export const EXTERNAL_NAV_GROUP_ORDER = ['Supplier', 'Farmer', 'Account'] as const;
 
 /**
  * External (customer / farmer): Dashboard, Accounts.
@@ -506,7 +507,7 @@ export const EXTERNAL_CUSTOMER_NAV_ITEMS: NavItem[] = [
 
 /** External farmer (direct or farmer-collector) tools */
 export const EXTERNAL_FARMER_NAV_ITEMS: NavItem[] = [
-  { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'external_customer', navGroup: 'Account' },
+  { icon: faHome, label: 'Dashboard', href: '/dashboard', section: 'external_customer', navGroup: 'Farmer' },
   { icon: faWarehouse, label: 'Farms', href: '/supplier/farms', section: 'external_customer', navGroup: 'Farmer' },
   { icon: faClipboardList, label: 'Collections', href: '/supplier/collections', section: 'external_customer', navGroup: 'Farmer' },
   { icon: faChartLine, label: 'Production', href: '/supplier/production', section: 'external_customer', navGroup: 'Farmer' },

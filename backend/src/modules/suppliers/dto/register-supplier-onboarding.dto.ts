@@ -9,11 +9,13 @@ import {
   IsIn,
   IsUUID,
   IsNumber,
+  IsArray,
   Min,
   Length,
   Matches,
   MaxLength,
   ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 
 function trimOrUndef(val: unknown): string | undefined {
@@ -207,10 +209,32 @@ export class CreateManagedProductionDto {
   notes?: string;
 }
 
+export class TransferCollectionLineDto {
+  @ApiProperty()
+  @IsString()
+  collection_id: string;
+
+  @ApiProperty({ description: 'Liters from this collection to include in the manifest (≤ remaining on hand)' })
+  @Type(() => Number)
+  @IsNumber({}, { message: 'Liters must be a number' })
+  @Min(0.01, { message: 'Transfer liters must be greater than 0' })
+  liters: number;
+}
+
 export class CreateManagedTransferDto {
-  @ApiPropertyOptional({ type: [String] })
+  @ApiPropertyOptional({ type: [String], description: 'Legacy: include full remaining liters per collection' })
   @IsOptional()
   collection_ids?: string[];
+
+  @ApiPropertyOptional({
+    type: [TransferCollectionLineDto],
+    description: 'Preferred: pick collections and liters to transfer (partial allowed)',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TransferCollectionLineDto)
+  lines?: TransferCollectionLineDto[];
 
   @ApiPropertyOptional()
   @IsOptional()

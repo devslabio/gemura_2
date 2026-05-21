@@ -120,6 +120,20 @@ export class MccManagerService {
       if (d.source_type === 'direct') directLitres += vol;
       else umucundaLitres += vol;
     }
+    const gateLitresToday = directLitres + umucundaLitres;
+
+    const intakeSalesAgg = await this.prisma.milkSale.aggregate({
+      where: {
+        customer_account_id: accountId,
+        sale_at: { gte: start, lt: end },
+        status: { notIn: ['deleted', 'cancelled', 'rejected'] },
+        ...(scope.mode === 'scoped' ? { supplier_account_id: scope.supplierAccountId } : {}),
+      },
+      _sum: { quantity: true },
+    });
+    const intakeFromSales = decN(intakeSalesAgg._sum.quantity);
+    /** Best estimate of milk in tank for this day (gate + collections/sales). */
+    const intakeLitresToday = Math.round(Math.max(gateLitresToday, intakeFromSales) * 10) / 10;
 
     const manifests = deliveries
       .filter((d) => d.manifest)
@@ -412,7 +426,15 @@ export class MccManagerService {
       });
     }
 
-    const tankUsedPct = decNOrNull(facilitySnapshot?.tank_used_pct);
+    const manualTankLitres = decNOrNull(facilitySnapshot?.tank_used_litres);
+    const effectiveTankLitres =
+      manualTankLitres != null && manualTankLitres > 0 ? manualTankLitres : intakeLitresToday;
+    const effectiveTankPct =
+      tankCapacityTotal > 0
+        ? Math.round((effectiveTankLitres / tankCapacityTotal) * 1000) / 10
+        : decNOrNull(facilitySnapshot?.tank_used_pct);
+
+    const tankUsedPct = effectiveTankPct;
     if (tankUsedPct != null) {
       if (tankUsedPct >= 85) {
         alerts.push({
@@ -590,7 +612,7 @@ export class MccManagerService {
     ]);
 
     const litresYesterday = yesterdayDeliveries.reduce((s, d) => s + decN(d.gate_volume_litres), 0);
-    const totalLitresToday = directLitres + umucundaLitres;
+    const totalLitresToday = intakeLitresToday;
     const litresChangePct =
       litresYesterday > 0.01
         ? Math.round(((totalLitresToday - litresYesterday) / litresYesterday) * 1000) / 10
@@ -791,7 +813,8 @@ export class MccManagerService {
         gate: {
           direct_litres: Math.round(directLitres * 10) / 10,
           umucunda_litres: Math.round(umucundaLitres * 10) / 10,
-          total_litres: Math.round((directLitres + umucundaLitres) * 10) / 10,
+          total_litres: Math.round(gateLitresToday * 10) / 10,
+          intake_litres: intakeLitresToday,
           delivery_count: deliveries.length,
         },
         manifests,
@@ -859,8 +882,9 @@ export class MccManagerService {
             },
         facility_snapshot: facilitySnapshot
           ? {
-              tank_used_litres: decNOrNull(facilitySnapshot.tank_used_litres),
-              tank_used_pct: decNOrNull(facilitySnapshot.tank_used_pct),
+              tank_used_litres: effectiveTankLitres,
+              tank_used_pct: effectiveTankPct,
+              tank_used_litres_manual: manualTankLitres,
               cooling_temperature_c: decNOrNull(facilitySnapshot.cooling_temperature_c),
               power_status: facilitySnapshot.power_status,
               generator_status: facilitySnapshot.generator_status,
@@ -868,8 +892,9 @@ export class MccManagerService {
               observed_at: facilitySnapshot.observed_at?.toISOString() ?? null,
             }
           : {
-              tank_used_litres: null,
-              tank_used_pct: null,
+              tank_used_litres: intakeLitresToday > 0 ? intakeLitresToday : null,
+              tank_used_pct: effectiveTankPct,
+              tank_used_litres_manual: null,
               cooling_temperature_c: null,
               power_status: null,
               generator_status: null,
