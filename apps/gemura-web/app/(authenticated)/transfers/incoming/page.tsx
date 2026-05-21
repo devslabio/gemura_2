@@ -73,12 +73,32 @@ export default function IncomingTransfersPage() {
     setProcessModalOpen(true);
   };
 
+  const acceptedNum = selectedTransfer ? Number(acceptedLiters) : 0;
+  const rejectedAtIntake =
+    selectedTransfer && processStatus === 'accepted'
+      ? Math.max(0, selectedTransfer.total_liters - acceptedNum)
+      : 0;
+  const needsPartialRejectionReason = processStatus === 'accepted' && rejectedAtIntake > 0.001;
+
   const handleProcess = async () => {
     if (!selectedTransfer) return;
 
     if (processStatus === 'rejected' && !rejectionReason) {
       useToastStore.getState().error('Please select a rejection reason');
       return;
+    }
+
+    if (needsPartialRejectionReason && !rejectionReason) {
+      useToastStore.getState().error('Select a reason for the litres you are not accepting');
+      return;
+    }
+
+    if (processStatus === 'accepted') {
+      const liters = Number(acceptedLiters);
+      if (Number.isNaN(liters) || liters < 0 || liters > selectedTransfer.total_liters) {
+        useToastStore.getState().error(`Accepted quantity must be between 0 and ${selectedTransfer.total_liters.toFixed(1)} L`);
+        return;
+      }
     }
 
     setProcessing(true);
@@ -90,8 +110,9 @@ export default function IncomingTransfersPage() {
 
       if (processStatus === 'accepted') {
         const liters = Number(acceptedLiters);
-        if (liters > 0 && liters <= selectedTransfer.total_liters) {
-          payload.accepted_liters = liters;
+        payload.accepted_liters = liters;
+        if (rejectedAtIntake > 0.001) {
+          payload.rejection_reason = rejectionReason;
         }
       } else {
         payload.rejection_reason = rejectionReason;
@@ -298,30 +319,39 @@ export default function IncomingTransfersPage() {
 
             {/* Accepted Liters (for partial acceptance) */}
             {processStatus === 'accepted' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Accepted Quantity (L)
-                </label>
-                <input
-                  type="number"
-                  value={acceptedLiters}
-                  onChange={(e) => setAcceptedLiters(e.target.value)}
-                  min="0"
-                  max={selectedTransfer.total_liters}
-                  step="0.1"
-                  className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Leave as {selectedTransfer.total_liters.toFixed(1)} to accept all, or enter less for partial acceptance.
-                </p>
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Accepted Quantity (L)
+                  </label>
+                  <input
+                    type="number"
+                    value={acceptedLiters}
+                    onChange={(e) => setAcceptedLiters(e.target.value)}
+                    min="0"
+                    max={selectedTransfer.total_liters}
+                    step="0.1"
+                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter less than {selectedTransfer.total_liters.toFixed(1)} L to reject the remainder at intake
+                    (e.g. supplier sent 12 L, accept 10 L — 2 L recorded as rejected on both sides).
+                  </p>
+                </div>
+                {rejectedAtIntake > 0.001 && (
+                  <p className="text-sm text-amber-800 bg-amber-50 rounded px-3 py-2">
+                    <span className="font-medium">{rejectedAtIntake.toFixed(1)} L</span> will be recorded as rejected.
+                  </p>
+                )}
               </div>
             )}
 
-            {/* Rejection Reason */}
-            {processStatus === 'rejected' && (
+            {/* Rejection Reason — full reject or partial accept */}
+            {(processStatus === 'rejected' || needsPartialRejectionReason) && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Rejection Reason <span className="text-red-500">*</span>
+                  {needsPartialRejectionReason ? 'Reason for rejected litres' : 'Rejection Reason'}{' '}
+                  <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={rejectionReason}

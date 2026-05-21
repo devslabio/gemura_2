@@ -4,6 +4,8 @@ export interface MccManagerGateSummary {
   direct_litres: number;
   umucunda_litres: number;
   total_litres: number;
+  /** Gate + recorded milk sales for the day (used for tank fill when snapshot is empty). */
+  intake_litres?: number;
   delivery_count: number;
 }
 
@@ -83,6 +85,8 @@ export interface MccManagerOperationalProfile {
 
 export interface MccManagerFacilitySnapshot {
   tank_used_litres: number | null;
+  /** Manual dip reading when set; otherwise derived from daily intake. */
+  tank_used_litres_manual?: number | null;
   tank_used_pct: number | null;
   cooling_temperature_c: number | null;
   power_status: string | null;

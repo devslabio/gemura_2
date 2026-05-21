@@ -7,13 +7,6 @@ import { usePermission } from '@/hooks/usePermission';
 import { useCrudPermissions } from '@/hooks/useCrudPermissions';
 import { suppliersApi, SupplierDetails } from '@/lib/api/suppliers';
 import { DetailPageSkeleton } from '@/app/components/SkeletonLoader';
-import Modal from '@/app/components/Modal';
-import {
-  FarmerOnboardingPreview,
-  CollectorOnboardingPreview,
-} from '../onboarding/OnboardingPreview';
-import type { FarmerFormState, CollectorFormState } from '../onboarding/model';
-import { computeOnboardingRecordCompletion } from '../onboarding/onboardingRecordCompletion';
 import Icon, {
   faBuilding,
   faUser,
@@ -38,11 +31,6 @@ export default function SupplierDetailsPage() {
   const [error, setError] = useState('');
   const [supplier, setSupplier] = useState<SupplierDetails | null>(null);
 
-  const [onboardingModalOpen, setOnboardingModalOpen] = useState(false);
-  const [supplierPayloadHasMilkOnboardingKey, setSupplierPayloadHasMilkOnboardingKey] = useState(false);
-  const [onboardingRecord, setOnboardingRecord] = useState<Record<string, unknown> | null>(null);
-  const [onboardingUpdatedAt, setOnboardingUpdatedAt] = useState<string | null>(null);
-
   useEffect(() => {
     if (!hasPermission('view_suppliers') && !isAdmin()) {
       router.push('/suppliers');
@@ -60,16 +48,6 @@ export default function SupplierDetailsPage() {
       const response = await suppliersApi.getSupplierById(supplierId);
       if (response.code === 200 && response.data) {
         setSupplier(response.data.supplier);
-        const mo = response.data.milk_onboarding;
-        if (mo?.onboarding != null && typeof mo.onboarding === 'object') {
-          setOnboardingRecord(mo.onboarding as Record<string, unknown>);
-        } else {
-          setOnboardingRecord(null);
-        }
-        setOnboardingUpdatedAt(mo?.updated_at ?? null);
-        setSupplierPayloadHasMilkOnboardingKey(
-          response.data != null && Object.prototype.hasOwnProperty.call(response.data, 'milk_onboarding'),
-        );
       } else {
         setError('Failed to load supplier data');
       }
@@ -80,10 +58,6 @@ export default function SupplierDetailsPage() {
     }
   };
 
-  const openOnboardingModal = () => {
-    setOnboardingModalOpen(true);
-  };
-
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-RW', {
       style: 'currency',
@@ -91,25 +65,6 @@ export default function SupplierDetailsPage() {
       minimumFractionDigits: 0,
     }).format(amount);
   };
-
-  const onboardingSt = onboardingRecord?.supplier_type;
-  const onboardingDraftFarmer =
-    onboardingSt === 'farmer' && onboardingRecord?.draft
-      ? (onboardingRecord.draft as FarmerFormState)
-      : null;
-  const onboardingDraftCollector =
-    onboardingSt === 'collector' && onboardingRecord?.draft
-      ? (onboardingRecord.draft as CollectorFormState)
-      : null;
-  const onboardingGpsText =
-    onboardingRecord && typeof onboardingRecord.gps === 'object' && onboardingRecord.gps != null
-      ? (() => {
-          const g = onboardingRecord.gps as { lat?: number; lng?: number };
-          return g.lat != null && g.lng != null ? `${g.lat}, ${g.lng}` : '—';
-        })()
-      : '—';
-  const onboardingHasNid = Boolean(onboardingRecord && onboardingRecord.nid_photo_meta);
-  const onboardingCompletionPct = onboardingRecord ? computeOnboardingRecordCompletion(onboardingRecord) : 0;
 
   if (loading) {
     return <DetailPageSkeleton />;
@@ -143,10 +98,13 @@ export default function SupplierDetailsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {(hasPermission('view_suppliers') || isAdmin()) && (
-            <button type="button" onClick={openOnboardingModal} className="btn btn-secondary whitespace-nowrap">
+            <Link
+              href={`/suppliers/${supplierId}/onboarding`}
+              className="btn btn-secondary whitespace-nowrap"
+            >
               <Icon icon={faClipboardList} size="sm" className="mr-2" />
               Onboarding results
-            </button>
+            </Link>
           )}
           {supplierCrud.update ? (
             <Link href={`/suppliers/${supplierId}/edit`} className="btn btn-primary whitespace-nowrap">
@@ -327,14 +285,13 @@ export default function SupplierDetailsPage() {
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
               <div className="space-y-2">
                 {(hasPermission('view_suppliers') || isAdmin()) && (
-                  <button
-                    type="button"
-                    onClick={openOnboardingModal}
+                  <Link
+                    href={`/suppliers/${supplierId}/onboarding`}
                     className="btn btn-secondary w-full justify-center"
                   >
                     <Icon icon={faClipboardList} size="sm" className="mr-2" />
                     Onboarding results
-                  </button>
+                  </Link>
                 )}
                 <Link href="/suppliers" className="btn btn-secondary w-full justify-center">
                   <Icon icon={faArrowLeft} size="sm" className="mr-2" />
@@ -346,55 +303,6 @@ export default function SupplierDetailsPage() {
         </div>
       )}
 
-      {supplier && onboardingModalOpen ? (
-            <Modal
-              open={onboardingModalOpen}
-              onClose={() => setOnboardingModalOpen(false)}
-              title={`Onboarding — ${supplier.name}`}
-              maxWidth="max-w-5xl"
-            >
-              {!supplierPayloadHasMilkOnboardingKey ? (
-                <div className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 space-y-2">
-                  <p>
-                    This supplier response has no <code className="text-xs px-1 bg-white/70 rounded">milk_onboarding</code>{' '}
-                    field. The running API build is older than this app.
-                  </p>
-                  <p className="text-amber-900/85">Redeploy the backend and refresh this page.</p>
-                </div>
-              ) : onboardingRecord ? (
-                <div className="space-y-4">
-                  <div className="flex flex-wrap gap-3 justify-between items-start text-sm text-gray-600">
-                    <span>
-                      Stored completion (from answers){' '}
-                      <strong className="text-gray-900 tabular-nums">{onboardingCompletionPct}%</strong>
-                    </span>
-                    {onboardingUpdatedAt ? (
-                      <span className="text-xs">Last updated: {new Date(onboardingUpdatedAt).toLocaleString()}</span>
-                    ) : null}
-                  </div>
-                  {onboardingDraftFarmer ? (
-                    <FarmerOnboardingPreview f={onboardingDraftFarmer} gpsText={onboardingGpsText} hasNidPhoto={onboardingHasNid} />
-                  ) : null}
-                  {onboardingDraftCollector ? (
-                    <CollectorOnboardingPreview c={onboardingDraftCollector} gpsText={onboardingGpsText} hasNidPhoto={onboardingHasNid} />
-                  ) : null}
-                  {!onboardingDraftFarmer && !onboardingDraftCollector ? (
-                    <div className="rounded-sm border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-                      A record exists but is not farmer or collector format, or the draft section is missing. Raw data may
-                      be incomplete.
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="space-y-2 text-sm text-gray-600">
-                  <p>No milk onboarding data is stored for this supplier, or none is exposed (no linked app user / no onboarding row).</p>
-                  {!supplier.relationship ? (
-                    <p className="text-amber-800 text-xs">There is no active supplier–MCC relationship for your default account, so onboarding is not attached.</p>
-                  ) : null}
-                </div>
-              )}
-            </Modal>
-      ) : null}
     </div>
   );
 }

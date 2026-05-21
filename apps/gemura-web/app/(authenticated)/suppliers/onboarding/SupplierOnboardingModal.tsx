@@ -1,5 +1,6 @@
 'use client';
 
+import SupplierKycOnboardingFlow from './SupplierKycOnboardingFlow';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { AxiosError } from 'axios';
 import Modal from '@/app/components/Modal';
@@ -788,11 +789,17 @@ export default function SupplierOnboardingModal({
           ? 'GPS unavailable — use manual coordinates'
           : 'GPS idle';
 
+  if (!selfService) {
+    return (
+      <SupplierKycOnboardingFlow open={open} onClose={onClose} onRegistered={onRegistered} />
+    );
+  }
+
   return (
     <Modal
       open={open}
       onClose={handleClose}
-      title={selfService ? 'Complete milk onboarding' : 'Onboard new supplier'}
+      title="Complete milk onboarding"
       maxWidth="max-w-6xl"
       footer={
         step === 'form' && supplierType ? (

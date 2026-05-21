@@ -284,6 +284,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
     'view_customers',
     'view_inventory',
     'view_analytics',
+    'dashboard.view',
   ],
   customer: [
     'view_sales',
@@ -293,6 +294,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleCode, string[]> = {
     'view_customers',
     'view_inventory',
     'view_analytics',
+    'dashboard.view',
   ],
 };
 

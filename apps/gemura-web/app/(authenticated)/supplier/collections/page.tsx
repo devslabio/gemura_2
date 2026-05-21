@@ -43,6 +43,12 @@ export default function SupplierCollectionsPage() {
     [farms]
   );
 
+  const availableLiters = (r: ManagedCollection) => {
+    const total = Number(r.liters) || 0;
+    const transferred = Number(r.liters_transferred) || 0;
+    return Math.max(0, total - transferred);
+  };
+
   if (!(accountType === 'supplier' || accountType === 'farmer')) {
     return <p className="text-sm text-gray-500">Only supplier/farmer accounts can access this page.</p>;
   }
@@ -111,21 +117,46 @@ export default function SupplierCollectionsPage() {
                 <tr className="text-left border-b border-gray-200 text-xs uppercase text-gray-500">
                   <th className="py-2 pr-3">Farm</th>
                   <th className="py-2 pr-3">Source</th>
-                  <th className="py-2 pr-3">Liters</th>
-                  <th className="py-2 pr-3">Transferred</th>
+                  <th className="py-2 pr-3">Collected (L)</th>
+                  <th className="py-2 pr-3">Sent to MCC (L)</th>
+                  <th className="py-2 pr-3">Available (L)</th>
+                  <th className="py-2 pr-3">MCC rejected (L)</th>
+                  <th className="py-2 pr-3">Status</th>
                   <th className="py-2 pr-3">Date</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.slice().reverse().map((r) => (
-                  <tr key={r.id} className="border-b border-gray-100">
-                    <td className="py-2 pr-3">{r.farm_name || farmNameById[r.farm_id] || '—'}</td>
-                    <td className="py-2 pr-3">{r.source_type === 'own_farm' ? 'Own' : 'External'}</td>
-                    <td className="py-2 pr-3">{Number(r.liters || 0).toFixed(1)}</td>
-                    <td className="py-2 pr-3">{r.transferred ? 'Yes' : 'No'}</td>
-                    <td className="py-2 pr-3">{new Date(r.collected_at).toLocaleString()}</td>
-                  </tr>
-                ))}
+                {rows.slice().reverse().map((r) => {
+                  const avail = availableLiters(r);
+                  const sent = Number(r.liters_transferred) || 0;
+                  const mccRejected = Number(r.mcc_rejected_liters) || 0;
+                  const statusLabel =
+                    r.intake_status === 'rejected_at_mcc'
+                      ? 'Rejected at MCC'
+                      : r.intake_status === 'partially_rejected_at_mcc'
+                        ? 'Partially rejected'
+                        : r.intake_status === 'accepted_at_mcc'
+                          ? 'Accepted at MCC'
+                          : r.transfer_status === 'partially_transferred'
+                            ? 'Partially sent'
+                            : r.transferred
+                              ? 'Fully sent'
+                              : 'On hand';
+                  return (
+                    <tr key={r.id} className="border-b border-gray-100">
+                      <td className="py-2 pr-3">{r.farm_name || farmNameById[r.farm_id] || '—'}</td>
+                      <td className="py-2 pr-3">{r.source_type === 'own_farm' ? 'Own' : 'External'}</td>
+                      <td className="py-2 pr-3 font-mono">{Number(r.liters || 0).toFixed(1)}</td>
+                      <td className="py-2 pr-3 font-mono">{sent > 0 ? sent.toFixed(1) : '—'}</td>
+                      <td className="py-2 pr-3 font-mono">{avail.toFixed(1)}</td>
+                      <td className="py-2 pr-3 font-mono text-red-700">
+                        {mccRejected > 0 ? mccRejected.toFixed(1) : '—'}
+                      </td>
+                      <td className="py-2 pr-3 text-xs">{statusLabel}</td>
+                      <td className="py-2 pr-3">{new Date(r.collected_at).toLocaleString()}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

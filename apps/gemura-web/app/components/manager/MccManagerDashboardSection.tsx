@@ -469,11 +469,13 @@ export default function MccManagerDashboardSection({
   const manifestPct = manifestRows.length > 0 ? Math.round((submittedCount / manifestRows.length) * 100) : 100;
   const profileTankCapacity = mcc?.profile?.cooling_tank_total_capacity_litres ?? null;
   const tankCapacityLitres = profileTankCapacity && profileTankCapacity > 0 ? profileTankCapacity : 0;
-  const snapshotTankLitres = mcc?.facility_snapshot?.tank_used_litres;
+  const intakeLitresToday = Number(
+    gate?.intake_litres ?? Math.max(Number(gate?.total_litres ?? 0), litresPeriod),
+  );
   const tankLitresUsed =
-    snapshotTankLitres != null && Number(snapshotTankLitres) >= 0
-      ? Number(snapshotTankLitres)
-      : Number(gate?.total_litres ?? litresPeriod ?? 0);
+    mcc?.facility_snapshot?.tank_used_litres != null
+      ? Number(mcc.facility_snapshot.tank_used_litres)
+      : intakeLitresToday;
   const tankPctRaw =
     tankCapacityLitres > 0 ? (tankLitresUsed / tankCapacityLitres) * 100 : null;
   const tankPct: number | null =
@@ -517,7 +519,9 @@ export default function MccManagerDashboardSection({
       ? `Bulk milk tank (${Math.round(tankCapacityLitres).toLocaleString()} L)`
       : 'Bulk milk tank';
   const isSingleDay = rangeDateFrom === rangeDateTo;
-  const totalLitresDisplay = isSingleDay && gate ? gate.total_litres : litresPeriod;
+  const totalLitresDisplay = isSingleDay
+    ? Number(gate?.intake_litres ?? Math.max(Number(gate?.total_litres ?? 0), litresPeriod))
+    : litresPeriod;
   const changePct = isSingleDay ? mcc?.litres_change_pct ?? null : null;
   const trend7 = mcc?.trend_7d ?? [];
   const quality = mcc?.quality_summary;

@@ -169,21 +169,28 @@ function AutoSummaryPanel({
   );
 }
 
+function previewScrollClass(fullPage?: boolean): string {
+  return fullPage ? 'space-y-4' : 'space-y-4 max-h-[min(70vh,560px)] overflow-y-auto pr-1';
+}
+
 export function FarmerOnboardingPreview({
   f,
   gpsText,
   hasNidPhoto,
+  fullPage = false,
 }: {
   f: FarmerFormState;
   gpsText: string;
   hasNidPhoto: boolean;
+  /** When true, show full content (dedicated page). When false, scroll inside modal height. */
+  fullPage?: boolean;
 }) {
   const fSafe = useMemo(() => mergeFarmerDraft(f as unknown), [f]);
   const risks = farmerRiskFlags(fSafe);
   const auto = computeFarmerAutoSummary(fSafe, { districtForRefugee: fSafe.identity.district });
 
   return (
-    <div className="space-y-4 max-h-[min(70vh,560px)] overflow-y-auto pr-1">
+    <div className={previewScrollClass(fullPage)}>
       <div className="rounded-sm border border-[#004AAD]/25 bg-[#004AAD]/10 px-4 py-3 text-sm text-[#031A3A]">
         <p className="font-semibold">Direct farmer — review</p>
         <p className="text-[#052A54]/90 mt-1">Check all answers before saving. You can go Back to edit any step.</p>
@@ -270,10 +277,12 @@ export function CollectorOnboardingPreview({
   c,
   gpsText,
   hasNidPhoto,
+  fullPage = false,
 }: {
   c: CollectorFormState;
   gpsText: string;
   hasNidPhoto: boolean;
+  fullPage?: boolean;
 }) {
   const cSafe = useMemo(() => mergeCollectorDraft(c as unknown), [c]);
   const risks = collectorRiskFlags(cSafe);
@@ -281,7 +290,7 @@ export function CollectorOnboardingPreview({
   const auto = computeCollectorAutoSummary(cSafe, { districtForRefugee: cSafe.c1.district });
 
   return (
-    <div className="space-y-4 max-h-[min(70vh,560px)] overflow-y-auto pr-1">
+    <div className={previewScrollClass(fullPage)}>
       <div className="rounded-sm border border-[#052A54]/25 bg-[#052A54]/10 px-4 py-3 text-sm text-[#031A3A]">
         <p className="font-semibold">Milk collector — review</p>
         <p className="text-[#052A54]/90 mt-1">Verify roster and logistics before saving.</p>

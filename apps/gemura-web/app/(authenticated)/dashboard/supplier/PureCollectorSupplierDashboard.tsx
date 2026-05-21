@@ -19,6 +19,7 @@ import Icon from '@/app/components/Icon';
 import { type PeriodKey } from '@/lib/utils/dashboardPeriod';
 import SupplierDashboardShell from './SupplierDashboardShell';
 import { useSupplierOverview, formatSupplierCurrency } from './useSupplierOverview';
+import { getTransferIntakeStats } from './transferRejectionStats';
 import SupplierActivityList from './SupplierActivityList';
 import { supplierOperationsApi, type ManagedCollection, type ManagedTransfer, type ManagedFarm } from '@/lib/api/supplierOperations';
 import {
@@ -109,8 +110,6 @@ export default function PureCollectorSupplierDashboard() {
   const totalQualityLiters = qualityGrades.reduce((s, g) => s + g.liters, 0);
   const GRADE_COLORS: Record<string, string> = { A: '#10b981', B: '#3b82f6', C: '#f59e0b', D: '#ef4444', UNGRADED: '#94a3b8' };
   const gradeColor = (grade: string) => GRADE_COLORS[grade.toUpperCase()] ?? GRADE_COLORS.UNGRADED;
-  const rejLit = Number(data?.summary?.rejections?.liters ?? 0);
-  const rejVal = Number(data?.summary?.rejections?.value ?? 0);
 
   const chartCategories = chartFromOverview
     ? bd.categories
@@ -125,17 +124,11 @@ export default function PureCollectorSupplierDashboard() {
   const chartDays = chartFromOverview ? bd.categories.length : chartData.length;
   const avgDaily = chartDays > 0 ? chartTotalForAvg / chartDays : 0;
 
-  // Transfer stats
-  const submittedTransfers = transfers.filter((t) => t.status === 'submitted');
-  const acceptedTransfers = submittedTransfers.filter((t) => t.mcc_status === 'accepted' || t.mcc_status === 'partially_accepted');
-  const rejectedTransfers = submittedTransfers.filter((t) => t.mcc_status === 'rejected');
-  const pendingTransfers = submittedTransfers.filter((t) => !t.mcc_status || t.mcc_status === 'submitted');
-  
-  const acceptedLiters = acceptedTransfers.reduce((s, t) => s + (t.mcc_accepted_liters ?? t.total_liters), 0);
-  const rejectedLiters = rejectedTransfers.reduce((s, t) => s + t.total_liters, 0);
-  const acceptanceRate = submittedTransfers.length > 0
-    ? Math.round((acceptedTransfers.length / submittedTransfers.length) * 100)
-    : 100;
+  const transferStats = useMemo(() => getTransferIntakeStats(transfers), [transfers]);
+  const acceptanceRate =
+    transferStats.submitted > 0
+      ? Math.round((transferStats.accepted / transferStats.submitted) * 100)
+      : 100;
 
   // Active farms
   const activeFarms = farms.filter((f) => f.status === 'active').length;
@@ -149,6 +142,12 @@ export default function PureCollectorSupplierDashboard() {
   const val = Number(summary?.sales?.value ?? 0);
   const saleLiters = Number(summary?.sales?.liters ?? 0);
   const saleTx = Number(summary?.sales?.transactions ?? 0);
+  const rejLit = Math.max(Number(summary?.rejections?.liters ?? 0), transferStats.rejectedLiters);
+  const rejVal =
+    Number(summary?.rejections?.value ?? 0) ||
+    (transferStats.rejectedLiters > 0 && saleLiters > 0
+      ? transferStats.rejectedLiters * (val / saleLiters)
+      : 0);
   const recentRows = supplierRecentOverviewRows(data?.recent_transactions);
 
   return (
@@ -201,7 +200,7 @@ export default function PureCollectorSupplierDashboard() {
         <StatCard
           label="Acceptance Rate"
           value={`${acceptanceRate}%`}
-          subtitle={`${acceptedTransfers.length} of ${submittedTransfers.length} transfers`}
+          subtitle={`${transferStats.accepted} of ${transferStats.submitted} transfers`}
           icon={faCheckCircle}
           {...AMBER}
         />
@@ -226,7 +225,7 @@ export default function PureCollectorSupplierDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Pending Transfers</p>
-              <p className="text-2xl font-bold text-yellow-600 mt-1">{pendingTransfers.length}</p>
+              <p className="text-2xl font-bold text-yellow-600 mt-1">{transferStats.pending}</p>
             </div>
             <div className="w-10 h-10 rounded-full flex items-center justify-center bg-yellow-100">
               <Icon icon={faTruck} className="text-yellow-600" />
@@ -240,7 +239,7 @@ export default function PureCollectorSupplierDashboard() {
             <div>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Accepted Volume</p>
               <p className="text-2xl font-bold text-green-600 mt-1">
-                {(saleLiters > 0 ? saleLiters : acceptedLiters).toFixed(1)} L
+                {(saleLiters > 0 ? saleLiters : transferStats.acceptedLiters).toFixed(1)} L
               </p>
             </div>
             <div className="w-10 h-10 rounded-full flex items-center justify-center bg-green-100">
@@ -256,13 +255,15 @@ export default function PureCollectorSupplierDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Rejected Volume</p>
-              <p className="text-2xl font-bold text-red-600 mt-1">{rejectedLiters.toFixed(1)} L</p>
+              <p className="text-2xl font-bold text-red-600 mt-1">{transferStats.rejectedLiters.toFixed(1)} L</p>
             </div>
             <div className="w-10 h-10 rounded-full flex items-center justify-center bg-red-100">
               <Icon icon={faArrowDown} className="text-red-600" />
             </div>
           </div>
-          <p className="text-xs text-gray-500 mt-2">{rejectedTransfers.length} rejected transfer{rejectedTransfers.length !== 1 ? 's' : ''}</p>
+          <p className="text-xs text-gray-500 mt-2">
+            {transferStats.rejected} rejection{transferStats.rejected !== 1 ? 's' : ''} (incl. partial)
+          </p>
         </div>
       </div>
 

@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody, ApiUnauthor
 import { StatsService } from './stats.service';
 import { TokenGuard } from '../../common/guards/token.guard';
 import { PermissionGuard } from '../../common/guards/permission.guard';
-import { RequirePermission } from '../../common/decorators/permission.decorator';
+import { RequireAnyPermission } from '../../common/decorators/permission.decorator';
 import { CurrentAccount } from '../../common/decorators/account.decorator';
 import { CurrentUser } from '../../common/decorators/user.decorator';
 import { User } from '@prisma/client';
@@ -18,7 +18,7 @@ export class StatsController {
 
   @Post('overview')
   @HttpCode(200)
-  @RequirePermission('dashboard.view')
+  @RequireAnyPermission(['dashboard.view', 'view_analytics'])
   @ApiOperation({
     summary: 'Get overview statistics',
     description:
@@ -97,7 +97,7 @@ export class StatsController {
 
   @Post()
   @HttpCode(200)
-  @RequirePermission('dashboard.view')
+  @RequireAnyPermission(['dashboard.view', 'view_analytics'])
   @ApiOperation({
     summary: 'Get general statistics',
     description: 'Retrieve general statistics for the authenticated user\'s default account, including collections, sales, and relationship counts.',

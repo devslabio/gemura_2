@@ -15,7 +15,7 @@ import Modal from '@/app/components/Modal';
 import BulkImportModal from '@/app/components/BulkImportModal';
 import CreateSupplierForm from './CreateSupplierForm';
 import SupplierOnboardingModal from './onboarding/SupplierOnboardingModal';
-import Icon, { faPlus, faEye, faCheckCircle, faBuilding, faPhone, faDollarSign, faFile, faUserPlus } from '@/app/components/Icon';
+import Icon, { faPlus, faEye, faClipboardList, faCheckCircle, faBuilding, faPhone, faDollarSign, faFile, faUserPlus } from '@/app/components/Icon';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
@@ -204,13 +204,22 @@ export default function SuppliersPage() {
       key: 'actions',
       label: 'Actions',
       render: (_, row) => (
-        <Link
-          href={`/suppliers/${row.account.id}`}
-          className="p-1.5 text-gray-600 hover:text-[var(--primary)] transition-colors inline-flex"
-          title="View details"
-        >
-          <Icon icon={faEye} size="sm" />
-        </Link>
+        <span className="inline-flex items-center gap-0.5">
+          <Link
+            href={`/suppliers/${row.account.id}`}
+            className="p-1.5 text-gray-600 hover:text-[var(--primary)] transition-colors inline-flex"
+            title="View details"
+          >
+            <Icon icon={faEye} size="sm" />
+          </Link>
+          <Link
+            href={`/suppliers/${row.account.id}/onboarding`}
+            className="p-1.5 text-gray-600 hover:text-[var(--primary)] transition-colors inline-flex"
+            title="Onboarding results"
+          >
+            <Icon icon={faClipboardList} size="sm" />
+          </Link>
+        </span>
       ),
     },
   ];

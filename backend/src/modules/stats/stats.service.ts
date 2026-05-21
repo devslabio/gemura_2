@@ -148,11 +148,57 @@ export class StatsService {
         unit_price: true,
       },
     });
-    const rejectionsTotalLiters = rejectionsWithValue.reduce((sum, sale) => sum + Number(sale.quantity), 0);
-    const rejectionsTotalValue = rejectionsWithValue.reduce(
+    let rejectionsTotalLiters = rejectionsWithValue.reduce((sum, sale) => sum + Number(sale.quantity), 0);
+    let rejectionsTotalValue = rejectionsWithValue.reduce(
       (sum, sale) => sum + Number(sale.quantity) * Number(sale.unit_price),
       0,
     );
+    let rejectionsTransactionsCount = rejectionsWithValue.length;
+
+    // MCC intake rejections on supplier transfers (incl. partial accept → rejected_liters)
+    if (accountId !== null) {
+      const supplierUserLinks = await this.prisma.userAccount.findMany({
+        where: { account_id: accountId, status: 'active' },
+        select: { user_id: true },
+      });
+      const supplierUserIds = supplierUserLinks.map((l) => l.user_id);
+      if (supplierUserIds.length > 0) {
+        const processedAtFilter: Prisma.DateTimeFilter | undefined = saleAtFilter
+          ? (saleAtFilter as Prisma.DateTimeFilter)
+          : undefined;
+        const intakeTransfers = await this.prisma.supplierTransfer.findMany({
+          where: {
+            supplier_user_id: { in: supplierUserIds },
+            status: { in: ['rejected', 'partially_accepted'] },
+            ...(processedAtFilter ? { processed_at: processedAtFilter } : { processed_at: { not: null } }),
+          },
+          select: {
+            rejected_liters: true,
+            total_liters: true,
+            status: true,
+          },
+        });
+
+        const priceRow = await this.prisma.supplierCustomer.findFirst({
+          where: { supplier_account_id: accountId, relationship_status: 'active' },
+          select: { price_per_liter: true },
+          orderBy: { updated_at: 'desc' },
+        });
+        const defaultUnitPrice = priceRow ? Number(priceRow.price_per_liter) : 0;
+
+        for (const tr of intakeTransfers) {
+          const liters =
+            tr.status === 'rejected'
+              ? Number(tr.rejected_liters ?? tr.total_liters)
+              : Number(tr.rejected_liters ?? 0);
+          if (liters > 0) {
+            rejectionsTotalLiters += liters;
+            rejectionsTotalValue += liters * defaultUnitPrice;
+            rejectionsTransactionsCount += 1;
+          }
+        }
+      }
+    }
 
     let salesTotalQuantity = 0;
     let salesTotalValue = 0;
@@ -368,7 +414,7 @@ export class StatsService {
           rejections: {
             liters: rejectionsTotalLiters,
             value: rejectionsTotalValue,
-            transactions: rejectionsWithValue.length,
+            transactions: rejectionsTransactionsCount,
           },
           sales: {
             liters: salesTotalQuantity,

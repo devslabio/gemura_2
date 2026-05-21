@@ -21,6 +21,7 @@ import Icon from '@/app/components/Icon';
 import { type PeriodKey } from '@/lib/utils/dashboardPeriod';
 import SupplierDashboardShell from './SupplierDashboardShell';
 import { useSupplierOverview, formatSupplierCurrency } from './useSupplierOverview';
+import { getTransferIntakeStats } from './transferRejectionStats';
 import SupplierActivityList from './SupplierActivityList';
 import { supplierOperationsApi, type ManagedProduction, type ManagedTransfer, type ManagedCollection } from '@/lib/api/supplierOperations';
 import {
@@ -130,23 +131,10 @@ export default function DirectFarmerSupplierDashboard() {
   const avgDaily = chartData.length > 0 ? totalProduction / chartData.length : 0;
   const trend = calculateTrend(productionSeries);
 
-  // Transfer stats
-  const submittedTransfers = transfers.filter((t) => t.status === 'submitted');
-  const acceptedTransfers = submittedTransfers.filter(
-    (t) => t.mcc_status === 'accepted' || t.mcc_status === 'partially_accepted'
-  );
-  const rejectedTransfers = submittedTransfers.filter((t) => t.mcc_status === 'rejected');
-  const pendingTransfers = submittedTransfers.filter(
-    (t) => !t.mcc_status || t.mcc_status === 'submitted'
-  );
-  const acceptedLiters = acceptedTransfers.reduce(
-    (s, t) => s + (t.mcc_accepted_liters ?? t.total_liters),
-    0
-  );
-  const rejectedLiters = rejectedTransfers.reduce((s, t) => s + t.total_liters, 0);
+  const transferStats = useMemo(() => getTransferIntakeStats(transfers), [transfers]);
   const acceptanceRate =
-    submittedTransfers.length > 0
-      ? Math.round((acceptedTransfers.length / submittedTransfers.length) * 100)
+    transferStats.submitted > 0
+      ? Math.round((transferStats.accepted / transferStats.submitted) * 100)
       : 100;
 
   // Earnings chart using breakdown data
@@ -162,8 +150,12 @@ export default function DirectFarmerSupplierDashboard() {
   const lit = Number(summary?.sales?.liters ?? 0);
   const val = Number(summary?.sales?.value ?? 0);
   const tx = Number(summary?.sales?.transactions ?? 0);
-  const rejLit = Number(summary?.rejections?.liters ?? 0);
-  const rejVal = Number(summary?.rejections?.value ?? 0);
+  const rejLit = Math.max(Number(summary?.rejections?.liters ?? 0), transferStats.rejectedLiters);
+  const rejVal =
+    Number(summary?.rejections?.value ?? 0) ||
+    (transferStats.rejectedLiters > 0 && lit > 0
+      ? transferStats.rejectedLiters * (val / lit)
+      : 0);
   const pricePerLiter = lit > 0 ? val / lit : 0;
   const recentRows = supplierRecentOverviewRows(data?.recent_transactions);
 
@@ -280,7 +272,7 @@ export default function DirectFarmerSupplierDashboard() {
             </div>
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            {acceptedTransfers.length}/{submittedTransfers.length} transfers accepted
+            {transferStats.accepted}/{transferStats.submitted} transfers accepted
           </p>
         </div>
 
@@ -514,29 +506,29 @@ export default function DirectFarmerSupplierDashboard() {
       </div>
 
       {/* Transfer Status Row */}
-      {submittedTransfers.length > 0 && (
+      {transferStats.submitted > 0 && (
         <div className="mt-4 bg-white border border-gray-200 rounded-sm p-4">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">Transfer Status Overview</h3>
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
             <div className="text-center p-3 bg-green-50 rounded-sm">
-              <p className="text-2xl font-bold text-green-600">{acceptedTransfers.length}</p>
+              <p className="text-2xl font-bold text-green-600">{transferStats.accepted}</p>
               <p className="text-xs text-green-700 mt-1">Accepted</p>
-              <p className="text-xs text-gray-500">{acceptedLiters.toFixed(1)} L</p>
+              <p className="text-xs text-gray-500">{transferStats.acceptedLiters.toFixed(1)} L</p>
             </div>
             <div className="text-center p-3 bg-yellow-50 rounded-sm">
-              <p className="text-2xl font-bold text-yellow-600">{pendingTransfers.length}</p>
+              <p className="text-2xl font-bold text-yellow-600">{transferStats.pending}</p>
               <p className="text-xs text-yellow-700 mt-1">Pending</p>
               <p className="text-xs text-gray-500">Awaiting review</p>
             </div>
             <div className="text-center p-3 bg-red-50 rounded-sm">
-              <p className="text-2xl font-bold text-red-600">{rejectedTransfers.length}</p>
-              <p className="text-xs text-red-700 mt-1">Rejected</p>
-              <p className="text-xs text-gray-500">{rejectedLiters.toFixed(1)} L</p>
+              <p className="text-2xl font-bold text-red-600">{transferStats.rejectedLiters.toFixed(1)}</p>
+              <p className="text-xs text-red-700 mt-1">Rejected (L)</p>
+              <p className="text-xs text-gray-500">{transferStats.rejected} event{transferStats.rejected !== 1 ? 's' : ''}</p>
             </div>
             <div className="hidden sm:block text-center p-3 bg-blue-50 rounded-sm">
               <p className="text-2xl font-bold text-blue-600">{acceptanceRate}%</p>
               <p className="text-xs text-blue-700 mt-1">Accept Rate</p>
-              <p className="text-xs text-gray-500">{submittedTransfers.length} total</p>
+              <p className="text-xs text-gray-500">{transferStats.submitted} total</p>
             </div>
           </div>
         </div>
